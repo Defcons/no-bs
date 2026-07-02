@@ -78,6 +78,26 @@ export default function App() {
     };
   }, []);
 
+  // Keep the screen awake while the app is open (re-acquire when tab returns).
+  useEffect(() => {
+    let lock: WakeLockSentinel | null = null;
+    const nav = navigator as Navigator & { wakeLock?: { request: (t: "screen") => Promise<WakeLockSentinel> } };
+    const request = async () => {
+      try {
+        if (nav.wakeLock && document.visibilityState === "visible") lock = await nav.wakeLock.request("screen");
+      } catch {
+        /* denied or unsupported */
+      }
+    };
+    const onVis = () => document.visibilityState === "visible" && request();
+    request();
+    document.addEventListener("visibilitychange", onVis);
+    return () => {
+      document.removeEventListener("visibilitychange", onVis);
+      lock?.release().catch(() => {});
+    };
+  }, []);
+
   const connect = async () => {
     try {
       await monitor.current!.connect();

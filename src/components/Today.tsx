@@ -31,7 +31,8 @@ export function Today({
   getHrStats,
   onFinished,
 }: Props) {
-  const { draft, loaded, elapsed, start, startCustom, cancel, finish, update } = useActiveWorkout();
+  const { draft, loaded, elapsed, start, startCustom, cancel, finish, update, toggleStopwatch, resetStopwatch, moveExercise } =
+    useActiveWorkout();
   const [prev, setPrev] = useState<StoredWorkout | undefined>();
   const [lastByDay, setLastByDay] = useState<Record<string, StoredWorkout | undefined>>({});
 
@@ -152,7 +153,15 @@ export function Today({
           ) : (
             <div className="wb-day">{draft.dayName}</div>
           )}
-          <div className="wb-timer">{hhmmss(elapsed)}</div>
+          <div className="wb-time-row">
+            <span className="wb-timer">{hhmmss(elapsed)}</span>
+            <button className="sw-btn" aria-label={draft.swRunning ? "pause" : "start"} onClick={toggleStopwatch}>
+              {draft.swRunning ? "⏸" : "▶"}
+            </button>
+            <button className="sw-btn" aria-label="reset stopwatch" onClick={resetStopwatch}>
+              ↺
+            </button>
+          </div>
         </div>
         <div className="wb-right">
           <button
@@ -171,6 +180,14 @@ export function Today({
 
       <RestTimer endsAt={draft.restEndsAt ?? null} onChange={setRest} />
 
+      <div className="pad">
+        <MoodSlider
+          label="Feeling before"
+          value={draft.moodBefore}
+          onChange={(v) => update((d) => ({ ...d, moodBefore: v }))}
+        />
+      </div>
+
       <div className="exercise-list">
         {draft.exercises.map((ex, i) => (
           <ExerciseCard
@@ -181,6 +198,8 @@ export function Today({
             onChange={(e) => setExercise(i, e)}
             editableName={draft.custom}
             onRemove={draft.custom ? () => removeExercise(i) : undefined}
+            onMoveUp={i > 0 ? () => moveExercise(i, -1) : undefined}
+            onMoveDown={i < draft.exercises.length - 1 ? () => moveExercise(i, 1) : undefined}
           />
         ))}
         {draft.custom && (
@@ -196,7 +215,14 @@ export function Today({
       </div>
 
       <div className="pad">
-        <label className="field-label">Day note</label>
+        <MoodSlider
+          label="Feeling after"
+          value={draft.moodAfter}
+          onChange={(v) => update((d) => ({ ...d, moodAfter: v }))}
+        />
+        <label className="field-label" style={{ marginTop: 14 }}>
+          Day note
+        </label>
         <textarea
           className="day-note"
           value={draft.note ?? ""}
@@ -218,6 +244,25 @@ export function Today({
           Finish workout
         </button>
       </div>
+    </div>
+  );
+}
+
+function MoodSlider({ label, value, onChange }: { label: string; value?: number; onChange: (v: number) => void }) {
+  return (
+    <div className="mood">
+      <div className="mood-head">
+        <span className="field-label">{label}</span>
+        <span className="mood-val">{value ? `${value}/10` : "—"}</span>
+      </div>
+      <input
+        type="range"
+        min={1}
+        max={10}
+        step={1}
+        value={value ?? 5}
+        onChange={(e) => onChange(parseInt(e.target.value, 10))}
+      />
     </div>
   );
 }

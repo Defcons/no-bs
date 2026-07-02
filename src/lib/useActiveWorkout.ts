@@ -5,7 +5,7 @@ import { db, getSetting, setSetting, type StoredWorkout } from "../db";
 import type { DayTemplate, ExercisePerf, SetEntry } from "../types";
 
 export type Draft = {
-  startedAt: number; // epoch ms
+  startedAt: number; // epoch ms (session start, for the date)
   date: string; // ISO datetime
   dayName: string;
   templateId?: number;
@@ -13,12 +13,23 @@ export type Draft = {
   note?: string;
   restEndsAt?: number; // epoch ms; running rest timer survives reload
   custom?: boolean; // "Alternative" free-form session (editable name/exercises)
+  // Stopwatch (controllable; survives reload).
+  swRunning: boolean;
+  swAccumMs: number; // ms banked before the current running segment
+  swSegStart: number; // epoch ms the current running segment started (if swRunning)
+  // Mood 1-10.
+  moodBefore?: number;
+  moodAfter?: number;
 };
 
 const DRAFT_KEY = "activeDraft";
 
 function isoNow(): string {
   return new Date().toISOString();
+}
+
+function swElapsedMs(d: Draft): number {
+  return d.swAccumMs + (d.swRunning ? Date.now() - d.swSegStart : 0);
 }
 
 // Build fresh exercises for a day, pre-filling each set with last week's number
@@ -53,22 +64,28 @@ export function useActiveWorkout() {
   const [elapsed, setElapsed] = useState(0);
   const saveTimer = useRef<number | undefined>(undefined);
 
-  // Load any persisted draft on mount.
+  // Load any persisted draft on mount (migrate pre-stopwatch drafts).
   useEffect(() => {
     getSetting<Draft | null>(DRAFT_KEY, null).then((d) => {
+      if (d && d.swAccumMs === undefined) {
+        d.swRunning = true;
+        d.swAccumMs = Math.max(0, Date.now() - d.startedAt);
+        d.swSegStart = Date.now();
+      }
       setDraft(d);
       setLoaded(true);
     });
   }, []);
 
-  // Tick the total workout timer once per second while a session is active.
+  // Tick the stopwatch once per second while running.
   useEffect(() => {
     if (!draft) return;
-    const tick = () => setElapsed(Math.floor((Date.now() - draft.startedAt) / 1000));
+    const tick = () => setElapsed(Math.floor(swElapsedMs(draft) / 1000));
     tick();
+    if (!draft.swRunning) return;
     const id = window.setInterval(tick, 1000);
     return () => window.clearInterval(id);
-  }, [draft?.startedAt]);
+  }, [draft?.swRunning, draft?.swSegStart, draft?.swAccumMs]);
 
   // Debounced persistence of the draft.
   const persist = useCallback((d: Draft | null) => {
@@ -94,12 +111,16 @@ export function useActiveWorkout() {
     const history = (await db.workouts.where("dayName").equals(tpl.name).toArray()).sort((a, b) =>
       b.date.localeCompare(a.date),
     );
+    const now = Date.now();
     const d: Draft = {
-      startedAt: Date.now(),
+      startedAt: now,
       date: isoNow(),
       dayName: tpl.name,
       templateId: tpl.id,
       exercises: buildExercises(tpl, history),
+      swRunning: true,
+      swAccumMs: 0,
+      swSegStart: now,
     };
     setDraft(d);
     setSetting(DRAFT_KEY, d);
@@ -107,16 +128,48 @@ export function useActiveWorkout() {
 
   // Free-form "Alternative" session: editable title + you add your own exercises.
   const startCustom = useCallback((label = "Alternative") => {
+    const now = Date.now();
     const d: Draft = {
-      startedAt: Date.now(),
+      startedAt: now,
       date: isoNow(),
       dayName: label,
       exercises: [],
       custom: true,
+      swRunning: true,
+      swAccumMs: 0,
+      swSegStart: now,
     };
     setDraft(d);
     setSetting(DRAFT_KEY, d);
   }, []);
+
+  // Stopwatch controls.
+  const toggleStopwatch = useCallback(
+    () =>
+      update((d) =>
+        d.swRunning
+          ? { ...d, swRunning: false, swAccumMs: d.swAccumMs + (Date.now() - d.swSegStart) }
+          : { ...d, swRunning: true, swSegStart: Date.now() },
+      ),
+    [update],
+  );
+  const resetStopwatch = useCallback(
+    () => update((d) => ({ ...d, swAccumMs: 0, swSegStart: Date.now() })),
+    [update],
+  );
+
+  // Reorder exercises for THIS session only (template order is untouched).
+  const moveExercise = useCallback(
+    (i: number, dir: -1 | 1) =>
+      update((d) => {
+        const j = i + dir;
+        if (j < 0 || j >= d.exercises.length) return d;
+        const ex = [...d.exercises];
+        [ex[i], ex[j]] = [ex[j], ex[i]];
+        return { ...d, exercises: ex };
+      }),
+    [update],
+  );
 
   const cancel = useCallback(() => {
     setDraft(null);
@@ -127,7 +180,7 @@ export function useActiveWorkout() {
   const finish = useCallback(
     async (hr?: { avg?: number; max?: number }) => {
       if (!draft) return;
-      const durationSec = Math.floor((Date.now() - draft.startedAt) / 1000);
+      const durationSec = Math.floor(swElapsedMs(draft) / 1000);
       const row: StoredWorkout = {
         date: draft.date,
         dayName: draft.dayName,
@@ -141,6 +194,8 @@ export function useActiveWorkout() {
         durationSec,
         avgHr: hr?.avg,
         maxHr: hr?.max,
+        moodBefore: draft.moodBefore,
+        moodAfter: draft.moodAfter,
         source: "app",
         // Custom sessions have no matching sheet block → don't queue for sync.
         synced: draft.custom ? true : undefined,
@@ -153,5 +208,17 @@ export function useActiveWorkout() {
     [draft],
   );
 
-  return { draft, loaded, elapsed, start, startCustom, cancel, finish, update };
+  return {
+    draft,
+    loaded,
+    elapsed,
+    start,
+    startCustom,
+    cancel,
+    finish,
+    update,
+    toggleStopwatch,
+    resetStopwatch,
+    moveExercise,
+  };
 }

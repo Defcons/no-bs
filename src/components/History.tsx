@@ -52,12 +52,13 @@ export function History() {
                       </div>
                     );
                   })}
-                  {w.durationSec ? (
+                  {(w.durationSec || w.moodBefore || w.moodAfter) && (
                     <div className="tiny muted log-meta">
-                      ⏱ {Math.round(w.durationSec / 60)} min
+                      {w.durationSec ? `⏱ ${Math.round(w.durationSec / 60)} min` : ""}
                       {w.avgHr ? ` · ♥ ${w.avgHr} avg / ${w.maxHr} max` : ""}
+                      {w.moodBefore || w.moodAfter ? ` · 🙂 ${w.moodBefore ?? "–"}→${w.moodAfter ?? "–"}/10` : ""}
                     </div>
-                  ) : null}
+                  )}
                 </div>
               )}
             </div>

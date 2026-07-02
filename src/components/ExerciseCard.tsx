@@ -11,6 +11,8 @@ type Props = {
   onChange: (ex: ExercisePerf) => void;
   editableName?: boolean; // custom sessions: let the user name the exercise
   onRemove?: () => void; // custom sessions: remove this exercise
+  onMoveUp?: () => void; // reorder within this session only
+  onMoveDown?: () => void;
 };
 
 function schemeLabel(ex: ExercisePerf): string {
@@ -19,7 +21,7 @@ function schemeLabel(ex: ExercisePerf): string {
   return `${sets ?? "?"}×${reps ?? "?"}`;
 }
 
-export function ExerciseCard({ exercise, step, prev, onChange, editableName, onRemove }: Props) {
+export function ExerciseCard({ exercise, step, prev, onChange, editableName, onRemove, onMoveUp, onMoveDown }: Props) {
   const [showNote, setShowNote] = useState(!!exercise.note);
 
   const patchSet = (i: number, patch: Partial<SetEntry>) => {
@@ -56,6 +58,16 @@ export function ExerciseCard({ exercise, step, prev, onChange, editableName, onR
         >
           ✎
         </button>
+        {onMoveUp && (
+          <button className="note-toggle" aria-label="move up" onClick={onMoveUp}>
+            ↑
+          </button>
+        )}
+        {onMoveDown && (
+          <button className="note-toggle" aria-label="move down" onClick={onMoveDown}>
+            ↓
+          </button>
+        )}
         {onRemove && (
           <button className="note-toggle" aria-label="remove exercise" onClick={onRemove}>
             🗑

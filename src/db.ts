@@ -13,6 +13,8 @@ export interface StoredWorkout {
   durationSec?: number;
   avgHr?: number;
   maxHr?: number;
+  moodBefore?: number; // 1-10 feeling before the session
+  moodAfter?: number; // 1-10 feeling after the session
   source: string; // "app" for new sessions, "sheet:2026" etc. for imports
   synced?: boolean; // written back to the Google Sheet
 }
