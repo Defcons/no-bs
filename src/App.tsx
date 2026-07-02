@@ -23,9 +23,11 @@ export default function App() {
   const [daysPerWeek, setDpw] = useState(4);
   const [bodyweightKg, setBw] = useState(0); // 0 = not set
   const [age, setAge] = useState(0); // 0 = not set
+  const [hrLowThreshold, setHrLow] = useState(90);
 
   // Heart rate.
   const [bpm, setBpm] = useState<number | null>(null);
+  const [hrAvg, setHrAvg] = useState<number | null>(null);
   const [connected, setConnected] = useState(false);
   const samples = useRef<number[]>([]);
   const monitor = useRef<HeartRateMonitor | null>(null);
@@ -61,6 +63,7 @@ export default function App() {
       setDpw(dpw);
       setBw(await getSetting("bodyweightKg", 0));
       setAge(await getSetting("age", 0));
+      setHrLow(await getSetting("hrLowThreshold", 90));
       setReady(true);
       await maybeRemind(dpw);
     })();
@@ -71,6 +74,7 @@ export default function App() {
     const off = monitor.current!.onData((v) => {
       setBpm(v);
       samples.current.push(v);
+      setHrAvg(Math.round(samples.current.reduce((a, b) => a + b, 0) / samples.current.length));
     });
     return () => {
       off();
@@ -109,7 +113,7 @@ export default function App() {
     monitor.current!.disconnect();
     setBpm(null);
   };
-  const hr = { bpm, connected, connect, disconnect, supported: "bluetooth" in navigator };
+  const hr = { bpm, avg: hrAvg, connected, connect, disconnect, supported: "bluetooth" in navigator };
 
   const getHrStats = () => {
     const s = samples.current;
@@ -136,6 +140,10 @@ export default function App() {
   const persistAge = (v: number) => {
     setAge(v);
     setSetting("age", v);
+  };
+  const persistHrLow = (v: number) => {
+    setHrLow(v);
+    setSetting("hrLowThreshold", v);
   };
 
   const onExport = async () => {
@@ -170,8 +178,12 @@ export default function App() {
             restDefaultSec={restDefaultSec}
             weightStep={weightStep}
             daysPerWeek={daysPerWeek}
+            hrLowThreshold={hrLowThreshold}
             hr={hr}
-            onWorkoutStart={() => (samples.current = [])}
+            onWorkoutStart={() => {
+              samples.current = [];
+              setHrAvg(null);
+            }}
             getHrStats={getHrStats}
             onFinished={() => setTab("history")}
           />
@@ -190,6 +202,8 @@ export default function App() {
             setBodyweightKg={persistBw}
             age={age}
             setAge={persistAge}
+            hrLowThreshold={hrLowThreshold}
+            setHrLowThreshold={persistHrLow}
             hr={hr}
             onExport={onExport}
             onReset={onReset}

@@ -2,12 +2,14 @@
 // exercises, sets, notes, duration and HR of that session.
 import { useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
-import { db } from "../db";
+import { db, type StoredWorkout } from "../db";
 import { daysAgoLabel, niceDate } from "../lib/format";
+import { ExerciseCard } from "./ExerciseCard";
 
 export function History() {
   const workouts = useLiveQuery(() => db.workouts.orderBy("date").reverse().toArray(), []);
   const [open, setOpen] = useState<number | null>(null);
+  const [editing, setEditing] = useState<StoredWorkout | null>(null);
   if (!workouts) return <div className="pad">Loading…</div>;
   if (workouts.length === 0) return <div className="pad muted">No workouts yet — log your first one!</div>;
 
@@ -64,11 +66,96 @@ export function History() {
                       {w.moodBefore || w.moodAfter ? ` · 🙂 ${w.moodBefore ?? "–"}→${w.moodAfter ?? "–"}/10` : ""}
                     </div>
                   )}
+                  <div className="row log-actions">
+                    <button className="mini" onClick={() => setEditing(structuredClone(w))}>
+                      ✎ Edit
+                    </button>
+                    <button
+                      className="mini danger"
+                      onClick={() => {
+                        if (confirm(`Delete this ${w.dayName} workout from ${niceDate(w.date)}? This can't be undone.`))
+                          db.workouts.delete(w.id!);
+                      }}
+                    >
+                      🗑 Delete
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
           );
         })}
+      </div>
+
+      {editing && <WorkoutEditor workout={editing} onClose={() => setEditing(null)} />}
+    </div>
+  );
+}
+
+function WorkoutEditor({ workout, onClose }: { workout: StoredWorkout; onClose: () => void }) {
+  const [w, setW] = useState<StoredWorkout>(workout);
+
+  const save = async () => {
+    await db.workouts.update(w.id!, {
+      dayName: w.dayName,
+      exercises: w.exercises,
+      note: w.note,
+      moodBefore: w.moodBefore,
+      moodAfter: w.moodAfter,
+    });
+    onClose();
+  };
+
+  return (
+    <div className="hr-modal-backdrop">
+      <div className="edit-modal">
+        <header className="edit-head">
+          <div>
+            <div className="log-day">{w.dayName}</div>
+            <div className="tiny muted">{niceDate(w.date)}</div>
+          </div>
+          <button className="mini" onClick={onClose}>
+            ✕
+          </button>
+        </header>
+
+        <div className="edit-body">
+          {w.exercises.map((ex, i) => (
+            <ExerciseCard
+              key={i}
+              exercise={ex}
+              step={2.5}
+              editableName
+              onChange={(e) => setW((p) => ({ ...p, exercises: p.exercises.map((x, idx) => (idx === i ? e : x)) }))}
+              onRemove={() => setW((p) => ({ ...p, exercises: p.exercises.filter((_, idx) => idx !== i) }))}
+            />
+          ))}
+          <label className="field-label" style={{ marginTop: 12 }}>
+            Day note
+          </label>
+          <textarea
+            className="day-note"
+            value={w.note ?? ""}
+            onChange={(e) => setW((p) => ({ ...p, note: e.target.value || undefined }))}
+          />
+        </div>
+
+        <footer className="edit-foot">
+          <button
+            className="mini danger"
+            onClick={() => {
+              if (confirm("Delete this workout? This can't be undone.")) db.workouts.delete(w.id!).then(onClose);
+            }}
+          >
+            Delete
+          </button>
+          <button className="ghost" onClick={onClose}>
+            Cancel
+          </button>
+          <button className="primary" onClick={save}>
+            Save
+          </button>
+        </footer>
       </div>
     </div>
   );

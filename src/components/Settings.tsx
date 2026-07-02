@@ -18,6 +18,8 @@ type Props = {
   setBodyweightKg: (v: number) => void;
   age: number;
   setAge: (v: number) => void;
+  hrLowThreshold: number;
+  setHrLowThreshold: (v: number) => void;
   hr: { bpm: number | null; connected: boolean; connect: () => void; disconnect: () => void };
   onExport: () => void;
   onReset: () => void;
@@ -36,6 +38,8 @@ export function Settings({
   setBodyweightKg,
   age,
   setAge,
+  hrLowThreshold,
+  setHrLowThreshold,
   hr,
   onExport,
   onReset,
@@ -194,6 +198,25 @@ export function Settings({
             Connect HR device
           </button>
         )}
+        <div className="row" style={{ marginTop: 10 }}>
+          <span className="muted tiny">Auto-end if HR stays below</span>
+          <input
+            type="text"
+            inputMode="numeric"
+            className="bw-input"
+            value={hrLowThreshold || ""}
+            placeholder="bpm"
+            onChange={(e) => {
+              const n = parseInt(e.target.value, 10);
+              setHrLowThreshold(Number.isFinite(n) ? n : 0);
+            }}
+          />
+          <span className="muted tiny">bpm for 10 min</span>
+        </div>
+        <p className="muted tiny">
+          While HR is connected: if it stays below this for 10 min, the app asks if you're still working out and
+          auto-ends after 5 more min with no reply. Set to 0 to disable.
+        </p>
       </div>
 
       <div className="setting">

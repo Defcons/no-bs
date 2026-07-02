@@ -1,8 +1,9 @@
 // The main gym screen: start a day, log sets, run the workout + rest timers,
 // see live HR, and finish. This is the primary "as-easy-as-possible" surface.
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { lastWorkoutForDay, type StoredWorkout } from "../db";
 import { daysAgo, daysAgoLabel, hhmmss, mmss, niceDate } from "../lib/format";
+import { showReminder } from "../lib/notify";
 import { syncWorkout } from "../lib/sheetSync";
 import { cadenceStatus, trainingDue } from "../lib/stats";
 import { useActiveWorkout } from "../lib/useActiveWorkout";
@@ -15,7 +16,8 @@ type Props = {
   restDefaultSec: number;
   weightStep: number;
   daysPerWeek: number;
-  hr: { bpm: number | null; connected: boolean; connect: () => void; supported: boolean };
+  hrLowThreshold: number;
+  hr: { bpm: number | null; avg: number | null; connected: boolean; connect: () => void; supported: boolean };
   onWorkoutStart: () => void;
   getHrStats: () => { avg?: number; max?: number };
   onFinished: () => void;
@@ -26,13 +28,32 @@ export function Today({
   restDefaultSec,
   weightStep,
   daysPerWeek,
+  hrLowThreshold,
   hr,
   onWorkoutStart,
   getHrStats,
   onFinished,
 }: Props) {
-  const { draft, loaded, elapsed, swElapsed, start, startCustom, cancel, finish, update, toggleStopwatch, resetStopwatch, moveExercise } =
-    useActiveWorkout();
+  const {
+    draft,
+    loaded,
+    elapsed,
+    swElapsed,
+    start,
+    startCustom,
+    cancel,
+    finish,
+    update,
+    toggleWorkoutTimer,
+    resetWorkoutTimer,
+    toggleStopwatch,
+    resetStopwatch,
+    moveExercise,
+  } = useActiveWorkout();
+  const [hrPrompt, setHrPrompt] = useState(false);
+  const [hrPromptLeft, setHrPromptLeft] = useState(0);
+  const lowSince = useRef<number | null>(null);
+  const promptDeadline = useRef<number>(0);
   const [prev, setPrev] = useState<StoredWorkout | undefined>();
   const [lastByDay, setLastByDay] = useState<Record<string, StoredWorkout | undefined>>({});
 
@@ -53,6 +74,54 @@ export function Today({
       cancelled = true;
     };
   }, [draft, templates]);
+
+  // Finish: save + sync back to the sheet + return to history.
+  const finishWorkout = async () => {
+    const row = await finish(getHrStats());
+    if (row && !row.custom) {
+      const res = await syncWorkout(row);
+      if (res && !res.ok) {
+        alert(`Saved locally, but Google Sheet sync failed:\n${res.error}\n\nRetry from Settings → Sync now.`);
+      }
+    }
+    setHrPrompt(false);
+    onFinished();
+  };
+  const finishRef = useRef(finishWorkout);
+  finishRef.current = finishWorkout;
+
+  // Low-HR watchdog: after HR sits below the threshold for 10 min, ask if you're
+  // still working out; if unanswered for 5 more min, auto-end. Driven by HR updates.
+  useEffect(() => {
+    if (!draft || !hr.connected || hrLowThreshold <= 0 || hr.bpm == null) {
+      if (!draft) lowSince.current = null;
+      return;
+    }
+    if (hr.bpm < hrLowThreshold) {
+      if (lowSince.current == null) lowSince.current = Date.now();
+      if (!hrPrompt && Date.now() - lowSince.current >= 10 * 60 * 1000) {
+        promptDeadline.current = Date.now() + 5 * 60 * 1000;
+        setHrPrompt(true);
+        showReminder("Still working out?", "Your heart rate's been low for 10 min — tap to keep going, or it auto-ends in 5 min.");
+      }
+    } else {
+      lowSince.current = null;
+      if (hrPrompt) setHrPrompt(false);
+    }
+  }, [hr.bpm, hr.connected, hrLowThreshold, draft, hrPrompt]);
+
+  // Prompt countdown → auto-end when it hits zero.
+  useEffect(() => {
+    if (!hrPrompt) return;
+    const tick = () => {
+      const left = Math.ceil((promptDeadline.current - Date.now()) / 1000);
+      setHrPromptLeft(Math.max(0, left));
+      if (left <= 0) finishRef.current();
+    };
+    tick();
+    const id = window.setInterval(tick, 1000);
+    return () => window.clearInterval(id);
+  }, [hrPrompt]);
 
   if (!loaded) return <div className="pad">Loading…</div>;
 
@@ -127,17 +196,6 @@ export function Today({
     }));
   const removeExercise = (i: number) => update((d) => ({ ...d, exercises: d.exercises.filter((_, idx) => idx !== i) }));
 
-  const doFinish = async () => {
-    const row = await finish(getHrStats());
-    if (row && !row.custom) {
-      const res = await syncWorkout(row);
-      if (res && !res.ok) {
-        alert(`Saved locally, but Google Sheet sync failed:\n${res.error}\n\nYou can retry from Settings → Sync now.`);
-      }
-    }
-    onFinished();
-  };
-
   return (
     <div className="today">
       <header className="workout-bar">
@@ -153,8 +211,16 @@ export function Today({
           ) : (
             <div className="wb-day">{draft.dayName}</div>
           )}
-          <div className="wb-timer" title="Total workout time">
-            {hhmmss(elapsed)}
+          <div className="wb-time-row">
+            <span className="wb-timer" title="Total workout time">
+              {hhmmss(elapsed)}
+            </span>
+            <button className="sw-btn" aria-label={draft.wRunning ? "pause workout timer" : "start workout timer"} onClick={toggleWorkoutTimer}>
+              {draft.wRunning ? "⏸" : "▶"}
+            </button>
+            <button className="sw-btn" aria-label="reset workout timer" onClick={resetWorkoutTimer}>
+              ↺
+            </button>
           </div>
         </div>
         <div className="wb-right">
@@ -164,7 +230,10 @@ export function Today({
             title={hr.supported ? "Connect heart rate" : "Web Bluetooth not supported here"}
           >
             <span className="hr-heart">♥</span>
-            <span className="hr-val">{hr.bpm ?? (hr.connected ? "…" : "HR")}</span>
+            <span className="hr-col">
+              <span className="hr-val">{hr.bpm ?? (hr.connected ? "…" : "HR")}</span>
+              {hr.avg != null && <span className="hr-avg">avg {hr.avg}</span>}
+            </span>
           </button>
           <button className="break-btn" onClick={startRest}>
             Break
@@ -245,10 +314,35 @@ export function Today({
         >
           Reset
         </button>
-        <button className="primary" onClick={doFinish}>
+        <button className="primary" onClick={finishWorkout}>
           Finish workout
         </button>
       </div>
+
+      {hrPrompt && (
+        <div className="hr-modal-backdrop">
+          <div className="hr-modal">
+            <h3>Still working out?</h3>
+            <p className="muted">
+              Your heart rate's been low. Auto-ending in <b>{mmss(hrPromptLeft)}</b>.
+            </p>
+            <div className="row">
+              <button
+                className="primary"
+                onClick={() => {
+                  lowSince.current = null;
+                  setHrPrompt(false);
+                }}
+              >
+                Yes, keep going
+              </button>
+              <button className="ghost" onClick={finishWorkout}>
+                End now
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
