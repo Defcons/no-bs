@@ -7,6 +7,7 @@
 // request (no preflight); Apps Script's redirected response carries ACAO:*.
 import { db, getSetting, type StoredWorkout } from "../db";
 import type { ExercisePerf } from "../types";
+import { DEFAULT_SYNC_SECRET, DEFAULT_SYNC_URL } from "./syncConfig";
 
 export type SyncResult = {
   ok: boolean;
@@ -42,9 +43,10 @@ function fmtDate(iso: string): string {
 }
 
 async function config(): Promise<{ url: string; secret: string }> {
+  // Per-device Settings override the built-in defaults.
   return {
-    url: await getSetting<string>("sheetSyncUrl", ""),
-    secret: await getSetting<string>("sheetSyncSecret", ""),
+    url: (await getSetting<string>("sheetSyncUrl", "")) || DEFAULT_SYNC_URL,
+    secret: (await getSetting<string>("sheetSyncSecret", "")) || DEFAULT_SYNC_SECRET,
   };
 }
 

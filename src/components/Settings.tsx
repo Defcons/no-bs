@@ -5,6 +5,7 @@ import { getSetting, setSetting } from "../db";
 import { bluetoothAvailable } from "../lib/hr";
 import { notificationsSupported, requestNotifications } from "../lib/notify";
 import { pendingCount, syncPending, testSync } from "../lib/sheetSync";
+import { DEFAULT_SYNC_SECRET, DEFAULT_SYNC_URL } from "../lib/syncConfig";
 
 type Props = {
   restDefaultSec: number;
@@ -46,8 +47,8 @@ export function Settings({
   const [reminders, setReminders] = useState(false);
 
   useEffect(() => {
-    getSetting<string>("sheetSyncUrl", "").then(setSyncUrl);
-    getSetting<string>("sheetSyncSecret", "").then(setSyncSecret);
+    getSetting<string>("sheetSyncUrl", "").then((v) => setSyncUrl(v || DEFAULT_SYNC_URL));
+    getSetting<string>("sheetSyncSecret", "").then((v) => setSyncSecret(v || DEFAULT_SYNC_SECRET));
     getSetting<boolean>("remindersEnabled", false).then(setReminders);
     pendingCount().then(setPending);
   }, []);
@@ -198,8 +199,8 @@ export function Settings({
       <div className="setting">
         <label>Google Sheets sync</label>
         <p className="muted tiny">
-          Finished workouts are written back to your sheet via an Apps Script Web App. Paste its URL + your shared secret
-          (see apps-script/README in the repo).
+          Pre-configured on every device — finished workouts are written back to your sheet automatically. Only change
+          these if you re-deploy the Apps Script.
         </p>
         <input
           type="text"
