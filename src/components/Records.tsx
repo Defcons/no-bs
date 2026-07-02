@@ -2,7 +2,7 @@
 import { useLiveQuery } from "dexie-react-hooks";
 import { db } from "../db";
 import { niceDate } from "../lib/format";
-import { liftRecords, summarize } from "../lib/stats";
+import { type LiftRecord, MUSCLE_ORDER, liftRecords, muscleGroup, summarize } from "../lib/stats";
 
 export function Records() {
   const workouts = useLiveQuery(() => db.workouts.toArray(), []);
@@ -13,6 +13,11 @@ export function Records() {
   const records = liftRecords(workouts).filter((r) => r.maxWeight.weight > 0);
   const scoreboard = [...records].sort((a, b) => b.maxWeight.weight - a.maxWeight.weight).slice(0, 10);
   const medal = ["🥇", "🥈", "🥉"];
+
+  // Group records by muscle for the collapsible sections.
+  const byCat: Record<string, LiftRecord[]> = {};
+  for (const r of records) (byCat[muscleGroup(r.name)] ??= []).push(r);
+  for (const c of Object.keys(byCat)) byCat[c].sort((a, b) => b.maxWeight.weight - a.maxWeight.weight);
 
   return (
     <div className="pad history">
@@ -44,25 +49,33 @@ export function Records() {
         ))}
       </div>
 
-      <h3 className="section">Personal records</h3>
-      <div className="records">
-        {records.map((r) => (
-          <div key={r.name} className="record">
-            <div className="record-name">{r.name}</div>
-            <div className="record-nums">
-              <div>
-                <span className="big">{r.maxWeight.weight} kg</span>
-                <span className="muted"> ×{r.maxWeight.reps}</span>
-                <div className="tiny muted">max · {niceDate(r.maxWeight.date)}</div>
+      <h3 className="section">Records by muscle</h3>
+      {MUSCLE_ORDER.filter((cat) => byCat[cat]?.length).map((cat) => (
+        <details key={cat} className="cat">
+          <summary>
+            <span className="cat-name">{cat}</span>
+            <span className="tiny muted">{byCat[cat].length} exercises</span>
+          </summary>
+          <div className="records">
+            {byCat[cat].map((r) => (
+              <div key={r.name} className="record">
+                <div className="record-name">{r.name}</div>
+                <div className="record-nums">
+                  <div>
+                    <span className="big">{r.maxWeight.weight} kg</span>
+                    <span className="muted"> ×{r.maxWeight.reps}</span>
+                    <div className="tiny muted">max · {niceDate(r.maxWeight.date)}</div>
+                  </div>
+                  <div>
+                    <span className="big">{r.bestE1rm.est.toFixed(0)} kg</span>
+                    <div className="tiny muted">est 1RM · {niceDate(r.bestE1rm.date)}</div>
+                  </div>
+                </div>
               </div>
-              <div>
-                <span className="big">{r.bestE1rm.est.toFixed(0)} kg</span>
-                <div className="tiny muted">est 1RM · {niceDate(r.bestE1rm.date)}</div>
-              </div>
-            </div>
+            ))}
           </div>
-        ))}
-      </div>
+        </details>
+      ))}
     </div>
   );
 }

@@ -30,6 +30,21 @@ export function canonName(name: string): string {
   return name.trim();
 }
 
+// Muscle-group buckets for the Records tab. Heuristic, tuned to the owner's exercises;
+// "Other" catches anything unmatched. Arms is checked first so curls/extensions
+// don't fall into leg/press buckets.
+export const MUSCLE_ORDER = ["Chest", "Back", "Shoulder", "Legs", "Arms", "Core", "Other"];
+export function muscleGroup(name: string): string {
+  const n = name.toLowerCase();
+  if (/extension|curl|tricep|bicep|skull|pushdown|pressdown/.test(n)) return "Arms";
+  if (/bench|incline|\bfly|decline|chest|skråbenk/.test(n)) return "Chest";
+  if (/shoulder|military|shrug|delt|\bohp\b|sidehev|sidelift|lateral|face ?pull/.test(n)) return "Shoulder";
+  if (/deadlift|row|pulldown|pull-?up|chin|\blat|korsrygg|nedtrekk|\bback\b|\bmark/.test(n)) return "Back";
+  if (/squat|\bleg|calf|calves|quad|hamstring|lunge|utfall|glute|benhev/.test(n)) return "Legs";
+  if (/abs|crunch|core|plank|sit-?up|situp/.test(n)) return "Core";
+  return "Other";
+}
+
 export type LiftRecord = {
   name: string;
   count: number; // sets logged
