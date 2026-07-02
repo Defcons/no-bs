@@ -17,6 +17,7 @@ Vite 8 + React 19 + TypeScript, Dexie 4 (IndexedDB), `vite-plugin-pwa`, Web Blue
 - `src/lib/stats.ts` — `liftRecords` (per-lift max weight + best e1RM), `summarize` (streak/longest-break/busiest-month/heaviest), `canonName` (merges NO/EN variants), `epley`. `MAX_PLAUSIBLE_KG=500` filters sheet typos like `4040`.
 - `src/lib/useActiveWorkout.ts` — the in-progress session hook. Persists a `Draft` to the `activeDraft` setting on every change (survives reload). `buildExercises` pre-fills weight from last session + reps from scheme.
 - `src/lib/hr.ts` — `HeartRateMonitor` (Web Bluetooth standard HRS `0x180D`). Needs HTTPS + user gesture.
+- `src/lib/sheetSync.ts` — Google Sheets write-back. `syncWorkout` (POST finished session, text/plain to dodge CORS preflight), `cellFor` (rebuild "72,5-70-70" with off-scheme rep `(6)` annotations), `testSync`, `syncPending`/`pendingCount`. Config in settings `sheetSyncUrl`/`sheetSyncSecret`. Server side = `apps-script/Code.gs` (bound Web App, `doPost` finds year tab→day-block→next empty column, matches exercises by scheme-stripped name).
 - `src/components/` — `Today` (orchestrator: day picker → logging → timers → finish), `ExerciseCard`, `SetInput` (thumb weight entry), `RestTimer` (beep+vibrate), `History`, `Settings`.
 - `src/App.tsx` — shell: bootstrap, tab nav, owns HR monitor + settings state, export/reset.
 
@@ -26,4 +27,4 @@ Vite 8 + React 19 + TypeScript, Dexie 4 (IndexedDB), `vite-plugin-pwa`, Web Blue
 - HR only works over HTTPS (or localhost). For real phone use, deploy behind HTTPS (homelab NPM + Tailscale). Pair straps THROUGH the app, not OS Bluetooth.
 
 ## Not built yet
-Google Sheets write-back / live re-sync (history is a bundled snapshot in `src/data/history-seed.json`); in-app template/exercise editing; per-lift progress charts; HTTPS homelab deploy.
+Live re-import from the sheet (history is still a bundled snapshot in `src/data/history-seed.json`); in-app template/exercise editing; per-lift progress charts. Google Sheets **write-back IS built** (`sheetSync.ts` + `apps-script/`) — needs the user to deploy the Apps Script Web App once and paste URL+secret in Settings.

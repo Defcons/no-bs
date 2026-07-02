@@ -1,6 +1,9 @@
-// Settings: rest-timer default, weight increment, HR connection, and data
-// backup/reset. Google Sheets write-back is a later phase.
+// Settings: rest-timer default, weight increment, HR connection, Google Sheets
+// write-back sync, and data backup/reset.
+import { useEffect, useState } from "react";
+import { getSetting, setSetting } from "../db";
 import { bluetoothAvailable } from "../lib/hr";
+import { pendingCount, syncPending, testSync } from "../lib/sheetSync";
 
 type Props = {
   restDefaultSec: number;
@@ -12,7 +15,41 @@ type Props = {
   onReset: () => void;
 };
 
+const SHEET_URL = "https://docs.google.com/spreadsheets/d/REDACTED_SHEET_ID/edit";
+
 export function Settings({ restDefaultSec, setRestDefaultSec, weightStep, setWeightStep, hr, onExport, onReset }: Props) {
+  const [syncUrl, setSyncUrl] = useState("");
+  const [syncSecret, setSyncSecret] = useState("");
+  const [pending, setPending] = useState(0);
+  const [status, setStatus] = useState<string>("");
+
+  useEffect(() => {
+    getSetting<string>("sheetSyncUrl", "").then(setSyncUrl);
+    getSetting<string>("sheetSyncSecret", "").then(setSyncSecret);
+    pendingCount().then(setPending);
+  }, []);
+
+  const saveUrl = (v: string) => {
+    setSyncUrl(v);
+    setSetting("sheetSyncUrl", v.trim());
+  };
+  const saveSecret = (v: string) => {
+    setSyncSecret(v);
+    setSetting("sheetSyncSecret", v.trim());
+  };
+
+  const doTest = async () => {
+    setStatus("Testing…");
+    const r = await testSync();
+    setStatus(r.ok ? "✓ Connected to your sheet script." : `✗ ${r.error ?? "failed"}`);
+  };
+  const doSyncNow = async () => {
+    setStatus("Syncing…");
+    const { done, failed } = await syncPending();
+    setPending(await pendingCount());
+    setStatus(`Synced ${done}${failed ? `, ${failed} failed` : ""}.`);
+  };
+
   return (
     <div className="pad settings">
       <h2>Settings</h2>
@@ -61,14 +98,40 @@ export function Settings({ restDefaultSec, setRestDefaultSec, weightStep, setWei
       </div>
 
       <div className="setting">
+        <label>Google Sheets sync</label>
+        <p className="muted tiny">
+          Finished workouts are written back to your sheet via an Apps Script Web App. Paste its URL + your shared secret
+          (see apps-script/README in the repo).
+        </p>
+        <input
+          type="text"
+          className="full"
+          placeholder="Apps Script Web App URL (…/exec)"
+          value={syncUrl}
+          onChange={(e) => saveUrl(e.target.value)}
+        />
+        <input
+          type="text"
+          className="full"
+          placeholder="Shared secret"
+          value={syncSecret}
+          onChange={(e) => saveSecret(e.target.value)}
+        />
+        <div className="row">
+          <button className="mini" onClick={doTest}>
+            Test connection
+          </button>
+          <button className="mini" onClick={doSyncNow}>
+            Sync now{pending ? ` (${pending} pending)` : ""}
+          </button>
+        </div>
+        {status && <p className="muted tiny">{status}</p>}
+      </div>
+
+      <div className="setting">
         <label>Data</label>
         <div className="row">
-          <a
-            className="mini linkbtn"
-            href="https://docs.google.com/spreadsheets/d/REDACTED_SHEET_ID/edit"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
+          <a className="mini linkbtn" href={SHEET_URL} target="_blank" rel="noopener noreferrer">
             Open Google Sheet ↗
           </a>
           <button className="mini" onClick={onExport}>
@@ -78,7 +141,6 @@ export function Settings({ restDefaultSec, setRestDefaultSec, weightStep, setWei
             Reset app data
           </button>
         </div>
-        <p className="muted tiny">Google Sheets write-back sync is coming in a later update.</p>
       </div>
     </div>
   );

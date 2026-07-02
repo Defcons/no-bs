@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { lastWorkoutForDay, type StoredWorkout } from "../db";
 import { daysAgoLabel, hhmmss, niceDate } from "../lib/format";
+import { syncWorkout } from "../lib/sheetSync";
 import { useActiveWorkout } from "../lib/useActiveWorkout";
 import type { DayTemplate, ExercisePerf } from "../types";
 import { ExerciseCard } from "./ExerciseCard";
@@ -90,7 +91,13 @@ export function Today({ templates, restDefaultSec, weightStep, hr, onWorkoutStar
   const setRest = (endsAt: number | null) => update((d) => ({ ...d, restEndsAt: endsAt ?? undefined }));
 
   const doFinish = async () => {
-    await finish(getHrStats());
+    const row = await finish(getHrStats());
+    if (row) {
+      const res = await syncWorkout(row);
+      if (res && !res.ok) {
+        alert(`Saved locally, but Google Sheet sync failed:\n${res.error}\n\nYou can retry from Settings → Sync now.`);
+      }
+    }
     onFinished();
   };
 

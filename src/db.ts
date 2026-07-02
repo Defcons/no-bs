@@ -14,6 +14,7 @@ export interface StoredWorkout {
   avgHr?: number;
   maxHr?: number;
   source: string; // "app" for new sessions, "sheet:2026" etc. for imports
+  synced?: boolean; // written back to the Google Sheet
 }
 
 export interface Setting {
