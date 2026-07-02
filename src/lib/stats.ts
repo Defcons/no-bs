@@ -19,6 +19,11 @@ const CANON: [RegExp, string][] = [
   [/legpress|leg press/i, "Legpress"],
   [/pulldown/i, "Pulldown"],
   [/\bcurl stang|barbell curl/i, "Barbell curl"],
+  // Merge "heavy"/"light"/"drop" variants of the same movement.
+  [/calves|calf/i, "Calves"],
+  [/quad/i, "Quad"],
+  [/hamstring/i, "Hamstring"],
+  [/shrug/i, "Shrugs"],
 ];
 export function canonName(name: string): string {
   for (const [re, c] of CANON) if (re.test(name)) return c;

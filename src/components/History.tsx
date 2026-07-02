@@ -1,79 +1,69 @@
-// History: personal records + lifetime summary computed from all stored workouts
-// (imported sheet history + new app sessions).
+// History: a table of past workouts (newest first). Tap a row to expand the
+// exercises, sets, notes, duration and HR of that session.
+import { useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db } from "../db";
-import { niceDate } from "../lib/format";
-import { liftRecords, summarize } from "../lib/stats";
+import { daysAgoLabel, niceDate } from "../lib/format";
 
 export function History() {
-  const workouts = useLiveQuery(() => db.workouts.toArray(), []);
+  const workouts = useLiveQuery(() => db.workouts.orderBy("date").reverse().toArray(), []);
+  const [open, setOpen] = useState<number | null>(null);
   if (!workouts) return <div className="pad">Loading…</div>;
   if (workouts.length === 0) return <div className="pad muted">No workouts yet — log your first one!</div>;
-
-  const summary = summarize(workouts)!;
-  const records = liftRecords(workouts).filter((r) => r.maxWeight.weight > 0);
-  const scoreboard = [...records].sort((a, b) => b.maxWeight.weight - a.maxWeight.weight).slice(0, 10);
-  const medal = ["🥇", "🥈", "🥉"];
 
   return (
     <div className="pad history">
       <h2>History</h2>
-      <p className="muted tiny">
-        {summary.total} sessions · {niceDate(summary.first)} → {niceDate(summary.last)}
-      </p>
+      <p className="muted tiny">{workouts.length} workouts · tap a row for details</p>
 
-      <div className="stat-grid">
-        <Stat label="Workouts" value={String(summary.total)} />
-        <Stat label="Training since" value={niceDate(summary.first)} />
-        <Stat label="Current streak" value={`${summary.currentStreakWeeks} wk`} />
-        <Stat label="Longest break" value={`${summary.longestBreakDays} d`} sub={`${niceDate(summary.longestBreakBetween[0])} → ${niceDate(summary.longestBreakBetween[1])}`} />
-        <Stat label="Busiest month" value={summary.busiestMonth.month} sub={`${summary.busiestMonth.count} sessions`} />
-        <Stat label="Heaviest lift" value={`${summary.heaviest.weight} kg`} sub={`${summary.heaviest.name} ×${summary.heaviest.reps}`} />
-        <Stat label="Best est. 1RM" value={`${summary.bestE1rm.est.toFixed(0)} kg`} sub={summary.bestE1rm.name} />
-      </div>
+      <div className="log">
+        {workouts.map((w) => {
+          const nSets = w.exercises.reduce((a, e) => a + e.sets.filter((s) => s.weight != null).length, 0);
+          const isOpen = open === w.id;
+          return (
+            <div key={w.id} className={`log-row ${isOpen ? "open" : ""}`}>
+              <button className="log-head" onClick={() => setOpen(isOpen ? null : w.id!)}>
+                <span className="log-info">
+                  <span className="log-day">{w.dayName}</span>
+                  <span className="tiny muted">
+                    {niceDate(w.date)} · {daysAgoLabel(w.date)}
+                  </span>
+                </span>
+                <span className="tiny muted log-count">
+                  {w.exercises.length} ex · {nSets} sets
+                </span>
+              </button>
 
-      <h3 className="section">🏆 Biggest lifts</h3>
-      <div className="scoreboard">
-        {scoreboard.map((r, i) => (
-          <div key={r.name} className={`score-row ${i < 3 ? "podium" : ""}`}>
-            <span className="rank">{medal[i] ?? i + 1}</span>
-            <span className="score-name">{r.name}</span>
-            <span className="score-weight">
-              {r.maxWeight.weight} kg <span className="muted tiny">×{r.maxWeight.reps}</span>
-            </span>
-          </div>
-        ))}
-      </div>
-
-      <h3 className="section">Personal records</h3>
-      <div className="records">
-        {records.map((r) => (
-          <div key={r.name} className="record">
-            <div className="record-name">{r.name}</div>
-            <div className="record-nums">
-              <div>
-                <span className="big">{r.maxWeight.weight} kg</span>
-                <span className="muted"> ×{r.maxWeight.reps}</span>
-                <div className="tiny muted">max · {niceDate(r.maxWeight.date)}</div>
-              </div>
-              <div>
-                <span className="big">{r.bestE1rm.est.toFixed(0)} kg</span>
-                <div className="tiny muted">est 1RM · {niceDate(r.bestE1rm.date)}</div>
-              </div>
+              {isOpen && (
+                <div className="log-detail">
+                  {w.note && <div className="log-note">📝 {w.note}</div>}
+                  {w.exercises.map((e, i) => {
+                    const sets = e.sets.filter((s) => s.weight != null);
+                    return (
+                      <div key={i} className="log-ex">
+                        <span className="log-ex-name">{e.name}</span>
+                        <span className="log-ex-sets">
+                          {sets.length
+                            ? sets.map((s) => `${s.weight}${s.reps ? `×${s.reps}` : ""}`).join(" · ")
+                            : e.skipped
+                              ? "skipped"
+                              : "—"}
+                        </span>
+                      </div>
+                    );
+                  })}
+                  {w.durationSec ? (
+                    <div className="tiny muted log-meta">
+                      ⏱ {Math.round(w.durationSec / 60)} min
+                      {w.avgHr ? ` · ♥ ${w.avgHr} avg / ${w.maxHr} max` : ""}
+                    </div>
+                  ) : null}
+                </div>
+              )}
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
-    </div>
-  );
-}
-
-function Stat({ label, value, sub }: { label: string; value: string; sub?: string }) {
-  return (
-    <div className="stat">
-      <div className="stat-label">{label}</div>
-      <div className="stat-value">{value}</div>
-      {sub && <div className="stat-sub">{sub}</div>}
     </div>
   );
 }

@@ -60,6 +60,93 @@
   color: var(--muted);
   font-size: 13px;
 }
+.day-last {
+  color: var(--muted);
+  font-size: 12px;
+  margin-top: 4px;
+}
+.last-banner {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin-bottom: 14px;
+  font-size: 14px;
+}
+
+/* ---- History log ---- */
+.log {
+  display: grid;
+  gap: 8px;
+}
+.log-row {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.log-head {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  background: none;
+  border: none;
+  border-radius: 0;
+  text-align: left;
+  padding: 12px;
+}
+.log-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.log-day {
+  font-weight: 600;
+}
+.log-count {
+  white-space: nowrap;
+}
+.log-detail {
+  padding: 10px 12px 12px;
+  display: grid;
+  gap: 6px;
+  border-top: 1px solid var(--line);
+}
+.log-note {
+  background: var(--surface-2);
+  border-radius: 8px;
+  padding: 8px;
+  font-size: 13px;
+}
+.log-ex {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 14px;
+}
+.log-ex-name {
+  color: var(--muted);
+}
+.log-ex-sets {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+.log-meta {
+  margin-top: 4px;
+}
+
+/* anchor styled as a mini button */
+.linkbtn {
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  color: var(--text);
+}
 
 /* ---- Active workout header ---- */
 .workout-bar {

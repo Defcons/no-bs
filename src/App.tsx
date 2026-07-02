@@ -4,10 +4,11 @@ import "./App.css";
 import { db, ensureBootstrapped, getSetting, setSetting } from "./db";
 import { HeartRateMonitor } from "./lib/hr";
 import { History } from "./components/History";
+import { Records } from "./components/Records";
 import { Settings } from "./components/Settings";
 import { Today } from "./components/Today";
 
-type Tab = "today" | "history" | "settings";
+type Tab = "today" | "history" | "records" | "settings";
 
 export default function App() {
   const [ready, setReady] = useState(false);
@@ -106,6 +107,7 @@ export default function App() {
           />
         )}
         {tab === "history" && <History />}
+        {tab === "records" && <Records />}
         {tab === "settings" && (
           <Settings
             restDefaultSec={restDefaultSec}
@@ -124,7 +126,10 @@ export default function App() {
           <span className="ico">🏋️</span>Today
         </button>
         <button className={tab === "history" ? "active" : ""} onClick={() => setTab("history")}>
-          <span className="ico">📈</span>History
+          <span className="ico">📅</span>History
+        </button>
+        <button className={tab === "records" ? "active" : ""} onClick={() => setTab("records")}>
+          <span className="ico">🏆</span>Records
         </button>
         <button className={tab === "settings" ? "active" : ""} onClick={() => setTab("settings")}>
           <span className="ico">⚙️</span>Settings

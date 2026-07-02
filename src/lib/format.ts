@@ -22,6 +22,16 @@ export function niceDate(iso: string): string {
   return d.toLocaleDateString(undefined, { day: "2-digit", month: "short", year: "numeric" });
 }
 
+export function daysAgo(iso: string): number {
+  return Math.max(0, Math.round((Date.now() - Date.parse(iso.slice(0, 10))) / 86400000));
+}
+
+// "today" / "yesterday" / "N days ago"
+export function daysAgoLabel(iso: string): string {
+  const d = daysAgo(iso);
+  return d === 0 ? "today" : d === 1 ? "yesterday" : `${d} days ago`;
+}
+
 export function ago(iso: string): string {
   const days = Math.round((Date.now() - Date.parse(iso.slice(0, 10))) / 86400000);
   if (days <= 0) return "today";

@@ -2,7 +2,7 @@
 // see live HR, and finish. This is the primary "as-easy-as-possible" surface.
 import { useEffect, useState } from "react";
 import { lastWorkoutForDay, type StoredWorkout } from "../db";
-import { hhmmss } from "../lib/format";
+import { daysAgoLabel, hhmmss, niceDate } from "../lib/format";
 import { useActiveWorkout } from "../lib/useActiveWorkout";
 import type { DayTemplate, ExercisePerf } from "../types";
 import { ExerciseCard } from "./ExerciseCard";
@@ -21,6 +21,7 @@ type Props = {
 export function Today({ templates, restDefaultSec, weightStep, hr, onWorkoutStart, getHrStats, onFinished }: Props) {
   const { draft, loaded, elapsed, start, cancel, finish, update } = useActiveWorkout();
   const [prev, setPrev] = useState<StoredWorkout | undefined>();
+  const [lastByDay, setLastByDay] = useState<Record<string, StoredWorkout | undefined>>({});
 
   // Load last session of this day for per-set ghost hints.
   useEffect(() => {
@@ -28,29 +29,54 @@ export function Today({ templates, restDefaultSec, weightStep, hr, onWorkoutStar
     else setPrev(undefined);
   }, [draft?.dayName]);
 
+  // On the picker, load the last session of each day type (for "days ago").
+  useEffect(() => {
+    if (draft) return;
+    let cancelled = false;
+    Promise.all(templates.map((t) => lastWorkoutForDay(t.name).then((w) => [t.name, w] as const))).then((entries) => {
+      if (!cancelled) setLastByDay(Object.fromEntries(entries));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [draft, templates]);
+
   if (!loaded) return <div className="pad">Loading…</div>;
 
   // ---- No active workout: choose a day -----------------------------------
   if (!draft) {
-    // Suggest the next day in rotation after the most recent session.
+    const lasts = Object.values(lastByDay).filter(Boolean) as StoredWorkout[];
+    const overall = lasts.sort((a, b) => b.date.localeCompare(a.date))[0];
     return (
       <div className="pad day-picker">
         <h2>Start a workout</h2>
+        {overall && (
+          <div className="last-banner">
+            Last workout: <b>{overall.dayName}</b> · {niceDate(overall.date)}{" "}
+            <span className="muted">({daysAgoLabel(overall.date)})</span>
+          </div>
+        )}
         <p className="muted">Pick today's day:</p>
         <div className="day-buttons">
-          {templates.map((t) => (
-            <button
-              key={t.id ?? t.name}
-              className="day-btn"
-              onClick={() => {
-                start(t);
-                onWorkoutStart();
-              }}
-            >
-              <span className="day-name">{t.name}</span>
-              <span className="day-sub">{t.exercises.length} exercises</span>
-            </button>
-          ))}
+          {templates.map((t) => {
+            const last = lastByDay[t.name];
+            return (
+              <button
+                key={t.id ?? t.name}
+                className="day-btn"
+                onClick={() => {
+                  start(t);
+                  onWorkoutStart();
+                }}
+              >
+                <span className="day-name">{t.name}</span>
+                <span className="day-sub">{t.exercises.length} exercises</span>
+                <span className="day-last">
+                  {last ? `Last: ${niceDate(last.date)} (${daysAgoLabel(last.date)})` : "Never done"}
+                </span>
+              </button>
+            );
+          })}
         </div>
       </div>
     );
@@ -115,8 +141,13 @@ export function Today({ templates, restDefaultSec, weightStep, hr, onWorkoutStar
       </div>
 
       <div className="finish-bar">
-        <button className="ghost" onClick={cancel}>
-          Discard
+        <button
+          className="ghost"
+          onClick={() => {
+            if (confirm("Reset this workout? Nothing will be saved and you'll go back to day selection.")) cancel();
+          }}
+        >
+          Reset
         </button>
         <button className="primary" onClick={doFinish}>
           Finish workout

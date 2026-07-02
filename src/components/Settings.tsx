@@ -31,9 +31,9 @@ export function Settings({ restDefaultSec, setRestDefaultSec, weightStep, setWei
       <div className="setting">
         <label>Weight step (± buttons)</label>
         <div className="seg">
-          {[1, 2.5, 5].map((s) => (
+          {[1.25, 2.5, 5].map((s) => (
             <button key={s} className={weightStep === s ? "active" : ""} onClick={() => setWeightStep(s)}>
-              {s} kg
+              {String(s).replace(".", ",")} kg
             </button>
           ))}
         </div>
@@ -63,6 +63,14 @@ export function Settings({ restDefaultSec, setRestDefaultSec, weightStep, setWei
       <div className="setting">
         <label>Data</label>
         <div className="row">
+          <a
+            className="mini linkbtn"
+            href="https://docs.google.com/spreadsheets/d/REDACTED_SHEET_ID/edit"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Open Google Sheet ↗
+          </a>
           <button className="mini" onClick={onExport}>
             Export backup (JSON)
           </button>
@@ -70,7 +78,7 @@ export function Settings({ restDefaultSec, setRestDefaultSec, weightStep, setWei
             Reset app data
           </button>
         </div>
-        <p className="muted tiny">Google Sheets sync is coming in a later update.</p>
+        <p className="muted tiny">Google Sheets write-back sync is coming in a later update.</p>
       </div>
     </div>
   );
