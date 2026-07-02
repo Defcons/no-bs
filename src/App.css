@@ -218,8 +218,14 @@
   background: var(--surface);
   border-bottom: 1px solid var(--line);
 }
+.wb-left {
+  min-width: 0;
+}
 .wb-day {
   font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .wb-timer {
   font-variant-numeric: tabular-nums;
@@ -230,6 +236,7 @@
   display: flex;
   gap: 8px;
   align-items: center;
+  flex-shrink: 0;
 }
 .hr-badge {
   display: flex;
@@ -310,6 +317,7 @@
 /* ---- Exercise cards ---- */
 .exercise-list {
   display: grid;
+  grid-template-columns: minmax(0, 1fr); /* let cards shrink to fit narrow phones */
   gap: 12px;
   padding: 8px 16px;
 }
@@ -355,16 +363,16 @@
 }
 .setrow {
   display: grid;
-  grid-template-columns: 24px 1fr auto 36px;
+  grid-template-columns: 22px minmax(0, 1fr) auto 32px;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
 }
 .setrow .set-note {
   grid-column: 1 / -1;
 }
 .set-badge {
-  width: 24px;
-  height: 24px;
+  width: 22px;
+  height: 22px;
   border-radius: 50%;
   display: grid;
   place-items: center;
@@ -379,8 +387,8 @@
 }
 .weight-group {
   display: grid;
-  grid-template-columns: 38px 1fr 38px;
-  gap: 5px;
+  grid-template-columns: 34px minmax(0, 1fr) 34px;
+  gap: 4px;
 }
 .stepper {
   font-size: 18px;
@@ -426,13 +434,13 @@
   font-weight: 600;
 }
 .reps-field {
-  width: 76px;
+  width: 58px;
 }
 .reps-field input {
   font-size: 16px;
 }
 .note-toggle {
-  width: 36px;
+  width: 32px;
   height: 40px;
   padding: 0;
   color: var(--muted);
