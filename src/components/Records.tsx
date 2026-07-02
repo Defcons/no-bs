@@ -1,20 +1,19 @@
-// Records: personal records, lifetime summary, and the biggest-lifts scoreboard.
+// Records: lifetime summary, key lifts rated against strength standards, and
+// per-muscle collapsible personal records.
 import { useLiveQuery } from "dexie-react-hooks";
 import { db } from "../db";
 import { niceDate } from "../lib/format";
+import { KEY_LIFTS, levelClass, rateLift } from "../lib/standards";
 import { type LiftRecord, MUSCLE_ORDER, liftRecords, muscleGroup, summarize } from "../lib/stats";
 
-export function Records() {
+export function Records({ bodyweightKg }: { bodyweightKg: number }) {
   const workouts = useLiveQuery(() => db.workouts.toArray(), []);
   if (!workouts) return <div className="pad">Loading…</div>;
   if (workouts.length === 0) return <div className="pad muted">No workouts yet — log your first one!</div>;
 
   const summary = summarize(workouts)!;
   const records = liftRecords(workouts).filter((r) => r.maxWeight.weight > 0);
-  const scoreboard = [...records].sort((a, b) => b.maxWeight.weight - a.maxWeight.weight).slice(0, 10);
-  const medal = ["🥇", "🥈", "🥉"];
 
-  // Group records by muscle for the collapsible sections.
   const byCat: Record<string, LiftRecord[]> = {};
   for (const r of records) (byCat[muscleGroup(r.name)] ??= []).push(r);
   for (const c of Object.keys(byCat)) byCat[c].sort((a, b) => b.maxWeight.weight - a.maxWeight.weight);
@@ -32,22 +31,39 @@ export function Records() {
         <Stat label="Current streak" value={`${summary.currentStreakWeeks} wk`} />
         <Stat label="Longest break" value={`${summary.longestBreakDays} d`} sub={`${niceDate(summary.longestBreakBetween[0])} → ${niceDate(summary.longestBreakBetween[1])}`} />
         <Stat label="Busiest month" value={summary.busiestMonth.month} sub={`${summary.busiestMonth.count} sessions`} />
-        <Stat label="Heaviest lift" value={`${summary.heaviest.weight} kg`} sub={`${summary.heaviest.name} ×${summary.heaviest.reps}`} />
         <Stat label="Best est. 1RM" value={`${summary.bestE1rm.est.toFixed(0)} kg`} sub={summary.bestE1rm.name} />
       </div>
 
-      <h3 className="section">🏆 Biggest lifts</h3>
-      <div className="scoreboard">
-        {scoreboard.map((r, i) => (
-          <div key={r.name} className={`score-row ${i < 3 ? "podium" : ""}`}>
-            <span className="rank">{medal[i] ?? i + 1}</span>
-            <span className="score-name">{r.name}</span>
-            <span className="score-weight">
-              {r.maxWeight.weight} kg <span className="muted tiny">×{r.maxWeight.reps}</span>
-            </span>
-          </div>
-        ))}
-      </div>
+      <h3 className="section">💪 Strength standards</h3>
+      {bodyweightKg <= 0 ? (
+        <p className="muted tiny">Set your bodyweight in Settings to rate your key lifts against strength standards.</p>
+      ) : (
+        <div className="standards">
+          {KEY_LIFTS.map((kl) => {
+            const rec = records.find((r) => r.name === kl.canon);
+            if (!rec) return null;
+            const e1rm = rec.bestE1rm.est;
+            const r = rateLift(kl.std, e1rm, bodyweightKg);
+            return (
+              <div key={kl.canon} className="std-row">
+                <div className="std-top">
+                  <span className="std-name">{kl.canon}</span>
+                  <span className={`lvl-badge ${levelClass(r.level)}`}>{r.level ?? "Below beginner"}</span>
+                </div>
+                <div className="std-bar">
+                  <div className="std-fill" style={{ width: `${r.pct}%` }} />
+                </div>
+                <div className="std-meta tiny muted">
+                  {e1rm.toFixed(0)} kg est-1RM · {r.ratio.toFixed(2)}× bodyweight
+                  {r.next ? ` · ${Math.max(0, r.next.kg - Math.round(e1rm))} kg to ${r.next.level}` : " · Elite 🏆"}
+                  {kl.note ? ` · ${kl.note}` : ""}
+                </div>
+              </div>
+            );
+          })}
+          <p className="muted tiny">Standards = 1RM ÷ bodyweight (adult male). Barbell lifts are reliable; machine lifts are approximate.</p>
+        </div>
+      )}
 
       <h3 className="section">Records by muscle</h3>
       {MUSCLE_ORDER.filter((cat) => byCat[cat]?.length).map((cat) => (

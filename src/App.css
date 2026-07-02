@@ -611,6 +611,74 @@
   padding: 0 12px 12px;
 }
 
+/* ---- Strength standards ---- */
+.standards {
+  display: grid;
+  gap: 10px;
+}
+.std-row {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 12px;
+}
+.std-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+.std-name {
+  font-weight: 600;
+}
+.lvl-badge {
+  font-size: 12px;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.std-bar {
+  height: 6px;
+  background: var(--surface-2);
+  border-radius: 999px;
+  margin: 9px 0 7px;
+  overflow: hidden;
+}
+.std-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 999px;
+}
+.lvl-none {
+  background: color-mix(in srgb, var(--muted) 22%, var(--surface-2));
+  color: var(--muted);
+}
+.lvl-beginner {
+  background: color-mix(in srgb, var(--danger) 22%, var(--surface-2));
+  color: var(--danger);
+}
+.lvl-novice {
+  background: color-mix(in srgb, var(--warn) 22%, var(--surface-2));
+  color: var(--warn);
+}
+.lvl-intermediate {
+  background: color-mix(in srgb, var(--accent) 22%, var(--surface-2));
+  color: var(--accent);
+}
+.lvl-advanced {
+  background: color-mix(in srgb, var(--accent-2) 22%, var(--surface-2));
+  color: var(--accent-2);
+}
+.lvl-elite {
+  background: color-mix(in srgb, #f5c542 26%, var(--surface-2));
+  color: #f5c542;
+}
+.bw-input {
+  width: 90px;
+  text-align: center;
+}
+
 /* ---- Settings ---- */
 .setting {
   margin-bottom: 22px;

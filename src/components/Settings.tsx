@@ -13,6 +13,8 @@ type Props = {
   setWeightStep: (v: number) => void;
   daysPerWeek: number;
   setDaysPerWeek: (v: number) => void;
+  bodyweightKg: number;
+  setBodyweightKg: (v: number) => void;
   hr: { bpm: number | null; connected: boolean; connect: () => void; disconnect: () => void };
   onExport: () => void;
   onReset: () => void;
@@ -27,6 +29,8 @@ export function Settings({
   setWeightStep,
   daysPerWeek,
   setDaysPerWeek,
+  bodyweightKg,
+  setBodyweightKg,
   hr,
   onExport,
   onReset,
@@ -116,6 +120,25 @@ export function Settings({
           ))}
         </div>
         <p className="muted tiny">Colors the “days since last workout” (green/orange/red) and drives reminders.</p>
+      </div>
+
+      <div className="setting">
+        <label>Bodyweight (for strength ratings)</label>
+        <div className="row">
+          <input
+            type="text"
+            inputMode="decimal"
+            className="bw-input"
+            value={bodyweightKg || ""}
+            placeholder="kg"
+            onChange={(e) => {
+              const n = parseFloat(e.target.value.replace(",", "."));
+              setBodyweightKg(Number.isFinite(n) ? n : 0);
+            }}
+          />
+          <span className="muted">kg</span>
+        </div>
+        <p className="muted tiny">Rates your key lifts in Records against strength standards.</p>
       </div>
 
       <div className="setting">

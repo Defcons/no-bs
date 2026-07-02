@@ -1,7 +1,7 @@
 // The in-progress gym session. Kept in React state and mirrored to IndexedDB on
 // every change so a phone refresh / accidental close mid-workout loses nothing.
 import { useCallback, useEffect, useRef, useState } from "react";
-import { db, getSetting, lastWorkoutForDay, setSetting, type StoredWorkout } from "../db";
+import { db, getSetting, setSetting, type StoredWorkout } from "../db";
 import type { DayTemplate, ExercisePerf, SetEntry } from "../types";
 
 export type Draft = {
@@ -21,15 +21,26 @@ function isoNow(): string {
   return new Date().toISOString();
 }
 
-// Build fresh exercises for a day, pre-filling weight from last session and
-// reps from each exercise's scheme, so the user usually just confirms/nudges.
-function buildExercises(tpl: DayTemplate, last?: StoredWorkout): ExercisePerf[] {
+// Build fresh exercises for a day, pre-filling each set with last week's number
+// for that exercise. `history` is this day-type's past sessions, newest first;
+// if the most recent session left an exercise empty, we walk back to the most
+// recent session that actually logged a weight for it.
+function buildExercises(tpl: DayTemplate, history: StoredWorkout[]): ExercisePerf[] {
   return tpl.exercises.map((e) => {
-    const prev = last?.exercises.find((p) => p.name === e.name);
+    // Most recent past sets (with any weight) for this exercise.
+    let prevSets: SetEntry[] | undefined;
+    for (const w of history) {
+      const p = w.exercises.find((x) => x.name === e.name);
+      if (p && p.sets.some((s) => s.weight != null)) {
+        prevSets = p.sets;
+        break;
+      }
+    }
+    const lastKnown = prevSets?.filter((s) => s.weight != null).at(-1)?.weight ?? null;
     const nSets = e.scheme.sets ?? 3;
     const defReps = typeof e.scheme.reps === "number" ? e.scheme.reps : null;
     const sets: SetEntry[] = Array.from({ length: nSets }, (_, i) => ({
-      weight: prev?.sets[i]?.weight ?? prev?.sets.at(-1)?.weight ?? null,
+      weight: prevSets?.[i]?.weight ?? lastKnown,
       reps: defReps,
     }));
     return { name: e.name, scheme: e.scheme, sets };
@@ -80,13 +91,15 @@ export function useActiveWorkout() {
   );
 
   const start = useCallback(async (tpl: DayTemplate) => {
-    const last = await lastWorkoutForDay(tpl.name);
+    const history = (await db.workouts.where("dayName").equals(tpl.name).toArray()).sort((a, b) =>
+      b.date.localeCompare(a.date),
+    );
     const d: Draft = {
       startedAt: Date.now(),
       date: isoNow(),
       dayName: tpl.name,
       templateId: tpl.id,
-      exercises: buildExercises(tpl, last),
+      exercises: buildExercises(tpl, history),
     };
     setDraft(d);
     setSetting(DRAFT_KEY, d);
