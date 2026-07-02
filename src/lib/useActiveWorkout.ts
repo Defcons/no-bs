@@ -61,15 +61,16 @@ function buildExercises(tpl: DayTemplate, history: StoredWorkout[]): ExercisePer
 export function useActiveWorkout() {
   const [draft, setDraft] = useState<Draft | null>(null);
   const [loaded, setLoaded] = useState(false);
-  const [elapsed, setElapsed] = useState(0);
+  const [elapsed, setElapsed] = useState(0); // full workout time (auto)
+  const [swElapsed, setSwElapsed] = useState(0); // separate stopwatch
   const saveTimer = useRef<number | undefined>(undefined);
 
   // Load any persisted draft on mount (migrate pre-stopwatch drafts).
   useEffect(() => {
     getSetting<Draft | null>(DRAFT_KEY, null).then((d) => {
       if (d && d.swAccumMs === undefined) {
-        d.swRunning = true;
-        d.swAccumMs = Math.max(0, Date.now() - d.startedAt);
+        d.swRunning = false;
+        d.swAccumMs = 0;
         d.swSegStart = Date.now();
       }
       setDraft(d);
@@ -77,15 +78,18 @@ export function useActiveWorkout() {
     });
   }, []);
 
-  // Tick the stopwatch once per second while running.
+  // Tick both timers once per second: the full workout time (always running) and
+  // the separate controllable stopwatch.
   useEffect(() => {
     if (!draft) return;
-    const tick = () => setElapsed(Math.floor(swElapsedMs(draft) / 1000));
+    const tick = () => {
+      setElapsed(Math.floor((Date.now() - draft.startedAt) / 1000));
+      setSwElapsed(Math.floor(swElapsedMs(draft) / 1000));
+    };
     tick();
-    if (!draft.swRunning) return;
     const id = window.setInterval(tick, 1000);
     return () => window.clearInterval(id);
-  }, [draft?.swRunning, draft?.swSegStart, draft?.swAccumMs]);
+  }, [draft?.startedAt, draft?.swRunning, draft?.swSegStart, draft?.swAccumMs]);
 
   // Debounced persistence of the draft.
   const persist = useCallback((d: Draft | null) => {
@@ -118,7 +122,7 @@ export function useActiveWorkout() {
       dayName: tpl.name,
       templateId: tpl.id,
       exercises: buildExercises(tpl, history),
-      swRunning: true,
+      swRunning: false,
       swAccumMs: 0,
       swSegStart: now,
     };
@@ -135,7 +139,7 @@ export function useActiveWorkout() {
       dayName: label,
       exercises: [],
       custom: true,
-      swRunning: true,
+      swRunning: false,
       swAccumMs: 0,
       swSegStart: now,
     };
@@ -180,7 +184,7 @@ export function useActiveWorkout() {
   const finish = useCallback(
     async (hr?: { avg?: number; max?: number }) => {
       if (!draft) return;
-      const durationSec = Math.floor(swElapsedMs(draft) / 1000);
+      const durationSec = Math.floor((Date.now() - draft.startedAt) / 1000);
       const row: StoredWorkout = {
         date: draft.date,
         dayName: draft.dayName,
@@ -212,6 +216,7 @@ export function useActiveWorkout() {
     draft,
     loaded,
     elapsed,
+    swElapsed,
     start,
     startCustom,
     cancel,

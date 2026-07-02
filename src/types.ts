@@ -10,6 +10,7 @@ export type Scheme = {
 export type SetEntry = {
   weight: number | null; // kg (per dumbbell for DB moves); null if unknown/bodyweight/text-only
   reps: number | null; // actual reps; null -> falls back to scheme reps
+  assist?: number | null; // extra/assisted reps → written as "(n)" in the sheet
   note?: string;
   raw?: string; // original token from the sheet, kept for fidelity/debugging
 };

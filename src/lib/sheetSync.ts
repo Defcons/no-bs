@@ -21,16 +21,15 @@ export type SyncResult = {
 // Norwegian decimal comma, matching how the sheet is written (72.5 -> "72,5").
 const fmtNum = (n: number): string => String(n).replace(".", ",");
 
-// Reconstruct a sheet cell like "72,5-70-70" or "70-70-70(6)".
-// Reps are only annotated when they differ from the exercise's scheme (his style).
+// Reconstruct a sheet cell like "72,5-70-70" or "70-70-70(2)".
+// Assisted/extra reps are written in parentheses, matching the owner's sheet style.
 export function cellFor(ex: ExercisePerf): string {
   if (ex.skipped) return "x";
-  const schemeReps = typeof ex.scheme.reps === "number" ? ex.scheme.reps : null;
   return ex.sets
     .filter((s) => s.weight != null)
     .map((s) => {
       let t = fmtNum(s.weight as number);
-      if (s.reps != null && s.reps !== schemeReps) t += `(${s.reps})`;
+      if (s.assist != null) t += `(${s.assist})`;
       return t;
     })
     .join("-");

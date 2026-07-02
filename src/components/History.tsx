@@ -44,7 +44,12 @@ export function History() {
                         <span className="log-ex-name">{e.name}</span>
                         <span className="log-ex-sets">
                           {sets.length
-                            ? sets.map((s) => `${s.weight}${s.reps ? `×${s.reps}` : ""}`).join(" · ")
+                            ? sets
+                                .map(
+                                  (s) =>
+                                    `${s.weight}${s.reps ? `×${s.reps}` : ""}${s.assist != null ? `(${s.assist})` : ""}`,
+                                )
+                                .join(" · ")
                             : e.skipped
                               ? "skipped"
                               : "—"}

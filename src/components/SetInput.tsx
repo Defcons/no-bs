@@ -59,7 +59,22 @@ export function SetInput({ index, set, step, prevWeight, onChange }: Props) {
             onChange({ reps: Number.isFinite(n) ? n : null });
           }}
         />
-        <span className="unit">reps</span>
+        <span className="unit">×</span>
+      </div>
+
+      <div className="field assist-field" title="assisted / extra reps → shown as (n) in the sheet">
+        <span className="unit">(</span>
+        <input
+          type="text"
+          inputMode="numeric"
+          value={set.assist ?? ""}
+          placeholder="–"
+          onChange={(e) => {
+            const n = parseInt(e.target.value, 10);
+            onChange({ assist: Number.isFinite(n) ? n : null });
+          }}
+        />
+        <span className="unit">)</span>
       </div>
 
       <button

@@ -2,7 +2,7 @@
 // see live HR, and finish. This is the primary "as-easy-as-possible" surface.
 import { useEffect, useState } from "react";
 import { lastWorkoutForDay, type StoredWorkout } from "../db";
-import { daysAgo, daysAgoLabel, hhmmss, niceDate } from "../lib/format";
+import { daysAgo, daysAgoLabel, hhmmss, mmss, niceDate } from "../lib/format";
 import { syncWorkout } from "../lib/sheetSync";
 import { cadenceStatus, trainingDue } from "../lib/stats";
 import { useActiveWorkout } from "../lib/useActiveWorkout";
@@ -31,7 +31,7 @@ export function Today({
   getHrStats,
   onFinished,
 }: Props) {
-  const { draft, loaded, elapsed, start, startCustom, cancel, finish, update, toggleStopwatch, resetStopwatch, moveExercise } =
+  const { draft, loaded, elapsed, swElapsed, start, startCustom, cancel, finish, update, toggleStopwatch, resetStopwatch, moveExercise } =
     useActiveWorkout();
   const [prev, setPrev] = useState<StoredWorkout | undefined>();
   const [lastByDay, setLastByDay] = useState<Record<string, StoredWorkout | undefined>>({});
@@ -153,14 +153,8 @@ export function Today({
           ) : (
             <div className="wb-day">{draft.dayName}</div>
           )}
-          <div className="wb-time-row">
-            <span className="wb-timer">{hhmmss(elapsed)}</span>
-            <button className="sw-btn" aria-label={draft.swRunning ? "pause" : "start"} onClick={toggleStopwatch}>
-              {draft.swRunning ? "⏸" : "▶"}
-            </button>
-            <button className="sw-btn" aria-label="reset stopwatch" onClick={resetStopwatch}>
-              ↺
-            </button>
+          <div className="wb-timer" title="Total workout time">
+            {hhmmss(elapsed)}
           </div>
         </div>
         <div className="wb-right">
@@ -177,6 +171,17 @@ export function Today({
           </button>
         </div>
       </header>
+
+      <div className="sw-bar">
+        <span className="sw-label">⏱ Stopwatch</span>
+        <span className="sw-time">{mmss(swElapsed)}</span>
+        <button className="mini" onClick={toggleStopwatch}>
+          {draft.swRunning ? "⏸ Pause" : "▶ Start"}
+        </button>
+        <button className="mini" onClick={resetStopwatch}>
+          ↺ Reset
+        </button>
+      </div>
 
       <RestTimer endsAt={draft.restEndsAt ?? null} onChange={setRest} />
 
