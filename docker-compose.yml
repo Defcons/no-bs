@@ -1,0 +1,9 @@
+services:
+  gym-tracker:
+    build: .
+    container_name: gym-tracker
+    restart: unless-stopped
+    environment:
+      - TZ=Europe/Oslo
+    ports:
+      - "3060:80" # host:container — NPM proxies gym.defc0n.no to this host port
