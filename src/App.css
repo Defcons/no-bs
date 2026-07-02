@@ -74,6 +74,64 @@
   font-size: 14px;
 }
 
+/* cadence color coding */
+.cad {
+  font-weight: 600;
+}
+.cad-green {
+  color: var(--accent-2);
+}
+.cad-orange {
+  color: var(--warn);
+}
+.cad-red {
+  color: var(--danger);
+}
+.due-prompt {
+  border-radius: 10px;
+  padding: 11px 14px;
+  margin-bottom: 14px;
+  font-weight: 600;
+}
+.cad-bg-orange {
+  background: color-mix(in srgb, var(--warn) 16%, var(--surface));
+  border: 1px solid var(--warn);
+  color: var(--warn);
+}
+.cad-bg-red {
+  background: color-mix(in srgb, var(--danger) 16%, var(--surface));
+  border: 1px solid var(--danger);
+  color: var(--danger);
+}
+.alt-btn {
+  border-style: dashed;
+}
+
+/* custom "Alternative" session controls */
+.wb-day-input {
+  font-weight: 600;
+  padding: 6px 8px;
+  max-width: 190px;
+}
+.exercise-name-input {
+  flex: 1;
+  min-width: 0;
+  font-size: 17px;
+  font-weight: 600;
+  padding: 6px 8px;
+}
+.add-exercise {
+  width: 100%;
+  padding: 12px;
+  border-style: dashed;
+  color: var(--accent);
+  font-weight: 600;
+}
+.mini.active {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
 /* ---- History log ---- */
 .log {
   display: grid;

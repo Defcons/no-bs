@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { getSetting, setSetting } from "../db";
 import { bluetoothAvailable } from "../lib/hr";
+import { notificationsSupported, requestNotifications } from "../lib/notify";
 import { pendingCount, syncPending, testSync } from "../lib/sheetSync";
 
 type Props = {
@@ -10,6 +11,8 @@ type Props = {
   setRestDefaultSec: (v: number) => void;
   weightStep: number;
   setWeightStep: (v: number) => void;
+  daysPerWeek: number;
+  setDaysPerWeek: (v: number) => void;
   hr: { bpm: number | null; connected: boolean; connect: () => void; disconnect: () => void };
   onExport: () => void;
   onReset: () => void;
@@ -17,17 +20,44 @@ type Props = {
 
 const SHEET_URL = "https://docs.google.com/spreadsheets/d/REDACTED_SHEET_ID/edit";
 
-export function Settings({ restDefaultSec, setRestDefaultSec, weightStep, setWeightStep, hr, onExport, onReset }: Props) {
+export function Settings({
+  restDefaultSec,
+  setRestDefaultSec,
+  weightStep,
+  setWeightStep,
+  daysPerWeek,
+  setDaysPerWeek,
+  hr,
+  onExport,
+  onReset,
+}: Props) {
   const [syncUrl, setSyncUrl] = useState("");
   const [syncSecret, setSyncSecret] = useState("");
   const [pending, setPending] = useState(0);
   const [status, setStatus] = useState<string>("");
+  const [reminders, setReminders] = useState(false);
 
   useEffect(() => {
     getSetting<string>("sheetSyncUrl", "").then(setSyncUrl);
     getSetting<string>("sheetSyncSecret", "").then(setSyncSecret);
+    getSetting<boolean>("remindersEnabled", false).then(setReminders);
     pendingCount().then(setPending);
   }, []);
+
+  const toggleReminders = async () => {
+    if (reminders) {
+      setReminders(false);
+      setSetting("remindersEnabled", false);
+      return;
+    }
+    const granted = await requestNotifications();
+    if (granted) {
+      setReminders(true);
+      setSetting("remindersEnabled", true);
+    } else {
+      alert("Notifications are blocked. Enable them for this site in your browser settings, then try again.");
+    }
+  };
 
   const saveUrl = (v: string) => {
     setSyncUrl(v);
@@ -74,6 +104,33 @@ export function Settings({ restDefaultSec, setRestDefaultSec, weightStep, setWei
             </button>
           ))}
         </div>
+      </div>
+
+      <div className="setting">
+        <label>Weekly goal (workouts / week)</label>
+        <div className="seg">
+          {[3, 4, 5, 6].map((s) => (
+            <button key={s} className={daysPerWeek === s ? "active" : ""} onClick={() => setDaysPerWeek(s)}>
+              {s}×
+            </button>
+          ))}
+        </div>
+        <p className="muted tiny">Colors the “days since last workout” (green/orange/red) and drives reminders.</p>
+      </div>
+
+      <div className="setting">
+        <label>Workout reminders</label>
+        {!notificationsSupported() ? (
+          <p className="muted tiny">Notifications aren't supported in this browser.</p>
+        ) : (
+          <button className={`mini ${reminders ? "active" : ""}`} onClick={toggleReminders}>
+            {reminders ? "On — tap to disable" : "Enable reminders"}
+          </button>
+        )}
+        <p className="muted tiny">
+          Nudges you to train when you're behind your goal. Fires when you open the app; a guaranteed scheduled push
+          (even when the app is closed) would need a small server — ask if you want that.
+        </p>
       </div>
 
       <div className="setting">

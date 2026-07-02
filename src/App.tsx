@@ -2,7 +2,10 @@ import { useEffect, useRef, useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import "./App.css";
 import { db, ensureBootstrapped, getSetting, setSetting } from "./db";
+import { daysAgo } from "./lib/format";
 import { HeartRateMonitor } from "./lib/hr";
+import { notificationsSupported, showReminder } from "./lib/notify";
+import { trainingDue } from "./lib/stats";
 import { History } from "./components/History";
 import { Records } from "./components/Records";
 import { Settings } from "./components/Settings";
@@ -17,6 +20,7 @@ export default function App() {
   // Settings (loaded from IndexedDB, persisted on change).
   const [restDefaultSec, setRest] = useState(120);
   const [weightStep, setStep] = useState(2.5);
+  const [daysPerWeek, setDpw] = useState(4);
 
   // Heart rate.
   const [bpm, setBpm] = useState<number | null>(null);
@@ -27,18 +31,47 @@ export default function App() {
 
   const templates = useLiveQuery(() => db.templates.orderBy("order").toArray(), []);
 
+  // Fire a local reminder if reminders are on and we're behind the weekly goal
+  // (and haven't trained today or already nudged today).
+  const maybeRemind = async (dpw: number) => {
+    const enabled = await getSetting("remindersEnabled", false);
+    if (!enabled || !notificationsSupported() || Notification.permission !== "granted") return;
+    const today = new Date().toISOString().slice(0, 10);
+    if ((await getSetting("lastReminder", "")) === today) return;
+    const last = await db.workouts.orderBy("date").reverse().first();
+    const days = last ? daysAgo(last.date) : 999;
+    const trainedToday = last ? last.date.slice(0, 10) === today : false;
+    if (!trainedToday && trainingDue(days, dpw)) {
+      await showReminder(
+        "Time to train 💪",
+        `It's been ${days} day${days === 1 ? "" : "s"} — train today to stay on your ${dpw}×/week goal.`,
+      );
+      await setSetting("lastReminder", today);
+    }
+  };
+
   useEffect(() => {
     (async () => {
       await ensureBootstrapped();
       setRest(await getSetting("restDefaultSec", 120));
       setStep(await getSetting("weightStep", 2.5));
+      const dpw = await getSetting("daysPerWeek", 4);
+      setDpw(dpw);
       setReady(true);
+      await maybeRemind(dpw);
     })();
+    const onVis = () => {
+      if (document.visibilityState === "visible") getSetting("daysPerWeek", 4).then(maybeRemind);
+    };
+    document.addEventListener("visibilitychange", onVis);
     const off = monitor.current!.onData((v) => {
       setBpm(v);
       samples.current.push(v);
     });
-    return off;
+    return () => {
+      off();
+      document.removeEventListener("visibilitychange", onVis);
+    };
   }, []);
 
   const connect = async () => {
@@ -67,6 +100,10 @@ export default function App() {
   const persistStep = (v: number) => {
     setStep(v);
     setSetting("weightStep", v);
+  };
+  const persistDpw = (v: number) => {
+    setDpw(v);
+    setSetting("daysPerWeek", v);
   };
 
   const onExport = async () => {
@@ -100,6 +137,7 @@ export default function App() {
             templates={templates}
             restDefaultSec={restDefaultSec}
             weightStep={weightStep}
+            daysPerWeek={daysPerWeek}
             hr={hr}
             onWorkoutStart={() => (samples.current = [])}
             getHrStats={getHrStats}
@@ -114,6 +152,8 @@ export default function App() {
             setRestDefaultSec={persistRest}
             weightStep={weightStep}
             setWeightStep={persistStep}
+            daysPerWeek={daysPerWeek}
+            setDaysPerWeek={persistDpw}
             hr={hr}
             onExport={onExport}
             onReset={onReset}

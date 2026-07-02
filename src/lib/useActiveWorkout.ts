@@ -12,6 +12,7 @@ export type Draft = {
   exercises: ExercisePerf[];
   note?: string;
   restEndsAt?: number; // epoch ms; running rest timer survives reload
+  custom?: boolean; // "Alternative" free-form session (editable name/exercises)
 };
 
 const DRAFT_KEY = "activeDraft";
@@ -91,6 +92,19 @@ export function useActiveWorkout() {
     setSetting(DRAFT_KEY, d);
   }, []);
 
+  // Free-form "Alternative" session: editable title + you add your own exercises.
+  const startCustom = useCallback((label = "Alternative") => {
+    const d: Draft = {
+      startedAt: Date.now(),
+      date: isoNow(),
+      dayName: label,
+      exercises: [],
+      custom: true,
+    };
+    setDraft(d);
+    setSetting(DRAFT_KEY, d);
+  }, []);
+
   const cancel = useCallback(() => {
     setDraft(null);
     setSetting(DRAFT_KEY, null);
@@ -105,20 +119,26 @@ export function useActiveWorkout() {
         date: draft.date,
         dayName: draft.dayName,
         templateId: draft.templateId,
-        exercises: draft.exercises.filter((ex) => ex.sets.some((s) => s.weight != null) || ex.note),
+        // Custom sessions: keep any named exercise (a run may have no weights).
+        // Template sessions: drop untouched pre-filled exercises.
+        exercises: draft.exercises.filter((ex) =>
+          draft.custom ? ex.name.trim() !== "" : ex.sets.some((s) => s.weight != null) || ex.note,
+        ),
         note: draft.note,
         durationSec,
         avgHr: hr?.avg,
         maxHr: hr?.max,
         source: "app",
+        // Custom sessions have no matching sheet block → don't queue for sync.
+        synced: draft.custom ? true : undefined,
       };
       await db.workouts.add(row);
       setDraft(null);
       await setSetting(DRAFT_KEY, null);
-      return row;
+      return { ...row, custom: draft.custom };
     },
     [draft],
   );
 
-  return { draft, loaded, elapsed, start, cancel, finish, update };
+  return { draft, loaded, elapsed, start, startCustom, cancel, finish, update };
 }

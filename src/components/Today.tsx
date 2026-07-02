@@ -2,8 +2,9 @@
 // see live HR, and finish. This is the primary "as-easy-as-possible" surface.
 import { useEffect, useState } from "react";
 import { lastWorkoutForDay, type StoredWorkout } from "../db";
-import { daysAgoLabel, hhmmss, niceDate } from "../lib/format";
+import { daysAgo, daysAgoLabel, hhmmss, niceDate } from "../lib/format";
 import { syncWorkout } from "../lib/sheetSync";
+import { cadenceStatus, trainingDue } from "../lib/stats";
 import { useActiveWorkout } from "../lib/useActiveWorkout";
 import type { DayTemplate, ExercisePerf } from "../types";
 import { ExerciseCard } from "./ExerciseCard";
@@ -13,14 +14,24 @@ type Props = {
   templates: DayTemplate[];
   restDefaultSec: number;
   weightStep: number;
+  daysPerWeek: number;
   hr: { bpm: number | null; connected: boolean; connect: () => void; supported: boolean };
   onWorkoutStart: () => void;
   getHrStats: () => { avg?: number; max?: number };
   onFinished: () => void;
 };
 
-export function Today({ templates, restDefaultSec, weightStep, hr, onWorkoutStart, getHrStats, onFinished }: Props) {
-  const { draft, loaded, elapsed, start, cancel, finish, update } = useActiveWorkout();
+export function Today({
+  templates,
+  restDefaultSec,
+  weightStep,
+  daysPerWeek,
+  hr,
+  onWorkoutStart,
+  getHrStats,
+  onFinished,
+}: Props) {
+  const { draft, loaded, elapsed, start, startCustom, cancel, finish, update } = useActiveWorkout();
   const [prev, setPrev] = useState<StoredWorkout | undefined>();
   const [lastByDay, setLastByDay] = useState<Record<string, StoredWorkout | undefined>>({});
 
@@ -48,19 +59,28 @@ export function Today({ templates, restDefaultSec, weightStep, hr, onWorkoutStar
   if (!draft) {
     const lasts = Object.values(lastByDay).filter(Boolean) as StoredWorkout[];
     const overall = lasts.sort((a, b) => b.date.localeCompare(a.date))[0];
+    const overallDays = overall ? daysAgo(overall.date) : Infinity;
+    const overallCad = overall ? cadenceStatus(overallDays, daysPerWeek) : "red";
+    const due = overall ? trainingDue(overallDays, daysPerWeek) && overallDays > 0 : true;
     return (
       <div className="pad day-picker">
         <h2>Start a workout</h2>
         {overall && (
           <div className="last-banner">
             Last workout: <b>{overall.dayName}</b> · {niceDate(overall.date)}{" "}
-            <span className="muted">({daysAgoLabel(overall.date)})</span>
+            <span className={`cad cad-${overallCad}`}>({daysAgoLabel(overall.date)})</span>
+          </div>
+        )}
+        {due && (
+          <div className={`due-prompt cad-bg-${overallCad}`}>
+            {overallCad === "red" ? "You're behind — train today! 💪" : "Time to train today to hit your goal 💪"}
           </div>
         )}
         <p className="muted">Pick today's day:</p>
         <div className="day-buttons">
           {templates.map((t) => {
             const last = lastByDay[t.name];
+            const cad = last ? cadenceStatus(daysAgo(last.date), daysPerWeek, templates.length) : "red";
             return (
               <button
                 key={t.id ?? t.name}
@@ -72,12 +92,22 @@ export function Today({ templates, restDefaultSec, weightStep, hr, onWorkoutStar
               >
                 <span className="day-name">{t.name}</span>
                 <span className="day-sub">{t.exercises.length} exercises</span>
-                <span className="day-last">
+                <span className={`day-last cad-${cad}`}>
                   {last ? `Last: ${niceDate(last.date)} (${daysAgoLabel(last.date)})` : "Never done"}
                 </span>
               </button>
             );
           })}
+          <button
+            className="day-btn alt-btn"
+            onClick={() => {
+              startCustom();
+              onWorkoutStart();
+            }}
+          >
+            <span className="day-name">＋ Alternative</span>
+            <span className="day-sub">Running, crossfit, or your own exercises</span>
+          </button>
         </div>
       </div>
     );
@@ -89,10 +119,16 @@ export function Today({ templates, restDefaultSec, weightStep, hr, onWorkoutStar
 
   const startRest = () => update((d) => ({ ...d, restEndsAt: Date.now() + restDefaultSec * 1000 }));
   const setRest = (endsAt: number | null) => update((d) => ({ ...d, restEndsAt: endsAt ?? undefined }));
+  const addExercise = () =>
+    update((d) => ({
+      ...d,
+      exercises: [...d.exercises, { name: "", scheme: { sets: null, reps: null }, sets: [{ weight: null, reps: null }] }],
+    }));
+  const removeExercise = (i: number) => update((d) => ({ ...d, exercises: d.exercises.filter((_, idx) => idx !== i) }));
 
   const doFinish = async () => {
     const row = await finish(getHrStats());
-    if (row) {
+    if (row && !row.custom) {
       const res = await syncWorkout(row);
       if (res && !res.ok) {
         alert(`Saved locally, but Google Sheet sync failed:\n${res.error}\n\nYou can retry from Settings → Sync now.`);
@@ -105,7 +141,17 @@ export function Today({ templates, restDefaultSec, weightStep, hr, onWorkoutStar
     <div className="today">
       <header className="workout-bar">
         <div className="wb-left">
-          <div className="wb-day">{draft.dayName}</div>
+          {draft.custom ? (
+            <input
+              className="wb-day-input"
+              type="text"
+              value={draft.dayName}
+              placeholder="Session name"
+              onChange={(e) => update((d) => ({ ...d, dayName: e.target.value }))}
+            />
+          ) : (
+            <div className="wb-day">{draft.dayName}</div>
+          )}
           <div className="wb-timer">{hhmmss(elapsed)}</div>
         </div>
         <div className="wb-right">
@@ -128,13 +174,25 @@ export function Today({ templates, restDefaultSec, weightStep, hr, onWorkoutStar
       <div className="exercise-list">
         {draft.exercises.map((ex, i) => (
           <ExerciseCard
-            key={ex.name + i}
+            key={i}
             exercise={ex}
             step={weightStep}
             prev={prev?.exercises.find((p) => p.name === ex.name)}
             onChange={(e) => setExercise(i, e)}
+            editableName={draft.custom}
+            onRemove={draft.custom ? () => removeExercise(i) : undefined}
           />
         ))}
+        {draft.custom && (
+          <button className="add-exercise" onClick={addExercise}>
+            ＋ Add exercise
+          </button>
+        )}
+        {draft.custom && draft.exercises.length === 0 && (
+          <p className="muted tiny pad">
+            Add your own exercises, or just use the timer + heart rate and jot it in the note below (e.g. “5 km run”).
+          </p>
+        )}
       </div>
 
       <div className="pad">

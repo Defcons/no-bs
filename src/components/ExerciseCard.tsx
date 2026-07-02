@@ -9,6 +9,8 @@ type Props = {
   step: number;
   prev?: ExercisePerf; // last session's performance of this exercise (for hints)
   onChange: (ex: ExercisePerf) => void;
+  editableName?: boolean; // custom sessions: let the user name the exercise
+  onRemove?: () => void; // custom sessions: remove this exercise
 };
 
 function schemeLabel(ex: ExercisePerf): string {
@@ -17,7 +19,7 @@ function schemeLabel(ex: ExercisePerf): string {
   return `${sets ?? "?"}×${reps ?? "?"}`;
 }
 
-export function ExerciseCard({ exercise, step, prev, onChange }: Props) {
+export function ExerciseCard({ exercise, step, prev, onChange, editableName, onRemove }: Props) {
   const [showNote, setShowNote] = useState(!!exercise.note);
 
   const patchSet = (i: number, patch: Partial<SetEntry>) => {
@@ -35,7 +37,17 @@ export function ExerciseCard({ exercise, step, prev, onChange }: Props) {
   return (
     <section className="exercise-card">
       <header className="exercise-head">
-        <h3>{exercise.name}</h3>
+        {editableName ? (
+          <input
+            className="exercise-name-input"
+            type="text"
+            value={exercise.name}
+            placeholder="exercise name…"
+            onChange={(e) => onChange({ ...exercise, name: e.target.value })}
+          />
+        ) : (
+          <h3>{exercise.name}</h3>
+        )}
         <span className="scheme">{schemeLabel(exercise)}</span>
         <button
           className={`note-toggle ${exercise.note ? "has-note" : ""}`}
@@ -44,6 +56,11 @@ export function ExerciseCard({ exercise, step, prev, onChange }: Props) {
         >
           ✎
         </button>
+        {onRemove && (
+          <button className="note-toggle" aria-label="remove exercise" onClick={onRemove}>
+            🗑
+          </button>
+        )}
       </header>
 
       {showNote && (

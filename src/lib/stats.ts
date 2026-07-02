@@ -9,22 +9,36 @@ const plausible = (w: number | null): w is number => w != null && w > 0 && w <= 
 
 // Group exercise variants under a canonical name so PRs aggregate across years
 // (e.g. "Benkpress"/"Bench press" -> "Bench"). Falls back to the raw name.
+// Order matters — first match wins. More specific patterns go first.
 const CANON: [RegExp, string][] = [
+  [/rear.?delt|rear.?fl|back.?fl/i, "Rear delt flyes"], // NOT chest — before flyes/back rules
+  [/decline.?press|decline.?bench/i, "Decline press"],
+  [/decline.?fl/i, "Decline flyes"], // "Decline flyes" / "Decline-Flyes" / "Decline-flyes"
   [/bench|benkpress/i, "Bench"],
   [/squat|knebøy/i, "Squat"],
   [/deadlift|\bmark/i, "Deadlift"],
   [/military|militarypress/i, "Military press"],
   [/shoulderpress|shoulder press/i, "Shoulder press"],
-  [/incline/i, "Incline"],
+  [/incline|skråbenk|skråpress/i, "Incline"], // incline bench == skråbenk
   [/legpress|leg press/i, "Legpress"],
-  [/pulldown/i, "Pulldown"],
+  [/pulldown|nedtrekk/i, "Pulldown"],
   [/\bcurl stang|barbell curl/i, "Barbell curl"],
-  // Merge "heavy"/"light"/"drop" variants of the same movement.
+  [/side.?hev|side.?lift|lateral/i, "Lateral raise"],
   [/calves|calf/i, "Calves"],
   [/quad/i, "Quad"],
   [/hamstring/i, "Hamstring"],
   [/shrug/i, "Shrugs"],
 ];
+
+// Loose key: canonical name, then separator/case-insensitive, so any remaining
+// "Decline-Flyes" vs "Decline flyes" variants still merge into one record.
+export function canonKey(name: string): string {
+  return canonName(name)
+    .toLowerCase()
+    .replace(/[\s\-_/]+/g, " ")
+    .trim();
+}
+
 export function canonName(name: string): string {
   for (const [re, c] of CANON) if (re.test(name)) return c;
   return name.trim();
@@ -37,12 +51,32 @@ export const MUSCLE_ORDER = ["Chest", "Back", "Shoulder", "Legs", "Arms", "Core"
 export function muscleGroup(name: string): string {
   const n = name.toLowerCase();
   if (/extension|curl|tricep|bicep|skull|pushdown|pressdown/.test(n)) return "Arms";
-  if (/bench|incline|\bfly|decline|chest|skråbenk/.test(n)) return "Chest";
-  if (/shoulder|military|shrug|delt|\bohp\b|sidehev|sidelift|lateral|face ?pull/.test(n)) return "Shoulder";
+  // Shoulder BEFORE chest so rear-delt/lateral "flyes" don't land in Chest.
+  if (/shoulder|military|shrug|delt|\bohp\b|sidehev|sidelift|lateral|face ?pull|rear|back ?fl/.test(n)) return "Shoulder";
+  if (/bench|incline|skråbenk|\bfly|decline|chest/.test(n)) return "Chest";
   if (/deadlift|row|pulldown|pull-?up|chin|\blat|korsrygg|nedtrekk|\bback\b|\bmark/.test(n)) return "Back";
   if (/squat|\bleg|calf|calves|quad|hamstring|lunge|utfall|glute|benhev/.test(n)) return "Legs";
   if (/abs|crunch|core|plank|sit-?up|situp/.test(n)) return "Core";
   return "Other";
+}
+
+// --- Training cadence (for color coding + reminders) ------------------------
+export type Cadence = "green" | "orange" | "red";
+
+// How overdue is a workout, given a weekly goal? `cycle` scales the expected
+// interval (use the number of day-types for per-day-type coloring).
+export function cadenceStatus(daysSince: number, daysPerWeek: number, cycle = 1): Cadence {
+  const interval = (7 / Math.max(1, daysPerWeek)) * cycle;
+  const ratio = daysSince / interval;
+  if (ratio <= 1.15) return "green";
+  if (ratio <= 2.2) return "orange";
+  return "red";
+}
+
+// Should we train today to stay on pace? (Behind the per-workout interval, and
+// not already trained today.)
+export function trainingDue(daysSinceLast: number, daysPerWeek: number): boolean {
+  return daysSinceLast >= 7 / Math.max(1, daysPerWeek);
 }
 
 export type LiftRecord = {
@@ -57,11 +91,12 @@ export function liftRecords(workouts: StoredWorkout[]): LiftRecord[] {
   for (const w of workouts) {
     for (const ex of w.exercises) {
       const name = canonName(ex.name);
+      const key = canonKey(ex.name); // loose key merges separator/case variants
       const schemeReps = typeof ex.scheme.reps === "number" ? ex.scheme.reps : 0;
       for (const set of ex.sets) {
         if (!plausible(set.weight)) continue;
         const reps = set.reps ?? schemeReps;
-        let rec = map.get(name);
+        let rec = map.get(key);
         if (!rec) {
           rec = {
             name,
@@ -69,7 +104,7 @@ export function liftRecords(workouts: StoredWorkout[]): LiftRecord[] {
             maxWeight: { weight: 0, reps: 0, date: "" },
             bestE1rm: { est: 0, weight: 0, reps: 0, date: "" },
           };
-          map.set(name, rec);
+          map.set(key, rec);
         }
         rec.count++;
         if (set.weight > rec.maxWeight.weight)
