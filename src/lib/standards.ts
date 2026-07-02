@@ -17,13 +17,34 @@ export const KEY_LIFTS: { canon: string; std: Thresholds; note?: string }[] = [
   { canon: "Legpress", std: { beginner: 1.0, novice: 1.75, intermediate: 2.75, advanced: 4.0, elite: 5.25 }, note: "sled machine — very rough" },
 ];
 
+// Adjust the 90 kg / open-age base thresholds for this lifter.
+//  - Bodyweight (allometric, Lietzke): ratio ∝ BW^(-1/3), so
+//    threshold(bw) = base * (90/bw)^(1/3). Lighter → higher bar, heavier → lower.
+//  - Age (McCulloch-tracking): no change ≤35, then lower the bar with age.
+// Both are fair "centering" adjustments, not precision instruments.
+export function adjustThresholds(std: Thresholds, bodyweightKg: number, age: number): Thresholds {
+  const bwF = bodyweightKg > 0 ? Math.pow(90 / bodyweightKg, 1 / 3) : 1;
+  const d = age > 35 ? age - 35 : 0;
+  const ageF = age > 0 ? 1 + 0.01 * d + 0.00025 * d * d : 1;
+  const adj = (r: number) => (r * bwF) / ageF;
+  return {
+    beginner: adj(std.beginner),
+    novice: adj(std.novice),
+    intermediate: adj(std.intermediate),
+    advanced: adj(std.advanced),
+    elite: adj(std.elite),
+  };
+}
+
 export type Rating = {
   level: Level | null; // null = below Beginner
   ratio: number; // 1RM / bodyweight
   next?: { level: Level; kg: number }; // next tier + absolute kg to reach it
-  pct: number; // progress through the current band toward the next tier
+  journeyPct: number; // overall progress toward Elite (fuller & more motivating)
+  ticks: number[]; // tier threshold positions as % of the bar (Beginner..Advanced)
 };
 
+// std is expected to already be adjusted for the lifter (bodyweight + age).
 export function rateLift(std: Thresholds, e1rm: number, bodyweightKg: number): Rating {
   const ratio = e1rm / bodyweightKg;
   const tiers: [Level, number][] = [
@@ -37,16 +58,20 @@ export function rateLift(std: Thresholds, e1rm: number, bodyweightKg: number): R
   for (const [lvl, thr] of tiers) if (ratio >= thr) level = lvl;
 
   let next: { level: Level; kg: number } | undefined;
-  let pct = 100;
-  for (let i = 0; i < tiers.length; i++) {
-    if (ratio < tiers[i][1]) {
-      next = { level: tiers[i][0], kg: Math.round(tiers[i][1] * bodyweightKg) };
-      const lower = i > 0 ? tiers[i - 1][1] : 0;
-      pct = Math.max(0, Math.min(100, ((ratio - lower) / (tiers[i][1] - lower)) * 100));
+  for (const [lvl, thr] of tiers) {
+    if (ratio < thr) {
+      next = { level: lvl, kg: Math.round(thr * bodyweightKg) };
       break;
     }
   }
-  return { level, ratio, next, pct };
+
+  // Bar spans Beginner (0%) → Elite (100%); fill = where you are on that road.
+  const span = std.elite - std.beginner;
+  const journeyPct = Math.max(3, Math.min(100, ((ratio - std.beginner) / span) * 100));
+  const ticks = [std.novice, std.intermediate, std.advanced].map((t) =>
+    Math.max(0, Math.min(100, ((t - std.beginner) / span) * 100)),
+  );
+  return { level, ratio, next, journeyPct, ticks };
 }
 
 export const levelClass = (level: Level | null): string =>

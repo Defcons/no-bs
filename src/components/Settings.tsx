@@ -15,6 +15,8 @@ type Props = {
   setDaysPerWeek: (v: number) => void;
   bodyweightKg: number;
   setBodyweightKg: (v: number) => void;
+  age: number;
+  setAge: (v: number) => void;
   hr: { bpm: number | null; connected: boolean; connect: () => void; disconnect: () => void };
   onExport: () => void;
   onReset: () => void;
@@ -31,6 +33,8 @@ export function Settings({
   setDaysPerWeek,
   bodyweightKg,
   setBodyweightKg,
+  age,
+  setAge,
   hr,
   onExport,
   onReset,
@@ -123,7 +127,7 @@ export function Settings({
       </div>
 
       <div className="setting">
-        <label>Bodyweight (for strength ratings)</label>
+        <label>Body profile (for strength ratings)</label>
         <div className="row">
           <input
             type="text"
@@ -137,8 +141,22 @@ export function Settings({
             }}
           />
           <span className="muted">kg</span>
+          <input
+            type="text"
+            inputMode="numeric"
+            className="bw-input"
+            value={age || ""}
+            placeholder="age"
+            onChange={(e) => {
+              const n = parseInt(e.target.value, 10);
+              setAge(Number.isFinite(n) ? n : 0);
+            }}
+          />
+          <span className="muted">yrs</span>
         </div>
-        <p className="muted tiny">Rates your key lifts in Records against strength standards.</p>
+        <p className="muted tiny">
+          Rates your key lifts against strength standards, adjusted for your bodyweight (allometric) and age.
+        </p>
       </div>
 
       <div className="setting">

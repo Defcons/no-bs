@@ -22,6 +22,7 @@ export default function App() {
   const [weightStep, setStep] = useState(2.5);
   const [daysPerWeek, setDpw] = useState(4);
   const [bodyweightKg, setBw] = useState(0); // 0 = not set
+  const [age, setAge] = useState(0); // 0 = not set
 
   // Heart rate.
   const [bpm, setBpm] = useState<number | null>(null);
@@ -59,6 +60,7 @@ export default function App() {
       const dpw = await getSetting("daysPerWeek", 4);
       setDpw(dpw);
       setBw(await getSetting("bodyweightKg", 0));
+      setAge(await getSetting("age", 0));
       setReady(true);
       await maybeRemind(dpw);
     })();
@@ -111,6 +113,10 @@ export default function App() {
     setBw(v);
     setSetting("bodyweightKg", v);
   };
+  const persistAge = (v: number) => {
+    setAge(v);
+    setSetting("age", v);
+  };
 
   const onExport = async () => {
     const data = {
@@ -151,7 +157,7 @@ export default function App() {
           />
         )}
         {tab === "history" && <History />}
-        {tab === "records" && <Records bodyweightKg={bodyweightKg} />}
+        {tab === "records" && <Records bodyweightKg={bodyweightKg} age={age} />}
         {tab === "settings" && (
           <Settings
             restDefaultSec={restDefaultSec}
@@ -162,6 +168,8 @@ export default function App() {
             setDaysPerWeek={persistDpw}
             bodyweightKg={bodyweightKg}
             setBodyweightKg={persistBw}
+            age={age}
+            setAge={persistAge}
             hr={hr}
             onExport={onExport}
             onReset={onReset}

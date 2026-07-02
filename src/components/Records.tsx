@@ -3,10 +3,10 @@
 import { useLiveQuery } from "dexie-react-hooks";
 import { db } from "../db";
 import { niceDate } from "../lib/format";
-import { KEY_LIFTS, levelClass, rateLift } from "../lib/standards";
+import { KEY_LIFTS, adjustThresholds, levelClass, rateLift } from "../lib/standards";
 import { type LiftRecord, MUSCLE_ORDER, liftRecords, muscleGroup, summarize } from "../lib/stats";
 
-export function Records({ bodyweightKg }: { bodyweightKg: number }) {
+export function Records({ bodyweightKg, age }: { bodyweightKg: number; age: number }) {
   const workouts = useLiveQuery(() => db.workouts.toArray(), []);
   if (!workouts) return <div className="pad">Loading…</div>;
   if (workouts.length === 0) return <div className="pad muted">No workouts yet — log your first one!</div>;
@@ -43,7 +43,7 @@ export function Records({ bodyweightKg }: { bodyweightKg: number }) {
             const rec = records.find((r) => r.name === kl.canon);
             if (!rec) return null;
             const e1rm = rec.bestE1rm.est;
-            const r = rateLift(kl.std, e1rm, bodyweightKg);
+            const r = rateLift(adjustThresholds(kl.std, bodyweightKg, age), e1rm, bodyweightKg);
             return (
               <div key={kl.canon} className="std-row">
                 <div className="std-top">
@@ -51,7 +51,10 @@ export function Records({ bodyweightKg }: { bodyweightKg: number }) {
                   <span className={`lvl-badge ${levelClass(r.level)}`}>{r.level ?? "Below beginner"}</span>
                 </div>
                 <div className="std-bar">
-                  <div className="std-fill" style={{ width: `${r.pct}%` }} />
+                  <div className="std-fill" style={{ width: `${r.journeyPct}%` }} />
+                  {r.ticks.map((t, i) => (
+                    <span key={i} className="std-tick" style={{ left: `${t}%` }} />
+                  ))}
                 </div>
                 <div className="std-meta tiny muted">
                   {e1rm.toFixed(0)} kg est-1RM · {r.ratio.toFixed(2)}× bodyweight
@@ -61,7 +64,10 @@ export function Records({ bodyweightKg }: { bodyweightKg: number }) {
               </div>
             );
           })}
-          <p className="muted tiny">Standards = 1RM ÷ bodyweight (adult male). Barbell lifts are reliable; machine lifts are approximate.</p>
+          <p className="muted tiny">
+            Adjusted for your bodyweight{age > 0 ? " and age" : ""} (male). Barbell lifts are reliable; machine lifts
+            (leg press / pulldown) are approximate.
+          </p>
         </div>
       )}
 
