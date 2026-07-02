@@ -70,11 +70,12 @@ export function ExerciseCard({ exercise, step, prev, onChange }: Props) {
       </div>
 
       <div className="set-actions">
-        <button className="mini" onClick={removeSet}>
-          − set
+        <span className="set-actions-label">Sets:</span>
+        <button className="mini set-step" aria-label="remove set" onClick={removeSet}>
+          −
         </button>
-        <button className="mini" onClick={addSet}>
-          ＋ set
+        <button className="mini set-step" aria-label="add set" onClick={addSet}>
+          +
         </button>
       </div>
     </section>

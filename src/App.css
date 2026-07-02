@@ -244,31 +244,47 @@
   height: 40px;
   color: var(--muted);
 }
-.weight-input {
+.field {
+  display: flex;
+  align-items: center;
   height: 40px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  padding: 0 8px;
+}
+.field:focus-within {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+}
+.field input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: none;
+  padding: 0;
+  height: 100%;
   text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.field input:focus {
+  outline: none;
+}
+.field .unit {
+  color: var(--muted);
+  font-size: 11px;
+  padding-left: 4px;
+  pointer-events: none;
+}
+.weight-field input {
   font-size: 17px;
   font-weight: 600;
-  font-variant-numeric: tabular-nums;
-  padding: 6px;
 }
-.reps-group {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  width: 50px;
+.reps-field {
+  width: 76px;
 }
-.reps-input {
-  width: 50px;
-  height: 40px;
-  text-align: center;
+.reps-field input {
   font-size: 16px;
-  font-variant-numeric: tabular-nums;
-  padding: 6px;
-}
-.reps-label {
-  font-size: 10px;
-  color: var(--muted);
 }
 .note-toggle {
   width: 36px;
@@ -282,9 +298,21 @@
 }
 .set-actions {
   display: flex;
+  align-items: center;
   justify-content: flex-end;
   gap: 8px;
   margin-top: 10px;
+}
+.set-actions-label {
+  color: var(--muted);
+  font-size: 13px;
+  margin-right: 2px;
+}
+.set-step {
+  width: 38px;
+  font-size: 18px;
+  font-weight: 700;
+  padding: 6px 0;
 }
 
 /* ---- Day note + finish bar ---- */

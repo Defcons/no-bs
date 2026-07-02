@@ -1,5 +1,7 @@
 // One set row: big thumb-friendly weight entry with +/- steppers, reps, and an
 // optional note. Weight is the primary input; reps is pre-filled from the scheme.
+// Units ("kg"/"reps") are static suffixes inside each field so they don't throw
+// off vertical alignment.
 import { useState } from "react";
 import type { SetEntry } from "../types";
 
@@ -31,32 +33,33 @@ export function SetInput({ index, set, step, prevWeight, onChange }: Props) {
         <button className="stepper" aria-label="decrease" onClick={() => bump(-step)}>
           −
         </button>
-        <input
-          className="weight-input"
-          type="text"
-          inputMode="decimal"
-          value={set.weight ?? ""}
-          placeholder={prevWeight != null ? String(prevWeight) : "kg"}
-          onChange={(e) => onChange({ weight: parseWeight(e.target.value) })}
-        />
+        <div className="field weight-field">
+          <input
+            type="text"
+            inputMode="decimal"
+            value={set.weight ?? ""}
+            placeholder={prevWeight != null ? String(prevWeight) : "—"}
+            onChange={(e) => onChange({ weight: parseWeight(e.target.value) })}
+          />
+          <span className="unit">kg</span>
+        </div>
         <button className="stepper" aria-label="increase" onClick={() => bump(step)}>
           +
         </button>
       </div>
 
-      <div className="reps-group">
+      <div className="field reps-field">
         <input
-          className="reps-input"
           type="text"
           inputMode="numeric"
           value={set.reps ?? ""}
-          placeholder="reps"
+          placeholder="—"
           onChange={(e) => {
             const n = parseInt(e.target.value, 10);
             onChange({ reps: Number.isFinite(n) ? n : null });
           }}
         />
-        <span className="reps-label">reps</span>
+        <span className="unit">reps</span>
       </div>
 
       <button
