@@ -5,6 +5,7 @@ import { getSetting, setSetting } from "../db";
 import { bluetoothAvailable } from "../lib/hr";
 import { notificationsSupported, requestNotifications } from "../lib/notify";
 import { pendingCount, syncPending, testSync } from "../lib/sheetSync";
+import type { BwEntry } from "../lib/standards";
 import { DEFAULT_SYNC_SECRET, DEFAULT_SYNC_URL } from "../lib/syncConfig";
 
 type Props = {
@@ -18,6 +19,8 @@ type Props = {
   setBodyweightKg: (v: number) => void;
   age: number;
   setAge: (v: number) => void;
+  bwHistory: BwEntry[];
+  setBwHistory: (v: BwEntry[]) => void;
   hrLowThreshold: number;
   setHrLowThreshold: (v: number) => void;
   hr: { bpm: number | null; connected: boolean; connect: () => void; disconnect: () => void };
@@ -38,6 +41,8 @@ export function Settings({
   setBodyweightKg,
   age,
   setAge,
+  bwHistory,
+  setBwHistory,
   hrLowThreshold,
   setHrLowThreshold,
   hr,
@@ -162,6 +167,52 @@ export function Settings({
         <p className="muted tiny">
           Rates your key lifts against strength standards, adjusted for your bodyweight (allometric) and age.
         </p>
+      </div>
+
+      <div className="setting">
+        <label>Bodyweight by year</label>
+        <p className="muted tiny">
+          Old records are rated against what you weighed back then. Add past bodyweights; your current weight above
+          covers this year onward.
+        </p>
+        {bwHistory.map((e, i) => (
+          <div className="row" key={i} style={{ marginTop: 8 }}>
+            <input
+              type="text"
+              inputMode="numeric"
+              className="bw-input"
+              value={e.year || ""}
+              placeholder="year"
+              onChange={(ev) => {
+                const y = parseInt(ev.target.value, 10);
+                setBwHistory(bwHistory.map((x, idx) => (idx === i ? { ...x, year: Number.isFinite(y) ? y : 0 } : x)));
+              }}
+            />
+            <span className="muted">→</span>
+            <input
+              type="text"
+              inputMode="decimal"
+              className="bw-input"
+              value={e.kg || ""}
+              placeholder="kg"
+              onChange={(ev) => {
+                const k = parseFloat(ev.target.value.replace(",", "."));
+                setBwHistory(bwHistory.map((x, idx) => (idx === i ? { ...x, kg: Number.isFinite(k) ? k : 0 } : x)));
+              }}
+            />
+            <span className="muted">kg</span>
+            <button className="mini danger" onClick={() => setBwHistory(bwHistory.filter((_, idx) => idx !== i))}>
+              ✕
+            </button>
+          </div>
+        ))}
+        <button
+          className="mini"
+          style={{ marginTop: 8 }}
+          onClick={() => setBwHistory([...bwHistory, { year: new Date().getFullYear() - 1, kg: 0 }])}
+        >
+          ＋ Add year
+        </button>
       </div>
 
       <div className="setting">

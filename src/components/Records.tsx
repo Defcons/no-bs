@@ -3,10 +3,19 @@
 import { useLiveQuery } from "dexie-react-hooks";
 import { db } from "../db";
 import { niceDate } from "../lib/format";
-import { KEY_LIFTS, adjustThresholds, levelClass, rateLift } from "../lib/standards";
+import { type BwEntry, KEY_LIFTS, adjustThresholds, bodyweightForYear, levelClass, rateLift } from "../lib/standards";
 import { type LiftRecord, MUSCLE_ORDER, liftRecords, muscleGroup, summarize } from "../lib/stats";
 
-export function Records({ bodyweightKg, age }: { bodyweightKg: number; age: number }) {
+export function Records({
+  bodyweightKg,
+  age,
+  bwHistory,
+}: {
+  bodyweightKg: number;
+  age: number;
+  bwHistory: BwEntry[];
+}) {
+  const currentYear = new Date().getFullYear();
   const workouts = useLiveQuery(() => db.workouts.toArray(), []);
   if (!workouts) return <div className="pad">Loading…</div>;
   if (workouts.length === 0) return <div className="pad muted">No workouts yet — log your first one!</div>;
@@ -43,7 +52,9 @@ export function Records({ bodyweightKg, age }: { bodyweightKg: number; age: numb
             const rec = records.find((r) => r.name === kl.canon);
             if (!rec) return null;
             const e1rm = rec.bestE1rm.est;
-            const r = rateLift(adjustThresholds(kl.std, bodyweightKg, age), e1rm, bodyweightKg);
+            const year = parseInt(rec.bestE1rm.date.slice(0, 4), 10);
+            const bw = bodyweightForYear(year, bwHistory, bodyweightKg, currentYear);
+            const r = rateLift(adjustThresholds(kl.std, bw, age), e1rm, bw);
             return (
               <div key={kl.canon} className="std-row">
                 <div className="std-top">
@@ -57,7 +68,7 @@ export function Records({ bodyweightKg, age }: { bodyweightKg: number; age: numb
                   ))}
                 </div>
                 <div className="std-meta tiny muted">
-                  {e1rm.toFixed(0)} kg est-1RM · {r.ratio.toFixed(2)}× bodyweight
+                  {e1rm.toFixed(0)} kg est-1RM · {r.ratio.toFixed(2)}× BW @ {bw}kg ({year})
                   {r.next ? ` · ${Math.max(0, r.next.kg - Math.round(e1rm))} kg to ${r.next.level}` : " · Elite 🏆"}
                   {kl.note ? ` · ${kl.note}` : ""}
                 </div>

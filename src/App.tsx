@@ -5,6 +5,7 @@ import { db, ensureBootstrapped, getSetting, setSetting } from "./db";
 import { daysAgo } from "./lib/format";
 import { HeartRateMonitor } from "./lib/hr";
 import { notificationsSupported, showReminder } from "./lib/notify";
+import type { BwEntry } from "./lib/standards";
 import { trainingDue } from "./lib/stats";
 import { History } from "./components/History";
 import { Records } from "./components/Records";
@@ -23,6 +24,7 @@ export default function App() {
   const [daysPerWeek, setDpw] = useState(4);
   const [bodyweightKg, setBw] = useState(0); // 0 = not set
   const [age, setAge] = useState(0); // 0 = not set
+  const [bwHistory, setBwH] = useState<BwEntry[]>([]);
   const [hrLowThreshold, setHrLow] = useState(90);
 
   // Heart rate.
@@ -63,6 +65,7 @@ export default function App() {
       setDpw(dpw);
       setBw(await getSetting("bodyweightKg", 0));
       setAge(await getSetting("age", 0));
+      setBwH(await getSetting<BwEntry[]>("bwHistory", []));
       setHrLow(await getSetting("hrLowThreshold", 90));
       setReady(true);
       await maybeRemind(dpw);
@@ -145,6 +148,10 @@ export default function App() {
     setHrLow(v);
     setSetting("hrLowThreshold", v);
   };
+  const persistBwHistory = (v: BwEntry[]) => {
+    setBwH(v);
+    setSetting("bwHistory", v);
+  };
 
   const onExport = async () => {
     const data = {
@@ -189,7 +196,7 @@ export default function App() {
           />
         )}
         {tab === "history" && <History />}
-        {tab === "records" && <Records bodyweightKg={bodyweightKg} age={age} />}
+        {tab === "records" && <Records bodyweightKg={bodyweightKg} age={age} bwHistory={bwHistory} />}
         {tab === "settings" && (
           <Settings
             restDefaultSec={restDefaultSec}
@@ -202,6 +209,8 @@ export default function App() {
             setBodyweightKg={persistBw}
             age={age}
             setAge={persistAge}
+            bwHistory={bwHistory}
+            setBwHistory={persistBwHistory}
             hrLowThreshold={hrLowThreshold}
             setHrLowThreshold={persistHrLow}
             hr={hr}

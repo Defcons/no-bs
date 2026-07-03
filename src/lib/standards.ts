@@ -76,3 +76,24 @@ export function rateLift(std: Thresholds, e1rm: number, bodyweightKg: number): R
 
 export const levelClass = (level: Level | null): string =>
   level ? `lvl-${level.toLowerCase()}` : "lvl-none";
+
+// Bodyweight changes over the years, so old PRs should be rated against what you
+// weighed back then. `history` holds {year, kg} entries; the current bodyweight
+// is treated as the current-year entry. For a given record year we use the most
+// recent entry at or before it (carrying the earliest backward for older years).
+export type BwEntry = { year: number; kg: number };
+
+export function bodyweightForYear(
+  year: number,
+  history: BwEntry[],
+  currentBw: number,
+  currentYear: number,
+): number {
+  const list = history.filter((e) => e.kg > 0);
+  if (currentBw > 0 && !list.some((e) => e.year === currentYear)) list.push({ year: currentYear, kg: currentBw });
+  const sorted = list.sort((a, b) => a.year - b.year);
+  if (sorted.length === 0) return currentBw;
+  let chosen = sorted[0];
+  for (const e of sorted) if (e.year <= year) chosen = e;
+  return chosen.kg;
+}
