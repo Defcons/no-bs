@@ -9,6 +9,9 @@ export default defineConfig({
     VitePWA({
       registerType: "autoUpdate",
       includeAssets: ["favicon.svg"],
+      // Don't let the SPA navigation fallback hijack direct file URLs (e.g. the
+      // downloadable /gym-tracker.apk) — those should hit the network.
+      workbox: { navigateFallbackDenylist: [/\.[^/]+$/] },
       manifest: {
         name: "Gym Tracker",
         short_name: "Gym",
