@@ -3,27 +3,35 @@
 // the target time (endsAt) is stored on the workout draft.
 import { useEffect, useRef, useState } from "react";
 import { mmss } from "../lib/format";
+import { showReminder } from "../lib/notify";
 
 type Props = {
   endsAt: number | null; // epoch ms, or null when idle
   onChange: (endsAt: number | null) => void;
 };
 
-function beep() {
+// A more attention-grabbing 3-beep alarm (louder, ascending).
+function alarm() {
   try {
     const Ctx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
     const ctx = new Ctx();
-    const o = ctx.createOscillator();
-    const g = ctx.createGain();
-    o.connect(g);
-    g.connect(ctx.destination);
-    o.frequency.value = 880;
-    g.gain.value = 0.15;
-    o.start();
-    o.stop(ctx.currentTime + 0.25);
-    o.onended = () => ctx.close();
+    const now = ctx.currentTime;
+    [0, 0.28, 0.56].forEach((t, i) => {
+      const o = ctx.createOscillator();
+      const g = ctx.createGain();
+      o.connect(g);
+      g.connect(ctx.destination);
+      o.type = "square";
+      o.frequency.value = 700 + i * 200;
+      g.gain.setValueAtTime(0.0001, now + t);
+      g.gain.exponentialRampToValueAtTime(0.4, now + t + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, now + t + 0.24);
+      o.start(now + t);
+      o.stop(now + t + 0.26);
+    });
+    setTimeout(() => ctx.close(), 1200);
   } catch {
-    /* audio may be blocked; vibration still fires */
+    /* audio may be blocked; vibration + notification still fire */
   }
 }
 
@@ -39,8 +47,10 @@ export function RestTimer({ endsAt, onChange }: Props) {
       setRemaining(rem);
       if (rem <= 0 && !firedRef.current) {
         firedRef.current = true;
-        beep();
-        navigator.vibrate?.([200, 100, 200]);
+        alarm();
+        navigator.vibrate?.([300, 120, 300, 120, 300]);
+        // Notification also surfaces the alert when the app is backgrounded.
+        showReminder("Rest over — go! 💪", "Time for your next set.");
       }
     };
     tick();

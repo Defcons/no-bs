@@ -51,28 +51,39 @@ export function ExerciseCard({ exercise, step, prev, onChange, editableName, onR
           <h3>{exercise.name}</h3>
         )}
         <span className="scheme">{schemeLabel(exercise)}</span>
-        <button
-          className={`note-toggle ${exercise.note ? "has-note" : ""}`}
-          aria-label="exercise note"
-          onClick={() => setShowNote((v) => !v)}
-        >
-          ✎
-        </button>
-        {onMoveUp && (
-          <button className="note-toggle" aria-label="move up" onClick={onMoveUp}>
-            ↑
+        <div className="ex-controls">
+          <button className="hbtn" aria-label="remove set" onClick={removeSet}>
+            −
           </button>
-        )}
-        {onMoveDown && (
-          <button className="note-toggle" aria-label="move down" onClick={onMoveDown}>
-            ↓
+          <span className="set-count" title="sets">
+            {exercise.sets.length}
+          </span>
+          <button className="hbtn" aria-label="add set" onClick={addSet}>
+            +
           </button>
-        )}
-        {onRemove && (
-          <button className="note-toggle" aria-label="remove exercise" onClick={onRemove}>
-            🗑
+          <button
+            className={`hbtn ${exercise.note ? "has-note" : ""}`}
+            aria-label="exercise note"
+            onClick={() => setShowNote((v) => !v)}
+          >
+            ✎
           </button>
-        )}
+          {onMoveUp && (
+            <button className="hbtn" aria-label="move up" onClick={onMoveUp}>
+              ↑
+            </button>
+          )}
+          {onMoveDown && (
+            <button className="hbtn" aria-label="move down" onClick={onMoveDown}>
+              ↓
+            </button>
+          )}
+          {onRemove && (
+            <button className="hbtn" aria-label="remove exercise" onClick={onRemove}>
+              🗑
+            </button>
+          )}
+        </div>
       </header>
 
       {showNote && (
@@ -96,16 +107,6 @@ export function ExerciseCard({ exercise, step, prev, onChange, editableName, onR
             onChange={(p) => patchSet(i, p)}
           />
         ))}
-      </div>
-
-      <div className="set-actions">
-        <span className="set-actions-label">Sets:</span>
-        <button className="mini set-step" aria-label="remove set" onClick={removeSet}>
-          −
-        </button>
-        <button className="mini set-step" aria-label="add set" onClick={addSet}>
-          +
-        </button>
       </div>
     </section>
   );

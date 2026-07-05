@@ -134,7 +134,7 @@ export function useActiveWorkout() {
       dayName: tpl.name,
       templateId: tpl.id,
       exercises: buildExercises(tpl, history),
-      wRunning: true,
+      wRunning: false, // starts on Start button or first weight/rep edit
       wAccumMs: 0,
       wSegStart: now,
       swRunning: false,
@@ -154,7 +154,7 @@ export function useActiveWorkout() {
       dayName: label,
       exercises: [],
       custom: true,
-      wRunning: true,
+      wRunning: false,
       wAccumMs: 0,
       wSegStart: now,
       swRunning: false,
@@ -177,6 +177,12 @@ export function useActiveWorkout() {
   );
   const resetWorkoutTimer = useCallback(
     () => update((d) => ({ ...d, wAccumMs: 0, wSegStart: Date.now() })),
+    [update],
+  );
+  // Idempotent: start the workout timer if it isn't already running (called on
+  // the first weight/rep edit).
+  const startWorkoutTimer = useCallback(
+    () => update((d) => (d.wRunning ? d : { ...d, wRunning: true, wSegStart: Date.now() })),
     [update],
   );
 
@@ -257,6 +263,7 @@ export function useActiveWorkout() {
     update,
     toggleWorkoutTimer,
     resetWorkoutTimer,
+    startWorkoutTimer,
     toggleStopwatch,
     resetStopwatch,
     moveExercise,

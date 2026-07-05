@@ -364,6 +364,16 @@
   color: var(--muted);
   font-weight: 400;
 }
+.tools-toggle {
+  display: block;
+  margin: 8px 16px 0;
+  width: calc(100% - 32px);
+  background: none;
+  border: 1px dashed var(--line);
+  color: var(--muted);
+  font-size: 13px;
+  padding: 8px;
+}
 .sw-bar {
   display: flex;
   align-items: center;
@@ -442,16 +452,45 @@
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  padding: 12px;
+  padding: 10px 10px 12px;
 }
 .exercise-head {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
 }
 .exercise-head h3 {
-  font-size: 17px;
+  font-size: 16px;
   flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ex-controls {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
+}
+.hbtn {
+  width: 26px;
+  height: 30px;
+  padding: 0;
+  font-size: 14px;
+  color: var(--muted);
+}
+.hbtn.has-note {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.set-count {
+  min-width: 15px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--muted);
 }
 .scheme {
   color: var(--muted);
@@ -475,8 +514,8 @@
 /* ---- Set rows ---- */
 .sets {
   display: grid;
-  gap: 8px;
-  margin-top: 10px;
+  gap: 6px;
+  margin-top: 8px;
 }
 .setrow {
   display: grid;

@@ -46,14 +46,19 @@ export function Today({
     update,
     toggleWorkoutTimer,
     resetWorkoutTimer,
+    startWorkoutTimer,
     toggleStopwatch,
     resetStopwatch,
     moveExercise,
   } = useActiveWorkout();
   const [hrPrompt, setHrPrompt] = useState(false);
   const [hrPromptLeft, setHrPromptLeft] = useState(0);
+  const [showTools, setShowTools] = useState(false);
+  const [finishAsk, setFinishAsk] = useState(false);
   const lowSince = useRef<number | null>(null);
   const promptDeadline = useRef<number>(0);
+  const hrEver = useRef(false); // did HR ever connect this session?
+  const lastHrAt = useRef(0); // last time an HR reading arrived
   const [prev, setPrev] = useState<StoredWorkout | undefined>();
   const [lastByDay, setLastByDay] = useState<Record<string, StoredWorkout | undefined>>({});
 
@@ -75,8 +80,8 @@ export function Today({
     };
   }, [draft, templates]);
 
-  // Finish: save + sync back to the sheet + return to history.
-  const finishWorkout = async () => {
+  // Actually save + sync + return to history.
+  const finishNow = async () => {
     const row = await finish(getHrStats());
     if (row && !row.custom) {
       const res = await syncWorkout(row);
@@ -85,10 +90,40 @@ export function Today({
       }
     }
     setHrPrompt(false);
+    setFinishAsk(false);
     onFinished();
   };
-  const finishRef = useRef(finishWorkout);
-  finishRef.current = finishWorkout;
+  // The Finish button: nudge to rate mood first if it wasn't set.
+  const finishWorkout = () => {
+    if (draft && (draft.moodBefore == null || draft.moodAfter == null)) setFinishAsk(true);
+    else finishNow();
+  };
+  const finishRef = useRef(finishNow);
+  finishRef.current = finishNow;
+
+  // Track HR availability for the drop-out auto-finish.
+  useEffect(() => {
+    if (hr.bpm != null) {
+      lastHrAt.current = Date.now();
+      hrEver.current = true;
+    }
+  }, [hr.bpm]);
+  // Reset HR tracking when a new session starts.
+  useEffect(() => {
+    hrEver.current = false;
+    lastHrAt.current = Date.now();
+  }, [draft?.startedAt]);
+  // If HR was in use but has been unavailable for 10 min, auto-finish (skip for
+  // Alternative sessions).
+  useEffect(() => {
+    if (!draft || draft.custom || hrLowThreshold <= 0) return;
+    const id = window.setInterval(() => {
+      if (hrEver.current && !hr.connected && Date.now() - lastHrAt.current >= 10 * 60 * 1000) {
+        finishRef.current();
+      }
+    }, 20000);
+    return () => window.clearInterval(id);
+  }, [draft, draft?.custom, hr.connected, hrLowThreshold]);
 
   // Low-HR watchdog: after HR sits below the threshold for 10 min, ask if you're
   // still working out; if unanswered for 5 more min, auto-end. Driven by HR updates.
@@ -184,8 +219,10 @@ export function Today({
   }
 
   // ---- Active workout ------------------------------------------------------
-  const setExercise = (i: number, ex: ExercisePerf) =>
+  const setExercise = (i: number, ex: ExercisePerf) => {
+    startWorkoutTimer(); // first edit starts the workout timer
     update((d) => ({ ...d, exercises: d.exercises.map((e, idx) => (idx === i ? ex : e)) }));
+  };
 
   const startRest = () => update((d) => ({ ...d, restEndsAt: Date.now() + restDefaultSec * 1000 }));
   const setRest = (endsAt: number | null) => update((d) => ({ ...d, restEndsAt: endsAt ?? undefined }));
@@ -241,26 +278,33 @@ export function Today({
         </div>
       </header>
 
-      <div className="sw-bar">
-        <span className="sw-label">⏱ Stopwatch</span>
-        <span className="sw-time">{mmss(swElapsed)}</span>
-        <button className="mini" onClick={toggleStopwatch}>
-          {draft.swRunning ? "⏸ Pause" : "▶ Start"}
-        </button>
-        <button className="mini" onClick={resetStopwatch}>
-          ↺ Reset
-        </button>
-      </div>
-
       <RestTimer endsAt={draft.restEndsAt ?? null} onChange={setRest} />
 
-      <div className="pad">
-        <MoodSlider
-          label="Feeling before"
-          value={draft.moodBefore}
-          onChange={(v) => update((d) => ({ ...d, moodBefore: v }))}
-        />
-      </div>
+      <button className="tools-toggle" onClick={() => setShowTools((v) => !v)}>
+        {showTools ? "▴ Hide stopwatch & feeling" : "▾ Stopwatch & feeling"}
+      </button>
+
+      {showTools && (
+        <>
+          <div className="sw-bar">
+            <span className="sw-label">⏱ Stopwatch</span>
+            <span className="sw-time">{mmss(swElapsed)}</span>
+            <button className="mini" onClick={toggleStopwatch}>
+              {draft.swRunning ? "⏸ Pause" : "▶ Start"}
+            </button>
+            <button className="mini" onClick={resetStopwatch}>
+              ↺ Reset
+            </button>
+          </div>
+          <div className="pad">
+            <MoodSlider
+              label="Feeling before"
+              value={draft.moodBefore}
+              onChange={(v) => update((d) => ({ ...d, moodBefore: v }))}
+            />
+          </div>
+        </>
+      )}
 
       <div className="exercise-list">
         {draft.exercises.map((ex, i) => (
@@ -289,14 +333,7 @@ export function Today({
       </div>
 
       <div className="pad">
-        <MoodSlider
-          label="Feeling after"
-          value={draft.moodAfter}
-          onChange={(v) => update((d) => ({ ...d, moodAfter: v }))}
-        />
-        <label className="field-label" style={{ marginTop: 14 }}>
-          Day note
-        </label>
+        <label className="field-label">Day note</label>
         <textarea
           className="day-note"
           value={draft.note ?? ""}
@@ -336,8 +373,35 @@ export function Today({
               >
                 Yes, keep going
               </button>
-              <button className="ghost" onClick={finishWorkout}>
+              <button className="ghost" onClick={finishNow}>
                 End now
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {finishAsk && (
+        <div className="hr-modal-backdrop">
+          <div className="hr-modal">
+            <h3>Rate your session</h3>
+            <p className="muted tiny">You didn't set your feeling — quick before you finish?</p>
+            <MoodSlider
+              label="Feeling before"
+              value={draft.moodBefore}
+              onChange={(v) => update((d) => ({ ...d, moodBefore: v }))}
+            />
+            <MoodSlider
+              label="Feeling after"
+              value={draft.moodAfter}
+              onChange={(v) => update((d) => ({ ...d, moodAfter: v }))}
+            />
+            <div className="row" style={{ marginTop: 14 }}>
+              <button className="primary" onClick={finishNow}>
+                Finish workout
+              </button>
+              <button className="ghost" onClick={finishNow}>
+                Skip
               </button>
             </div>
           </div>
