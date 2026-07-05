@@ -3,4 +3,5 @@ dist
 dev-fixtures
 .git
 .github
+android
 *.md
