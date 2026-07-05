@@ -2,7 +2,7 @@
 // optional note. Weight is the primary input; reps is pre-filled from the scheme.
 // Units ("kg"/"reps") are static suffixes inside each field so they don't throw
 // off vertical alignment.
-import { useState } from "react";
+import { type FocusEvent, useState } from "react";
 import type { SetEntry } from "../types";
 
 type Props = {
@@ -20,14 +20,20 @@ function parseWeight(s: string): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+// Select existing text on focus so typing replaces it (no manual backspacing).
+const selectAll = (e: FocusEvent<HTMLInputElement>) => e.target.select();
+
 export function SetInput({ index, set, step, prevWeight, onChange }: Props) {
   const [showNote, setShowNote] = useState(!!set.note);
-  const done = set.weight != null;
-  const bump = (d: number) => onChange({ weight: Math.max(0, (set.weight ?? prevWeight ?? 0) + d) });
+  const done = !!set.done;
+  // Editing any value marks the set done (green).
+  const bump = (d: number) => onChange({ weight: Math.max(0, (set.weight ?? prevWeight ?? 0) + d), done: true });
 
   return (
     <div className={`setrow ${done ? "done" : ""}`}>
-      <div className="set-badge">{index + 1}</div>
+      <button className="set-badge" aria-label="toggle set done" onClick={() => onChange({ done: !done })}>
+        {index + 1}
+      </button>
 
       <div className="weight-group">
         <button className="stepper" aria-label="decrease" onClick={() => bump(-step)}>
@@ -39,7 +45,8 @@ export function SetInput({ index, set, step, prevWeight, onChange }: Props) {
             inputMode="decimal"
             value={set.weight ?? ""}
             placeholder={prevWeight != null ? String(prevWeight) : "—"}
-            onChange={(e) => onChange({ weight: parseWeight(e.target.value) })}
+            onFocus={selectAll}
+            onChange={(e) => onChange({ weight: parseWeight(e.target.value), done: true })}
           />
           <span className="unit">kg</span>
         </div>
@@ -54,9 +61,10 @@ export function SetInput({ index, set, step, prevWeight, onChange }: Props) {
           inputMode="numeric"
           value={set.reps ?? ""}
           placeholder="—"
+          onFocus={selectAll}
           onChange={(e) => {
             const n = parseInt(e.target.value, 10);
-            onChange({ reps: Number.isFinite(n) ? n : null });
+            onChange({ reps: Number.isFinite(n) ? n : null, done: true });
           }}
         />
         <span className="unit">×</span>
@@ -69,9 +77,10 @@ export function SetInput({ index, set, step, prevWeight, onChange }: Props) {
           inputMode="numeric"
           value={set.assist ?? ""}
           placeholder="–"
+          onFocus={selectAll}
           onChange={(e) => {
             const n = parseInt(e.target.value, 10);
-            onChange({ assist: Number.isFinite(n) ? n : null });
+            onChange({ assist: Number.isFinite(n) ? n : null, done: true });
           }}
         />
         <span className="unit">)</span>

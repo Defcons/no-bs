@@ -522,6 +522,11 @@
   grid-template-columns: 18px minmax(0, 1fr) auto auto 28px;
   align-items: center;
   gap: 3px;
+  border-radius: 9px;
+  transition: background-color 0.25s ease;
+}
+.setrow.done {
+  background: color-mix(in srgb, var(--accent-2) 14%, transparent);
 }
 .setrow .set-note {
   grid-column: 1 / -1;
@@ -529,13 +534,17 @@
 .set-badge {
   width: 18px;
   height: 18px;
+  border: none;
+  padding: 0;
   border-radius: 50%;
   display: grid;
   place-items: center;
   background: var(--surface-2);
   color: var(--muted);
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
 }
 .setrow.done .set-badge {
   background: var(--accent-2);

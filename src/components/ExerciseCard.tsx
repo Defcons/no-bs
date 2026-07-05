@@ -30,7 +30,9 @@ export function ExerciseCard({ exercise, step, prev, onChange, editableName, onR
   };
   const addSet = () => {
     const last = exercise.sets.at(-1);
-    onChange({ ...exercise, sets: [...exercise.sets, { weight: null, reps: last?.reps ?? null }] });
+    // Carry the previous set's weight, but reset reps to the exercise's scheme default.
+    const defReps = typeof exercise.scheme.reps === "number" ? exercise.scheme.reps : null;
+    onChange({ ...exercise, sets: [...exercise.sets, { weight: last?.weight ?? null, reps: defReps, done: false }] });
   };
   const removeSet = () => {
     if (exercise.sets.length > 1) onChange({ ...exercise, sets: exercise.sets.slice(0, -1) });

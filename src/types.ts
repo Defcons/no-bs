@@ -11,6 +11,7 @@ export type SetEntry = {
   weight: number | null; // kg (per dumbbell for DB moves); null if unknown/bodyweight/text-only
   reps: number | null; // actual reps; null -> falls back to scheme reps
   assist?: number | null; // extra/assisted reps → written as "(n)" in the sheet
+  done?: boolean; // set completed (green) — toggled by the badge or on any value edit
   note?: string;
   raw?: string; // original token from the sheet, kept for fidelity/debugging
 };
