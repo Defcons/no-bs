@@ -538,6 +538,43 @@
   margin-top: 8px;
 }
 
+/* ---- Picture-in-Picture minimal view ---- */
+.pip-view {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2vh;
+  background: var(--bg);
+  color: var(--text);
+  text-align: center;
+}
+.pip-view.resting {
+  background: color-mix(in srgb, var(--accent) 22%, var(--bg));
+}
+.pip-label {
+  font-size: 7vw;
+  letter-spacing: 0.25em;
+  color: var(--muted);
+  font-weight: 700;
+}
+.pip-time {
+  font-size: 26vw;
+  line-height: 1;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+.pip-view.resting .pip-time {
+  color: var(--accent);
+}
+.pip-hr {
+  font-size: 8vw;
+  color: var(--danger);
+  font-weight: 700;
+}
+
 /* ---- Set rows ---- */
 .sets {
   display: grid;

@@ -1,7 +1,9 @@
 // Settings: rest-timer default, weight increment, HR connection, Google Sheets
 // write-back sync, and data backup/reset.
 import { useEffect, useState } from "react";
+import { Capacitor } from "@capacitor/core";
 import { getSetting, setSetting } from "../db";
+import { captureLocation } from "../lib/geofence";
 import { hrAvailable } from "../lib/hr";
 import { notificationsSupported, requestNotifications } from "../lib/notify";
 import { importFromSheet, pendingCount, syncPending, testSync } from "../lib/sheetSync";
@@ -60,6 +62,11 @@ export function Settings({
   const [appVersion, setAppVersion] = useState("");
   const [updateMsg, setUpdateMsg] = useState("");
   const [updating, setUpdating] = useState(false);
+  const [gym, setGym] = useState<{ lat: number; lng: number } | null>(null);
+  const [gymRadius, setGymRadius] = useState(150);
+  const [autoEndLeave, setAutoEndLeave] = useState(false);
+  const [geoMsg, setGeoMsg] = useState("");
+  const native = Capacitor.isNativePlatform();
 
   useEffect(() => {
     getSetting<string>("sheetSyncUrl", "").then((v) => setSyncUrl(v || DEFAULT_SYNC_URL));
@@ -67,7 +74,36 @@ export function Settings({
     getSetting<boolean>("remindersEnabled", false).then(setReminders);
     pendingCount().then(setPending);
     currentVersion().then(setAppVersion);
+    (async () => {
+      const lat = await getSetting<number>("gymLat", NaN);
+      const lng = await getSetting<number>("gymLng", NaN);
+      if (Number.isFinite(lat) && Number.isFinite(lng)) setGym({ lat, lng });
+      setGymRadius(await getSetting<number>("gymRadiusM", 150));
+      setAutoEndLeave(await getSetting<boolean>("autoEndOnLeave", false));
+    })();
   }, []);
+
+  const captureGym = async () => {
+    setGeoMsg("Getting a GPS fix…");
+    try {
+      const loc = await captureLocation();
+      await setSetting("gymLat", loc.lat);
+      await setSetting("gymLng", loc.lng);
+      setGym(loc);
+      setGeoMsg(`Gym set ✓ (${loc.lat.toFixed(5)}, ${loc.lng.toFixed(5)})`);
+    } catch (e) {
+      setGeoMsg((e as Error).message);
+    }
+  };
+  const toggleAutoEndLeave = () => {
+    const v = !autoEndLeave;
+    setAutoEndLeave(v);
+    setSetting("autoEndOnLeave", v);
+  };
+  const changeRadius = (v: number) => {
+    setGymRadius(v);
+    setSetting("gymRadiusM", v);
+  };
 
   const doUpdate = async () => {
     setUpdating(true);
@@ -320,6 +356,38 @@ export function Settings({
           auto-ends after 5 more min with no reply. Set to 0 to disable.
         </p>
       </div>
+
+      {native && (
+        <div className="setting">
+          <label>Leave-gym auto-end</label>
+          <button className={`mini ${autoEndLeave ? "active" : ""}`} onClick={toggleAutoEndLeave}>
+            {autoEndLeave ? "On — tap to disable" : "Enable"}
+          </button>
+          <div className="row" style={{ marginTop: 10 }}>
+            <button className="mini" onClick={captureGym}>
+              {gym ? "Update gym location" : "Set gym location (here)"}
+            </button>
+            <span className="muted tiny">radius</span>
+            <input
+              type="text"
+              inputMode="numeric"
+              className="bw-input"
+              value={gymRadius || ""}
+              placeholder="m"
+              onChange={(e) => {
+                const n = parseInt(e.target.value, 10);
+                changeRadius(Number.isFinite(n) ? n : 0);
+              }}
+            />
+            <span className="muted tiny">m</span>
+          </div>
+          {geoMsg && <p className="muted tiny">{geoMsg}</p>}
+          <p className="muted tiny">
+            Stand at your gym and tap “Set gym location”. When a (non-Alternative) workout is running and you walk more
+            than {gymRadius}m away for 2 min, the session auto-saves. Uses a background location service while you train.
+          </p>
+        </div>
+      )}
 
       <div className="setting">
         <label>Google Sheets sync</label>

@@ -4,11 +4,14 @@ import { useEffect, useRef, useState } from "react";
 import { lastWorkoutForDay, type StoredWorkout } from "../db";
 import { daysAgo, daysAgoLabel, hhmmss, mmss, niceDate } from "../lib/format";
 import { cancelBreakNotification, scheduleBreakNotification, showReminder } from "../lib/notify";
+import { startGeofence, stopGeofence } from "../lib/geofence";
+import { onPipChange, setPipAutoEnter } from "../lib/pip";
 import { syncWorkout } from "../lib/sheetSync";
 import { cadenceStatus, trainingDue } from "../lib/stats";
 import { useActiveWorkout } from "../lib/useActiveWorkout";
 import type { DayTemplate, ExercisePerf } from "../types";
 import { ExerciseCard } from "./ExerciseCard";
+import { PipView } from "./PipView";
 import { RestTimer } from "./RestTimer";
 
 type Props = {
@@ -55,6 +58,7 @@ export function Today({
   const [hrPromptLeft, setHrPromptLeft] = useState(0);
   const [showTools, setShowTools] = useState(false);
   const [finishAsk, setFinishAsk] = useState(false);
+  const [pipMode, setPipMode] = useState(false);
   const lowSince = useRef<number | null>(null);
   const promptDeadline = useRef<number>(0);
   const hrEver = useRef(false); // did HR ever connect this session?
@@ -125,6 +129,32 @@ export function Today({
     return () => window.clearInterval(id);
   }, [draft, draft?.custom, hr.connected, hrLowThreshold]);
 
+  // Float the rest timer as Picture-in-Picture when you leave the app during a
+  // break; swap in the minimal PiP view while the window is shrunk.
+  useEffect(() => onPipChange(setPipMode), []);
+  useEffect(() => {
+    setPipAutoEnter(!!draft && (draft.restEndsAt ?? 0) > Date.now());
+    return () => {
+      setPipAutoEnter(false);
+    };
+  }, [draft?.restEndsAt, draft]);
+
+  // Leave-gym auto-end: while a (non-Alternative) workout runs, watch location in
+  // the background; when you've clearly left the gym, save + finish the session.
+  useEffect(() => {
+    if (!draft || draft.custom) return;
+    let active = true;
+    startGeofence(() => {
+      if (!active) return;
+      showReminder("Workout saved 💾", "You left the gym, so I finished and saved your session.");
+      finishRef.current();
+    });
+    return () => {
+      active = false;
+      stopGeofence();
+    };
+  }, [draft?.startedAt, draft?.custom]);
+
   // Low-HR watchdog: after HR sits below the threshold for 10 min, ask if you're
   // still working out; if unanswered for 5 more min, auto-end. Driven by HR updates.
   useEffect(() => {
@@ -159,6 +189,11 @@ export function Today({
   }, [hrPrompt]);
 
   if (!loaded) return <div className="pad">Loading…</div>;
+
+  // Shrunk into the PiP window: show only the big timer.
+  if (pipMode && draft) {
+    return <PipView restEndsAt={draft.restEndsAt ?? null} elapsedSec={elapsed} bpm={hr.bpm} />;
+  }
 
   // ---- No active workout: choose a day -----------------------------------
   if (!draft) {
