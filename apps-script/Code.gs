@@ -106,6 +106,10 @@ function doPost(e) {
       { label: "Mood", value: body.mood },
       { label: "Time", value: body.time },
       { label: "Avg HR", value: body.hr },
+      { label: "Distance", value: body.distance },
+      { label: "Pace", value: body.pace },
+      { label: "Speed", value: body.speed },
+      { label: "Route", value: body.route },
     ];
     var metaWritten = {};
     var insertAt = lastBlockRow; // 0-based; new meta rows go after here
@@ -155,6 +159,11 @@ function createBlock(sheet, body) {
   rows.push(["Mood", body.mood || ""]);
   rows.push(["Time", body.time || ""]);
   rows.push(["Avg HR", body.hr || ""]);
+  // Cardio-only meta rows: skip the ones that are empty for a normal session.
+  ["Distance", "Pace", "Speed", "Route"].forEach(function (lbl) {
+    var v = { Distance: body.distance, Pace: body.pace, Speed: body.speed, Route: body.route }[lbl];
+    if (v) rows.push([lbl, v]);
+  });
 
   var start = sheet.getLastRow() + 2; // leave one blank spacer row
   sheet.getRange(start, 1, rows.length, 2).setValues(rows);
@@ -180,6 +189,10 @@ function metaKind(label) {
   if (l === "mood" || l === "feeling") return "Mood";
   if (l === "time" || l === "tid" || l === "duration" || l === "varighet") return "Time";
   if (l === "avg hr" || l === "hr" || l === "puls" || l === "snittpuls" || l === "heart rate") return "Avg HR";
+  if (l === "distance" || l === "distanse") return "Distance";
+  if (l === "pace" || l === "tempo") return "Pace";
+  if (l === "speed" || l === "fart") return "Speed";
+  if (l === "route" || l === "rute") return "Route";
   return "";
 }
 

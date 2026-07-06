@@ -111,6 +111,9 @@ const NOTE_LABELS = new Set(["note", "notes", "notat", "notater"]);
 const MOOD_LABELS = new Set(["mood", "feeling", "humør", "form"]);
 const TIME_LABELS = new Set(["time", "tid", "duration", "varighet"]);
 const HR_LABELS = new Set(["avg hr", "hr", "puls", "avg puls", "heart rate", "snittpuls"]);
+// Derived cardio rows we write but don't import back (recomputed from the track) —
+// recognised here only so they aren't parsed as fake exercises.
+const SKIP_LABELS = new Set(["distance", "distanse", "pace", "tempo", "speed", "fart", "route", "rute"]);
 
 // "6→8" / "6->8" / "6-8" → { before: 6, after: 8 }. Single number → before only.
 function parseMood(txt: string): { before?: number; after?: number } {
@@ -164,6 +167,17 @@ export function parseSheet(rows: string[][], source: string): Workout[] {
       const d = parseDate(row[c]);
       if (d) colDate.set(c, d);
     }
+    // Get (or create) the workout for a date column. Meta rows use this too, so a
+    // pure-cardio session (Time/HR/Distance rows, no exercises) still imports.
+    const ensure = (date: string): Workout => {
+      const k = key(dayName, date);
+      let w = workouts.get(k);
+      if (!w) {
+        w = { date, dayName, exercises: [], source };
+        workouts.set(k, w);
+      }
+      return w;
+    };
 
     // Consume following rows until the next header (row with date cells) or EOF.
     let j = i + 1;
@@ -178,8 +192,8 @@ export function parseSheet(rows: string[][], source: string): Workout[] {
         for (const [col, date] of colDate) {
           const txt = (r[col] ?? "").trim();
           if (!txt) continue;
-          const w = workouts.get(key(dayName, date));
-          if (w) w.note = w.note ? `${w.note}\n${txt}` : txt;
+          const w = ensure(date);
+          w.note = w.note ? `${w.note}\n${txt}` : txt;
         }
         continue;
       }
@@ -188,9 +202,9 @@ export function parseSheet(rows: string[][], source: string): Workout[] {
         for (const [col, date] of colDate) {
           const txt = (r[col] ?? "").trim();
           if (!txt) continue;
-          const w = workouts.get(key(dayName, date));
-          if (!w) continue;
           const { before, after } = parseMood(txt);
+          if (before == null && after == null) continue;
+          const w = ensure(date);
           if (before != null) w.moodBefore = before;
           if (after != null) w.moodAfter = after;
         }
@@ -200,8 +214,7 @@ export function parseSheet(rows: string[][], source: string): Workout[] {
       if (TIME_LABELS.has(low0)) {
         for (const [col, date] of colDate) {
           const secs = parseDuration((r[col] ?? "").trim());
-          const w = workouts.get(key(dayName, date));
-          if (w && secs != null) w.durationSec = secs;
+          if (secs != null) ensure(date).durationSec = secs;
         }
         continue;
       }
@@ -209,11 +222,12 @@ export function parseSheet(rows: string[][], source: string): Workout[] {
       if (HR_LABELS.has(low0)) {
         for (const [col, date] of colDate) {
           const n = parseInt((r[col] ?? "").trim(), 10);
-          const w = workouts.get(key(dayName, date));
-          if (w && Number.isFinite(n)) w.avgHr = n;
+          if (Number.isFinite(n)) ensure(date).avgHr = n;
         }
         continue;
       }
+
+      if (SKIP_LABELS.has(low0)) continue; // derived cardio rows — not exercises
 
       // Exercise row. Label may be one col ("3x5 Bench") or two ("3x5"|"Benkpress").
       let label = label0;
