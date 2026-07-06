@@ -7,6 +7,7 @@
 // request (no preflight); Apps Script's redirected response carries ACAO:*.
 import { Capacitor, CapacitorHttp } from "@capacitor/core";
 import { db, getSetting, type StoredWorkout } from "../db";
+import { parseSheet } from "./sheet";
 import type { ExercisePerf } from "../types";
 import { DEFAULT_SYNC_SECRET, DEFAULT_SYNC_URL } from "./syncConfig";
 
@@ -18,6 +19,7 @@ export type SyncResult = {
   skipped?: string[];
   noteWritten?: boolean;
   ping?: boolean;
+  tabs?: Record<string, string[][]>; // "pull" response: each sheet tab's cells
 };
 
 // Norwegian decimal comma, matching how the sheet is written (72.5 -> "72,5").
@@ -126,4 +128,41 @@ export async function syncPending(): Promise<{ done: number; failed: number }> {
     else failed++;
   }
   return { done, failed };
+}
+
+// Pull every workout from the sheet and add any this device is missing
+// (deduped by day + date), e.g. sessions logged elsewhere since the last import.
+export async function importFromSheet(): Promise<{ added: number; error?: string }> {
+  const { url, secret } = await config();
+  if (!url) return { added: 0, error: "No sync URL set" };
+  try {
+    const res = await post(url, { secret, action: "pull" });
+    if (!res.ok || !res.tabs) return { added: 0, error: res.error || "Import failed" };
+
+    const parsed = Object.entries(res.tabs).flatMap(([name, rows]) => parseSheet(rows, name));
+    const existing = await db.workouts.toArray();
+    const key = (dayName: string, iso: string) => `${dayName}@@${iso.slice(0, 10)}`;
+    const have = new Set(existing.map((w) => key(w.dayName, w.date)));
+    const cutoff = new Date(Date.now() + 2 * 86400000).toISOString().slice(0, 10); // drop future typos
+
+    const toAdd: StoredWorkout[] = [];
+    for (const w of parsed) {
+      if (w.date > cutoff) continue;
+      const k = key(w.dayName, w.date);
+      if (have.has(k)) continue;
+      have.add(k);
+      toAdd.push({
+        date: w.date,
+        dayName: w.dayName,
+        exercises: w.exercises,
+        note: w.note,
+        source: `sheet:${w.source ?? "?"}`,
+        synced: true,
+      });
+    }
+    if (toAdd.length) await db.workouts.bulkAdd(toAdd);
+    return { added: toAdd.length };
+  } catch (e) {
+    return { added: 0, error: (e as Error).message };
+  }
 }

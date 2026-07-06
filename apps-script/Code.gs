@@ -23,6 +23,16 @@ function doPost(e) {
     if (body.secret !== SECRET) return json({ ok: false, error: "bad secret" });
     if (body.ping) return json({ ok: true, ping: true });
 
+    // Pull: return every tab's cells (as displayed) so the app can import
+    // workouts that exist in the sheet but not yet on the device.
+    if (body.action === "pull") {
+      var out = {};
+      SpreadsheetApp.getActiveSpreadsheet().getSheets().forEach(function (sh) {
+        out[sh.getName()] = sh.getDataRange().getDisplayValues();
+      });
+      return json({ ok: true, tabs: out });
+    }
+
     var ss = SpreadsheetApp.getActiveSpreadsheet();
     var sheet = ss.getSheetByName(String(body.year));
     if (!sheet) return json({ ok: false, error: "no tab named " + body.year });

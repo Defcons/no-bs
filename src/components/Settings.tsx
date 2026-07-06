@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { getSetting, setSetting } from "../db";
 import { hrAvailable } from "../lib/hr";
 import { notificationsSupported, requestNotifications } from "../lib/notify";
-import { pendingCount, syncPending, testSync } from "../lib/sheetSync";
+import { importFromSheet, pendingCount, syncPending, testSync } from "../lib/sheetSync";
 import type { BwEntry } from "../lib/standards";
 import { DEFAULT_SYNC_SECRET, DEFAULT_SYNC_URL } from "../lib/syncConfig";
 import { checkAndApplyUpdate, currentVersion, updatesSupported } from "../lib/update";
@@ -110,6 +110,12 @@ export function Settings({
     const { done, failed } = await syncPending();
     setPending(await pendingCount());
     setStatus(`Synced ${done}${failed ? `, ${failed} failed` : ""}.`);
+  };
+
+  const doImport = async () => {
+    setStatus("Importing from sheet…");
+    const { added, error } = await importFromSheet();
+    setStatus(error ? `Import failed: ${error}` : added ? `Imported ${added} workout${added === 1 ? "" : "s"} from the sheet.` : "Already up to date — nothing new in the sheet.");
   };
 
   return (
@@ -334,8 +340,15 @@ export function Settings({
           <button className="mini" onClick={doSyncNow}>
             Sync now{pending ? ` (${pending} pending)` : ""}
           </button>
+          <button className="mini" onClick={doImport}>
+            Import from sheet ↓
+          </button>
         </div>
         {status && <p className="muted tiny">{status}</p>}
+        <p className="muted tiny">
+          “Import from sheet” pulls in any workouts that are in your sheet but missing on this device (e.g. logged
+          elsewhere). It only adds — it never overwrites or deletes.
+        </p>
       </div>
 
       <div className="setting">
