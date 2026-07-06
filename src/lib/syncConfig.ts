@@ -5,3 +5,7 @@
 export const DEFAULT_SYNC_URL =
   "REDACTED_SYNC_URL";
 export const DEFAULT_SYNC_SECRET = "REDACTED_OLD_SECRET";
+
+// Public origin of the installed PWA — used to build shareable route links that
+// open the in-app map viewer (behind Cloudflare Access, so only the owner can open).
+export const APP_PUBLIC_URL = "https://gym.defc0n.no";

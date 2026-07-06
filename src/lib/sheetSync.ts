@@ -9,9 +9,10 @@ import { Capacitor, CapacitorHttp } from "@capacitor/core";
 import { db, getSetting, setSetting, type StoredWorkout } from "../db";
 import { parseBodyweightTab, parseSheet } from "./sheet";
 import { computeRun, fmtDist, fmtPace } from "./runStats";
+import { downsample, encodePolyline } from "./polyline";
 import type { BwEntry } from "./standards";
 import type { ExercisePerf } from "../types";
-import { DEFAULT_SYNC_SECRET, DEFAULT_SYNC_URL } from "./syncConfig";
+import { APP_PUBLIC_URL, DEFAULT_SYNC_SECRET, DEFAULT_SYNC_URL } from "./syncConfig";
 
 const BODYWEIGHT_TAB = "Bodyweight";
 
@@ -112,7 +113,13 @@ export async function syncWorkout(row: StoredWorkout): Promise<SyncResult | null
   const { url, secret } = await config();
   if (!url) return null; // sync not set up — silently skip
   const run = computeRun(row.track); // GPS-tracked cardio → distance/pace/speed/route
-  const start = row.track?.[0];
+  // Encode the whole path (thinned) into a link that opens our in-app map viewer.
+  const routeLink =
+    run && row.track && row.track.length >= 2
+      ? `${APP_PUBLIC_URL}/#route=${encodeURIComponent(
+          encodePolyline(downsample(row.track.map((p) => [p.lat, p.lng] as [number, number]), 250)),
+        )}`
+      : "";
   const payload = {
     secret,
     year: row.date.slice(0, 4),
@@ -125,7 +132,7 @@ export async function syncWorkout(row: StoredWorkout): Promise<SyncResult | null
     distance: run ? fmtDist(run.distanceM) : "",
     pace: run ? fmtPace(run.avgPaceSecPerKm) : "",
     speed: run ? `${run.avgSpeedKmh.toFixed(1)} km/h` : "",
-    route: run && start ? `https://maps.google.com/?q=${start.lat.toFixed(5)},${start.lng.toFixed(5)}` : "",
+    route: routeLink,
     allowCreate: true, // Alternative/free-form sessions → auto-create a named block
     exercises: row.exercises.map((e) => ({ name: e.name, cell: cellFor(e) })).filter((e) => e.cell !== ""),
   };

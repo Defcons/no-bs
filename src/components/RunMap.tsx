@@ -6,7 +6,7 @@ import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import type { TrackPoint } from "../types";
 
-const TILE_URL = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
+export const TILE_URL = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
 
 export function RunMap({ track }: { track: TrackPoint[] }) {
   const el = useRef<HTMLDivElement>(null);

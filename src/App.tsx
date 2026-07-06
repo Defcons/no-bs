@@ -12,14 +12,22 @@ import type { BwEntry } from "./lib/standards";
 import { trainingDue } from "./lib/stats";
 import { History } from "./components/History";
 import { Records } from "./components/Records";
+import { RouteViewer } from "./components/RouteViewer";
 import { Settings } from "./components/Settings";
 import { Today } from "./components/Today";
 
 type Tab = "today" | "history" | "records" | "settings";
 
+// A "#route=<encoded polyline>" link (from a sheet Route cell) opens the map viewer.
+function readRouteHash(): string | null {
+  const m = /[#&]route=([^&]+)/.exec(location.hash);
+  return m ? decodeURIComponent(m[1]) : null;
+}
+
 export default function App() {
   const [ready, setReady] = useState(false);
   const [tab, setTab] = useState<Tab>("today");
+  const [routeHash, setRouteHash] = useState<string | null>(() => readRouteHash());
 
   // Settings (loaded from IndexedDB, persisted on change).
   const [restDefaultSec, setRest] = useState(120);
@@ -39,6 +47,12 @@ export default function App() {
   if (!monitor.current) monitor.current = createHrMonitor((c) => setConnected(c));
 
   const templates = useLiveQuery(() => db.templates.orderBy("order").toArray(), []);
+
+  useEffect(() => {
+    const onHash = () => setRouteHash(readRouteHash());
+    window.addEventListener("hashchange", onHash);
+    return () => window.removeEventListener("hashchange", onHash);
+  }, []);
 
   // Fire a local reminder if reminders are on and we're behind the weekly goal
   // (and haven't trained today or already nudged today).
@@ -184,6 +198,18 @@ export default function App() {
     await db.delete();
     location.reload();
   };
+
+  // A route link is self-contained — show the viewer without waiting for bootstrap.
+  if (routeHash)
+    return (
+      <RouteViewer
+        encoded={routeHash}
+        onClose={() => {
+          history.replaceState(null, "", location.pathname + location.search);
+          setRouteHash(null);
+        }}
+      />
+    );
 
   if (!ready || !templates) return <div className="boot">Loading…</div>;
 
