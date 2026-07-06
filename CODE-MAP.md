@@ -2,7 +2,7 @@
 
 Installable PWA for fast in-gym set logging. Local-first (IndexedDB via Dexie), imports the owner's Google Sheet history for records. See `project_gym_tracker` / `reference_gym_sheet` in memory.
 
-_Last verified: 2026-07-02_
+_Last verified: 2026-07-06_
 
 ## Stack
 Vite 8 + React 19 + TypeScript, Dexie 4 (IndexedDB), `vite-plugin-pwa`, Web Bluetooth for HR. Run `npm run dev`; typecheck `npx tsc --noEmit`.
@@ -13,14 +13,14 @@ Vite 8 + React 19 + TypeScript, Dexie 4 (IndexedDB), `vite-plugin-pwa`, Web Blue
 ## Key files (anchor to symbols, not lines)
 - `src/types.ts` — `Workout`, `ExercisePerf`, `SetEntry`, `Scheme`, `DayTemplate`.
 - `src/db.ts` — Dexie `GymDB` (tables `workouts`, `templates`, `settings`), `DEFAULT_TEMPLATES` (the split, from the 2026 sheet tab), `ensureBootstrapped`, `lastWorkoutForDay`, `getSetting`/`setSetting`.
-- `src/lib/sheet.ts` — sheet parser. `parseCSV`, `parseDate`, `parseScheme` (splits `"3x8 Bench"`), `parseCell` (dash-separated sets; handles Norwegian decimal comma, `xN`/`(N)`/`(N+M)`/`(3x8)` rep notations, `x`=skipped, free text), `parseSheet` (transposed layout → workouts), `parseWorkbook`.
+- `src/lib/sheet.ts` — sheet parser. `parseCSV`, `parseDate`, `parseScheme` (splits `"3x8 Bench"`), `parseCell` (dash-separated sets; handles Norwegian decimal comma, `xN`/`(N)`/`(N+M)`/`(3x8)` rep notations, `x`=skipped, free text), `parseSheet` (transposed layout → workouts; a `Mood` row `"6→8"` → `moodBefore`/`moodAfter`, a `Note` row → `note`), `parseBodyweightTab` (`Year | Kg` rows), `parseWorkbook`.
 - `src/lib/stats.ts` — `liftRecords` (per-lift max weight + best e1RM; grouped by `canonKey` so separator/case variants merge), `summarize`, `canonName`/`canonKey` (merge NO/EN + Skråbenk→Incline, Back flyes→Rear delt flyes, Sidehev→Lateral raise, Nedtrekk→Pulldown, etc.), `muscleGroup`/`MUSCLE_ORDER` (Chest/Back/Shoulder/Legs/Arms/Core; Shoulder checked before Chest so rear-delt flyes don't land in Chest), `cadenceStatus`/`trainingDue` (green/orange/red vs weekly goal), `epley`. `MAX_PLAUSIBLE_KG=500` filters typos.
 - `src/lib/standards.ts` — science-based strength standards (1RM÷bodyweight, male, StrengthLevel/ExRx consensus). `KEY_LIFTS` (Squat/Bench/Deadlift/Military press/Pulldown/Legpress), `rateLift` → level (Beginner→Elite) + kg-to-next, `levelClass`. Needs bodyweight setting (`bodyweightKg`); legpress/pulldown flagged rough.
 - `src/lib/useActiveWorkout.ts` — `buildExercises` prefills each set with last week's number for that exercise, walking back through the day-type's history to the most recent session that actually logged a weight (so an empty last week falls back further).
 - `src/lib/notify.ts` — local workout reminders (`requestNotifications`, `showReminder` via SW registration). Fires on app open/visibility when behind goal (App.maybeRemind); background-when-closed would need a push backend.
 - `src/lib/useActiveWorkout.ts` — the in-progress session hook. Persists a `Draft` to the `activeDraft` setting on every change (survives reload). `buildExercises` pre-fills weight from last session + reps from scheme.
 - `src/lib/hr.ts` — `HeartRateMonitor` (Web Bluetooth standard HRS `0x180D`). Needs HTTPS + user gesture.
-- `src/lib/sheetSync.ts` — Google Sheets write-back. `syncWorkout` (POST finished session, text/plain to dodge CORS preflight), `cellFor` (rebuild "72,5-70-70" with off-scheme rep `(6)` annotations), `testSync`, `syncPending`/`pendingCount`. Config in settings `sheetSyncUrl`/`sheetSyncSecret`. Server side = `apps-script/Code.gs` (bound Web App, `doPost` finds year tab→day-block→next empty column, matches exercises by scheme-stripped name).
+- `src/lib/sheetSync.ts` — Google Sheets sync (native uses `CapacitorHttp` to dodge WebView CORS; web uses text/plain fetch to skip preflight). `syncWorkout` (POST finished session; payload carries `mood`="before→after" + `allowCreate:true`), `cellFor` (rebuild "72,5-70-70" with off-scheme rep `(6)` annotations), `testSync`, `syncPending`/`pendingCount`, `importFromSheet` (POST `action:pull`, add missing workouts deduped by `dayName@@date`; reconciles the `Bodyweight` tab into settings), `syncBodyweight` (upsert `Bodyweight` tab). Config in settings `sheetSyncUrl`/`sheetSyncSecret`. Server side = `apps-script/Code.gs` (bound Web App: `doPost` finds year tab→day-block→next empty column, matches exercises by scheme-stripped name, writes Note + Mood rows [inserting a Mood row if absent]; `createBlock` appends a named block for Alternative sessions when `allowCreate` + no block found; `writeBodyweight` upserts the tab; `action:pull` returns every tab's displayValues).
 - `src/components/` — `Today` (orchestrator: day picker → logging → timers → finish), `ExerciseCard`, `SetInput` (thumb weight entry), `RestTimer` (beep+vibrate), `History`, `Settings`.
 - `src/App.tsx` — shell: bootstrap, tab nav, owns HR monitor + settings state, export/reset.
 
@@ -30,4 +30,4 @@ Vite 8 + React 19 + TypeScript, Dexie 4 (IndexedDB), `vite-plugin-pwa`, Web Blue
 - HR only works over HTTPS (or localhost). For real phone use, deploy behind HTTPS (homelab NPM + Tailscale). Pair straps THROUGH the app, not OS Bluetooth.
 
 ## Not built yet
-Live re-import from the sheet (history is still a bundled snapshot in `src/data/history-seed.json`); in-app template/exercise editing; per-lift progress charts. Google Sheets **write-back IS built** (`sheetSync.ts` + `apps-script/`) — needs the user to deploy the Apps Script Web App once and paste URL+secret in Settings.
+In-app template/exercise editing; per-lift progress charts. Google Sheets **read + write-back IS built** (`sheetSync.ts` + `apps-script/`): write-back on finish, `importFromSheet` for live re-import (Settings → "Import from sheet"), mood/Alternative-block/bodyweight sync. Any change to `apps-script/Code.gs` requires the user to redeploy the Web App (Manage deployments → new version). App is also wrapped native via Capacitor (Android); HR uses native BLE there (`hr.ts` `NativeHeartRateMonitor`).
