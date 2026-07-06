@@ -45,10 +45,14 @@ public class PipPlugin extends Plugin {
         final Rational ratio = new Rational(w, h);
         getActivity().runOnUiThread(() -> {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                PictureInPictureParams params = new PictureInPictureParams.Builder()
-                        .setAspectRatio(ratio)
-                        .build();
-                getActivity().enterPictureInPictureMode(params);
+                try {
+                    PictureInPictureParams params = new PictureInPictureParams.Builder()
+                            .setAspectRatio(ratio)
+                            .build();
+                    getActivity().enterPictureInPictureMode(params);
+                } catch (Exception e) {
+                    // PiP unavailable (device policy / activity finishing) — ignore.
+                }
             }
         });
         call.resolve();

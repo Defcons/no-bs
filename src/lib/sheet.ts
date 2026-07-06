@@ -54,6 +54,9 @@ export function parseDate(s: string): string | null {
   let y = +m[3];
   if (y < 100) y += 2000;
   if (mo < 1 || mo > 12 || d < 1 || d > 31) return null;
+  // Reject impossible calendar dates (e.g. 31.02) — a Date would silently roll over.
+  const dt = new Date(y, mo - 1, d);
+  if (dt.getFullYear() !== y || dt.getMonth() !== mo - 1 || dt.getDate() !== d) return null;
   return `${y}-${String(mo).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
 }
 
@@ -94,7 +97,9 @@ export function parseCell(raw: string): { sets: SetEntry[]; skipped: boolean } {
   const tokens = body.split("-").map((x) => x.trim()).filter((x) => x.length > 0);
   const sets: SetEntry[] = [];
   for (const tok of tokens) {
-    const weight = num(tok);
+    // Weight is the number BEFORE any parens ("80(6)" -> 80); a paren-only token
+    // like "(30)" is reps only (a bodyweight set), not a 30 kg lift.
+    const weight = num(tok.split("(")[0]);
     let reps: number | null = wholeReps;
     // "(7)" or "(4+1)" -> reps 7 / 4 (first number is the clean reps)
     const paren = tok.match(/\((\d+)(?:\+\d+)?\)/);
@@ -102,6 +107,7 @@ export function parseCell(raw: string): { sets: SetEntry[]; skipped: boolean } {
     // trailing "xN" reps, e.g. "110x3" (but not part of a "(3x8)" already stripped)
     const xr = tok.match(/[xX](\d+)\b(?!\s*\))/);
     if (xr) reps = +xr[1];
+    if (weight == null && reps == null) continue; // junk token (e.g. "skip") — not a set
     sets.push({ weight, reps, raw: tok });
   }
   return { sets, skipped: false };
@@ -115,10 +121,12 @@ const HR_LABELS = new Set(["avg hr", "hr", "puls", "avg puls", "heart rate", "sn
 // recognised here only so they aren't parsed as fake exercises.
 const SKIP_LABELS = new Set(["distance", "distanse", "pace", "tempo", "speed", "fart", "route", "rute"]);
 
-// "6→8" / "6->8" / "6-8" → { before: 6, after: 8 }. Single number → before only.
+// "6→8" / "6→" / "→8" (also -> - /) → {before?, after?}. Single number → before.
 function parseMood(txt: string): { before?: number; after?: number } {
-  const m = txt.match(/(\d+)\s*(?:→|->|-|\/)\s*(\d+)/);
-  if (m) return { before: +m[1], after: +m[2] };
+  const arrow = txt.match(/(\d*)\s*(?:→|->|\/|-)\s*(\d*)/);
+  if (arrow && (arrow[1] || arrow[2])) {
+    return { before: arrow[1] ? +arrow[1] : undefined, after: arrow[2] ? +arrow[2] : undefined };
+  }
   const one = txt.match(/\d+/);
   return one ? { before: +one[0] } : {};
 }
@@ -133,14 +141,17 @@ function parseDuration(txt: string): number | null {
     return c != null ? a * 3600 + b * 60 + c : a * 60 + b; // h:mm:ss or mm:ss
   }
   const min = txt.match(/(\d+)\s*min/i);
-  return min ? +min[1] * 60 : null;
+  if (min) return +min[1] * 60;
+  const bare = txt.trim().match(/^\d+$/); // a bare number of minutes
+  return bare ? +bare[0] * 60 : null;
 }
 
 // Parse one year's sheet (rows) into a list of workouts (one per block-column session).
 export function parseSheet(rows: string[][], source: string): Workout[] {
-  // A "workout key" = dayName + date column; accumulate exercises under it.
+  // A "workout key" = dayName + date + column, so two same-day columns of the same
+  // day-type stay distinct workouts instead of merging into one Frankenstein entry.
   const workouts = new Map<string, Workout>();
-  const key = (day: string, date: string) => `${day}@@${date}`;
+  const key = (day: string, date: string, col: number) => `${day}@@${date}@@${col}`;
 
   let i = 0;
   while (i < rows.length) {
@@ -169,8 +180,8 @@ export function parseSheet(rows: string[][], source: string): Workout[] {
     }
     // Get (or create) the workout for a date column. Meta rows use this too, so a
     // pure-cardio session (Time/HR/Distance rows, no exercises) still imports.
-    const ensure = (date: string): Workout => {
-      const k = key(dayName, date);
+    const ensure = (col: number, date: string): Workout => {
+      const k = key(dayName, date, col);
       let w = workouts.get(k);
       if (!w) {
         w = { date, dayName, exercises: [], source };
@@ -192,7 +203,7 @@ export function parseSheet(rows: string[][], source: string): Workout[] {
         for (const [col, date] of colDate) {
           const txt = (r[col] ?? "").trim();
           if (!txt) continue;
-          const w = ensure(date);
+          const w = ensure(col, date);
           w.note = w.note ? `${w.note}\n${txt}` : txt;
         }
         continue;
@@ -204,7 +215,7 @@ export function parseSheet(rows: string[][], source: string): Workout[] {
           if (!txt) continue;
           const { before, after } = parseMood(txt);
           if (before == null && after == null) continue;
-          const w = ensure(date);
+          const w = ensure(col, date);
           if (before != null) w.moodBefore = before;
           if (after != null) w.moodAfter = after;
         }
@@ -214,7 +225,7 @@ export function parseSheet(rows: string[][], source: string): Workout[] {
       if (TIME_LABELS.has(low0)) {
         for (const [col, date] of colDate) {
           const secs = parseDuration((r[col] ?? "").trim());
-          if (secs != null) ensure(date).durationSec = secs;
+          if (secs != null) ensure(col, date).durationSec = secs;
         }
         continue;
       }
@@ -222,7 +233,7 @@ export function parseSheet(rows: string[][], source: string): Workout[] {
       if (HR_LABELS.has(low0)) {
         for (const [col, date] of colDate) {
           const n = parseInt((r[col] ?? "").trim(), 10);
-          if (Number.isFinite(n)) ensure(date).avgHr = n;
+          if (Number.isFinite(n) && n >= 30 && n <= 250) ensure(col, date).avgHr = n; // ignore junk HR cells
         }
         continue;
       }
@@ -239,15 +250,9 @@ export function parseSheet(rows: string[][], source: string): Workout[] {
       for (const [col, date] of colDate) {
         const cell = r[col] ?? "";
         const { sets, skipped } = parseCell(cell);
-        if (!skipped && sets.length === 0 && !cell.trim()) continue; // nothing logged
-        const wkey = key(dayName, date);
-        let w = workouts.get(wkey);
-        if (!w) {
-          w = { date, dayName, exercises: [], source };
-          workouts.set(wkey, w);
-        }
+        if (!skipped && sets.length === 0) continue; // nothing logged (blank or junk cell)
         const perf: ExercisePerf = { name, scheme, sets, skipped };
-        w.exercises.push(perf);
+        ensure(col, date).exercises.push(perf);
       }
     }
     i = j;

@@ -1,18 +1,19 @@
-import { useEffect, useRef, useState } from "react";
+import { Suspense, lazy, useEffect, useRef, useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import "./App.css";
 import { db, ensureBootstrapped, getSetting, setSetting } from "./db";
 import { daysAgo } from "./lib/format";
 import { type HrMonitor, createHrMonitor, hrAvailable } from "./lib/hr";
 import { Capacitor } from "@capacitor/core";
-import { notificationsSupported, requestNotifications, showReminder } from "./lib/notify";
+import { notificationsAllowed, requestNotifications, showReminder } from "./lib/notify";
 import { markAppReady } from "./lib/update";
 import { syncBodyweight } from "./lib/sheetSync";
 import type { BwEntry } from "./lib/standards";
 import { trainingDue } from "./lib/stats";
 import { History } from "./components/History";
 import { Records } from "./components/Records";
-import { RouteViewer } from "./components/RouteViewer";
+// Lazy so Leaflet (+CSS) stays out of the cold-start bundle — only loaded on a map view.
+const RouteViewer = lazy(() => import("./components/RouteViewer").then((m) => ({ default: m.RouteViewer })));
 import { Settings } from "./components/Settings";
 import { Today } from "./components/Today";
 
@@ -42,7 +43,9 @@ export default function App() {
   const [bpm, setBpm] = useState<number | null>(null);
   const [hrAvg, setHrAvg] = useState<number | null>(null);
   const [connected, setConnected] = useState(false);
-  const samples = useRef<number[]>([]);
+  // Running HR aggregate (O(1) per sample — avoids an unbounded array + O(n) reduce
+  // and Math.max(...spread) on every packet during long sessions).
+  const hrAgg = useRef({ sum: 0, count: 0, max: 0 });
   const monitor = useRef<HrMonitor | null>(null);
   if (!monitor.current) monitor.current = createHrMonitor((c) => setConnected(c));
 
@@ -58,7 +61,7 @@ export default function App() {
   // (and haven't trained today or already nudged today).
   const maybeRemind = async (dpw: number) => {
     const enabled = await getSetting("remindersEnabled", false);
-    if (!enabled || !notificationsSupported() || Notification.permission !== "granted") return;
+    if (!enabled || !(await notificationsAllowed())) return;
     const today = new Date().toISOString().slice(0, 10);
     if ((await getSetting("lastReminder", "")) === today) return;
     const last = await db.workouts.orderBy("date").reverse().first();
@@ -95,8 +98,11 @@ export default function App() {
     document.addEventListener("visibilitychange", onVis);
     const off = monitor.current!.onData((v) => {
       setBpm(v);
-      samples.current.push(v);
-      setHrAvg(Math.round(samples.current.reduce((a, b) => a + b, 0) / samples.current.length));
+      const a = hrAgg.current;
+      a.sum += v;
+      a.count += 1;
+      if (v > a.max) a.max = v;
+      setHrAvg(Math.round(a.sum / a.count));
     });
     return () => {
       off();
@@ -138,9 +144,9 @@ export default function App() {
   const hr = { bpm, avg: hrAvg, connected, connect, disconnect, supported: hrAvailable() };
 
   const getHrStats = () => {
-    const s = samples.current;
-    if (s.length === 0) return {};
-    return { avg: Math.round(s.reduce((a, b) => a + b, 0) / s.length), max: Math.max(...s) };
+    const a = hrAgg.current;
+    if (a.count === 0) return {};
+    return { avg: Math.round(a.sum / a.count), max: a.max };
   };
 
   const persistRest = (v: number) => {
@@ -202,13 +208,15 @@ export default function App() {
   // A route link is self-contained — show the viewer without waiting for bootstrap.
   if (routeHash)
     return (
-      <RouteViewer
-        encoded={routeHash}
-        onClose={() => {
-          history.replaceState(null, "", location.pathname + location.search);
-          setRouteHash(null);
-        }}
-      />
+      <Suspense fallback={<div className="boot">Loading map…</div>}>
+        <RouteViewer
+          encoded={routeHash}
+          onClose={() => {
+            history.replaceState(null, "", location.pathname + location.search);
+            setRouteHash(null);
+          }}
+        />
+      </Suspense>
     );
 
   if (!ready || !templates) return <div className="boot">Loading…</div>;
@@ -225,7 +233,7 @@ export default function App() {
             hrLowThreshold={hrLowThreshold}
             hr={hr}
             onWorkoutStart={() => {
-              samples.current = [];
+              hrAgg.current = { sum: 0, count: 0, max: 0 };
               setHrAvg(null);
             }}
             getHrStats={getHrStats}

@@ -1,5 +1,6 @@
 // Records: lifetime summary, key lifts rated against strength standards, and
 // per-muscle collapsible personal records.
+import { useMemo } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db } from "../db";
 import { niceDate } from "../lib/format";
@@ -17,15 +18,21 @@ export function Records({
 }) {
   const currentYear = new Date().getFullYear();
   const workouts = useLiveQuery(() => db.workouts.toArray(), []);
+  // Derived records are an O(n·exercises) scan — memoize so unrelated re-renders
+  // (settings tweaks) don't recompute the whole history every time.
+  const derived = useMemo(() => {
+    if (!workouts || workouts.length === 0) return null;
+    const summary = summarize(workouts)!;
+    const records = liftRecords(workouts).filter((r) => r.maxWeight.weight > 0);
+    const byCat: Record<string, LiftRecord[]> = {};
+    for (const r of records) (byCat[muscleGroup(r.name)] ??= []).push(r);
+    for (const c of Object.keys(byCat)) byCat[c].sort((a, b) => b.maxWeight.weight - a.maxWeight.weight);
+    return { summary, records, byCat };
+  }, [workouts]);
   if (!workouts) return <div className="pad">Loading…</div>;
   if (workouts.length === 0) return <div className="pad muted">No workouts yet — log your first one!</div>;
 
-  const summary = summarize(workouts)!;
-  const records = liftRecords(workouts).filter((r) => r.maxWeight.weight > 0);
-
-  const byCat: Record<string, LiftRecord[]> = {};
-  for (const r of records) (byCat[muscleGroup(r.name)] ??= []).push(r);
-  for (const c of Object.keys(byCat)) byCat[c].sort((a, b) => b.maxWeight.weight - a.maxWeight.weight);
+  const { summary, records, byCat } = derived!;
 
   return (
     <div className="pad history">

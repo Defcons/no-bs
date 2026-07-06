@@ -1,12 +1,13 @@
 // History: a table of past workouts (newest first). Tap a row to expand the
 // exercises, sets, notes, duration and HR of that session.
-import { useState } from "react";
+import { Suspense, lazy, useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db, type StoredWorkout } from "../db";
 import { daysAgoLabel, hhmmss, niceDate } from "../lib/format";
 import { computeRun, fmtDist, fmtPace } from "../lib/runStats";
 import { ExerciseCard } from "./ExerciseCard";
-import { RunMap } from "./RunMap";
+// Lazy so Leaflet (+CSS) only loads when a run's map is actually shown.
+const RunMap = lazy(() => import("./RunMap").then((m) => ({ default: m.RunMap })));
 
 export function History() {
   const workouts = useLiveQuery(() => db.workouts.orderBy("date").reverse().toArray(), []);
@@ -100,7 +101,9 @@ function RunDetail({ track }: { track: NonNullable<StoredWorkout["track"]> }) {
   if (!s) return null;
   return (
     <div className="run-detail">
-      <RunMap track={track} />
+      <Suspense fallback={<div className="run-map" />}>
+        <RunMap track={track} />
+      </Suspense>
       <div className="run-stats">
         <div className="run-stat">
           <span className="run-stat-v">{fmtDist(s.distanceM)}</span>

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { db, getSetting, setSetting, type StoredWorkout } from "../db";
 import type { DayTemplate, ExercisePerf, SetEntry } from "../types";
+import { uid } from "./uid";
 
 export type Draft = {
   startedAt: number; // epoch ms (session start, for the date)
@@ -59,10 +60,11 @@ function buildExercises(tpl: DayTemplate, history: StoredWorkout[]): ExercisePer
     const nSets = e.scheme.sets ?? 3;
     const defReps = typeof e.scheme.reps === "number" ? e.scheme.reps : null;
     const sets: SetEntry[] = Array.from({ length: nSets }, (_, i) => ({
+      id: uid(),
       weight: prevSets?.[i]?.weight ?? lastKnown,
       reps: defReps,
     }));
-    return { name: e.name, scheme: e.scheme, sets };
+    return { id: uid(), name: e.name, scheme: e.scheme, sets };
   });
 }
 
@@ -72,6 +74,12 @@ export function useActiveWorkout() {
   const [elapsed, setElapsed] = useState(0); // full workout time (auto)
   const [swElapsed, setSwElapsed] = useState(0); // separate stopwatch
   const saveTimer = useRef<number | undefined>(undefined);
+  const draftRef = useRef<Draft | null>(null);
+  draftRef.current = draft;
+
+  // A background gap longer than this isn't counted as workout time (a forgotten
+  // session left running overnight shouldn't write a multi-hour duration).
+  const IDLE_CAP_MS = 30 * 60 * 1000;
 
   // Load any persisted draft on mount (migrate pre-stopwatch drafts).
   useEffect(() => {
@@ -86,9 +94,44 @@ export function useActiveWorkout() {
         d.wAccumMs = Math.max(0, Date.now() - d.startedAt);
         d.wSegStart = Date.now();
       }
+      // Killed-and-reopened after a long idle gap: don't count the closed time.
+      if (d && d.wRunning && Date.now() - d.wSegStart > IDLE_CAP_MS) d.wSegStart = Date.now();
       setDraft(d);
       setLoaded(true);
     });
+  }, []);
+
+  // Persist immediately when backgrounded/closed (the debounce could otherwise lose
+  // the last edit if the OS kills the app), and drop long idle gaps from the timer.
+  useEffect(() => {
+    let hiddenAt = 0;
+    const flush = () => {
+      window.clearTimeout(saveTimer.current);
+      setSetting(DRAFT_KEY, draftRef.current);
+    };
+    const onVis = () => {
+      if (document.visibilityState === "hidden") {
+        hiddenAt = Date.now();
+        flush();
+      } else if (hiddenAt) {
+        const gap = Date.now() - hiddenAt;
+        hiddenAt = 0;
+        if (gap > IDLE_CAP_MS) {
+          setDraft((d) => {
+            if (!d || !d.wRunning) return d;
+            const next = { ...d, wSegStart: d.wSegStart + gap };
+            setSetting(DRAFT_KEY, next);
+            return next;
+          });
+        }
+      }
+    };
+    document.addEventListener("visibilitychange", onVis);
+    window.addEventListener("pagehide", flush);
+    return () => {
+      document.removeEventListener("visibilitychange", onVis);
+      window.removeEventListener("pagehide", flush);
+    };
   }, []);
 
   // Tick both timers once per second: the full workout time (always running) and
@@ -231,9 +274,13 @@ export function useActiveWorkout() {
         dayName: draft.dayName,
         templateId: draft.templateId,
         // Custom sessions: keep any named exercise (a run may have no weights).
-        // Template sessions: drop untouched pre-filled exercises.
+        // Template sessions: keep an exercise if ANY set was actually logged —
+        // weight OR reps OR a done/note flag (bodyweight moves like Crunches log
+        // reps only, no weight, and must not be dropped) — or it has a note.
         exercises: draft.exercises.filter((ex) =>
-          draft.custom ? ex.name.trim() !== "" : ex.sets.some((s) => s.weight != null) || ex.note,
+          draft.custom
+            ? ex.name.trim() !== ""
+            : ex.sets.some((s) => s.weight != null || s.reps != null || s.done || s.note) || ex.note,
         ),
         note: draft.note,
         durationSec,

@@ -46,8 +46,13 @@ export async function setPipAutoEnter(enabled: boolean): Promise<void> {
 export function onPipChange(cb: (inPip: boolean) => void): () => void {
   if (!native()) return () => {};
   let handle: PluginListenerHandle | null = null;
+  let cancelled = false;
   Pip.addListener("pipChange", (d) => cb(d.pip)).then((h) => {
-    handle = h;
+    if (cancelled) h.remove(); // unsubscribed before the listener resolved
+    else handle = h;
   });
-  return () => handle?.remove();
+  return () => {
+    cancelled = true;
+    handle?.remove();
+  };
 }

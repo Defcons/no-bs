@@ -11,11 +11,20 @@ type Props = {
   onChange: (endsAt: number | null) => void;
 };
 
+// One shared AudioContext for the whole app — creating a fresh one per beep leaks
+// contexts and hits the browser's per-page limit (~6), after which alarms go silent.
+let sharedCtx: AudioContext | null = null;
+function audioCtx(): AudioContext {
+  const Ctx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+  if (!sharedCtx) sharedCtx = new Ctx();
+  return sharedCtx;
+}
+
 // A more attention-grabbing 3-beep alarm (louder, ascending).
 function alarm() {
   try {
-    const Ctx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-    const ctx = new Ctx();
+    const ctx = audioCtx();
+    if (ctx.state === "suspended") void ctx.resume();
     const now = ctx.currentTime;
     [0, 0.28, 0.56].forEach((t, i) => {
       const o = ctx.createOscillator();
@@ -30,7 +39,7 @@ function alarm() {
       o.start(now + t);
       o.stop(now + t + 0.26);
     });
-    setTimeout(() => ctx.close(), 1200);
+    // Do NOT close — it's the shared context, reused for the next rest.
   } catch {
     /* audio may be blocked; vibration + notification still fire */
   }
@@ -43,6 +52,7 @@ export function RestTimer({ endsAt, onChange }: Props) {
   useEffect(() => {
     if (endsAt == null) return;
     firedRef.current = false;
+    let id = 0;
     const tick = () => {
       const rem = Math.round((endsAt - Date.now()) / 1000);
       setRemaining(rem);
@@ -53,10 +63,11 @@ export function RestTimer({ endsAt, onChange }: Props) {
         // Native pre-schedules a notification for this moment (fires in background),
         // so only fire the web SW notification here to avoid a duplicate.
         if (!Capacitor.isNativePlatform()) showReminder("Rest over — go! 💪", "Time for your next set.");
+        window.clearInterval(id); // stop ticking once fired (no endless 250ms loop)
       }
     };
     tick();
-    const id = window.setInterval(tick, 250);
+    id = window.setInterval(tick, 250);
     return () => window.clearInterval(id);
   }, [endsAt]);
 

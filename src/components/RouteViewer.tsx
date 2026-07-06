@@ -13,7 +13,11 @@ export function RouteViewer({ encoded, onClose }: { encoded: string; onClose: ()
   const el = useRef<HTMLDivElement>(null);
   const pts = useMemo(() => {
     try {
-      return decodePolyline(encoded);
+      // The encoded link is user-supplied — drop out-of-range/NaN coords and cap the
+      // point count so a malformed/huge value can't wedge the map.
+      return decodePolyline(encoded)
+        .filter(([la, ln]) => Number.isFinite(la) && Number.isFinite(ln) && la >= -90 && la <= 90 && ln >= -180 && ln <= 180)
+        .slice(0, 5000);
     } catch {
       return [];
     }

@@ -23,10 +23,15 @@ public class MainActivity extends BridgeActivity {
         if (PipPlugin.autoEnter
                 && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
                 && getPackageManager().hasSystemFeature(android.content.pm.PackageManager.FEATURE_PICTURE_IN_PICTURE)) {
-            PictureInPictureParams params = new PictureInPictureParams.Builder()
-                    .setAspectRatio(new Rational(2, 3))
-                    .build();
-            enterPictureInPictureMode(params);
+            try {
+                PictureInPictureParams params = new PictureInPictureParams.Builder()
+                        .setAspectRatio(new Rational(2, 3))
+                        .build();
+                enterPictureInPictureMode(params);
+            } catch (Exception e) {
+                // PiP can be blocked by device policy / OEM, or the activity may be
+                // finishing — never crash the app on Home for it.
+            }
         }
     }
 

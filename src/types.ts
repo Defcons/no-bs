@@ -8,6 +8,7 @@ export type Scheme = {
 };
 
 export type SetEntry = {
+  id?: string; // stable key for React lists (see lib/uid)
   weight: number | null; // kg (per dumbbell for DB moves); null if unknown/bodyweight/text-only
   reps: number | null; // actual reps; null -> falls back to scheme reps
   assist?: number | null; // extra/assisted reps → written as "(n)" in the sheet
@@ -17,6 +18,7 @@ export type SetEntry = {
 };
 
 export type ExercisePerf = {
+  id?: string; // stable key for React lists (see lib/uid)
   name: string;
   scheme: Scheme;
   sets: SetEntry[];

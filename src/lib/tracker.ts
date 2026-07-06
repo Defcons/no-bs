@@ -33,6 +33,7 @@ const BackgroundGeolocation = registerPlugin<BackgroundGeolocationPlugin>("Backg
 const MAX_ACCURACY_M = 40; // drop obviously-bad fixes
 
 let watcherId: string | null = null;
+let starting = false; // a start() is mid-await
 let points: TrackPoint[] = [];
 let getHr: (() => number | null) | null = null;
 
@@ -42,24 +43,37 @@ export function isTracking(): boolean {
 
 // Start recording. getBpm lets us stamp each point with the live heart rate.
 export async function startTracking(getBpm: () => number | null): Promise<boolean> {
-  if (!Capacitor.isNativePlatform() || watcherId) return false;
+  if (!Capacitor.isNativePlatform() || watcherId || starting) return false;
+  starting = true;
   points = [];
   getHr = getBpm;
-  watcherId = await BackgroundGeolocation.addWatcher(
-    {
-      backgroundTitle: "Gym Tracker",
-      backgroundMessage: "Recording your route.",
-      requestPermissions: true,
-      stale: false,
-      distanceFilter: 5,
-    },
-    (position, error) => {
-      if (error || !position || position.accuracy > MAX_ACCURACY_M) return;
-      const hr = getHr?.() ?? undefined;
-      points.push({ t: Date.now(), lat: position.latitude, lng: position.longitude, hr: hr ?? undefined });
-    },
-  );
-  return true;
+  try {
+    const id = await BackgroundGeolocation.addWatcher(
+      {
+        backgroundTitle: "Gym Tracker",
+        backgroundMessage: "Recording your route.",
+        requestPermissions: true,
+        stale: false,
+        distanceFilter: 5,
+      },
+      (position, error) => {
+        if (error || !position || position.accuracy > MAX_ACCURACY_M) return;
+        const hr = getHr?.() ?? undefined;
+        points.push({ t: Date.now(), lat: position.latitude, lng: position.longitude, hr: hr ?? undefined });
+      },
+    );
+    if (!starting) {
+      // stopTracking() ran while we awaited the watcher → tear it back down.
+      await BackgroundGeolocation.removeWatcher({ id }).catch(() => {});
+      return false;
+    }
+    watcherId = id;
+    return true;
+  } catch {
+    return false; // permission denied / plugin error — recording just stays off
+  } finally {
+    starting = false;
+  }
 }
 
 export function currentTrack(): TrackPoint[] {
@@ -68,6 +82,7 @@ export function currentTrack(): TrackPoint[] {
 
 // Stop recording and return the collected track.
 export async function stopTracking(): Promise<TrackPoint[]> {
+  starting = false; // cancel any in-flight start
   const track = points.slice();
   if (watcherId) {
     const id = watcherId;

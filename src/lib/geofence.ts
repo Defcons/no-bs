@@ -49,51 +49,67 @@ const EXIT_GRACE_MS = 5 * 60 * 1000; // ...sustained for this long
 const ANCHOR_MAX_ACCURACY_M = 75; // ignore junk fixes when anchoring
 
 let watcherId: string | null = null;
+let starting = false; // a start() is mid-await (addWatcher not yet resolved)
 
 // Begin watching for an active workout. Anchors to the first decent fix, then
 // fires onLeave() once you've been >RADIUS_M away for EXIT_GRACE_MS. No-op when the
 // toggle is off or not on native. Returns whether a watcher actually started.
 export async function startGeofence(onLeave: () => void): Promise<boolean> {
-  if (!Capacitor.isNativePlatform() || watcherId) return false;
-  if (!(await getSetting<boolean>("autoEndOnLeave", false))) return false;
+  if (!Capacitor.isNativePlatform() || watcherId || starting) return false;
+  starting = true;
+  try {
+    if (!(await getSetting<boolean>("autoEndOnLeave", false))) return false;
 
-  let anchor: LatLng | null = null;
-  let outsideSince: number | null = null;
-  let fired = false;
+    let anchor: LatLng | null = null;
+    let outsideSince: number | null = null;
+    let fired = false;
 
-  watcherId = await BackgroundGeolocation.addWatcher(
-    {
-      backgroundTitle: "Gym Tracker",
-      backgroundMessage: "Auto-saves your workout when you leave the area.",
-      requestPermissions: true,
-      stale: false,
-      distanceFilter: 25,
-    },
-    (position, error) => {
-      if (error || !position || fired) return;
-      const here = { lat: position.latitude, lng: position.longitude };
-      if (!anchor) {
-        if (position.accuracy <= ANCHOR_MAX_ACCURACY_M) anchor = here; // lock the start spot
-        return;
-      }
-      const d = distanceM(anchor, here);
-      const outside = d - position.accuracy > RADIUS_M;
-      const inside = d + position.accuracy < RADIUS_M;
-      if (inside) {
-        outsideSince = null;
-      } else if (outside) {
-        outsideSince ??= Date.now();
-        if (Date.now() - outsideSince >= EXIT_GRACE_MS) {
-          fired = true;
-          onLeave();
+    const id = await BackgroundGeolocation.addWatcher(
+      {
+        backgroundTitle: "Gym Tracker",
+        backgroundMessage: "Auto-saves your workout when you leave the area.",
+        requestPermissions: true,
+        stale: false,
+        distanceFilter: 25,
+      },
+      (position, error) => {
+        if (error || !position || fired) return;
+        const here = { lat: position.latitude, lng: position.longitude };
+        if (!anchor) {
+          if (position.accuracy <= ANCHOR_MAX_ACCURACY_M) anchor = here; // lock the start spot
+          return;
         }
-      }
-    },
-  );
-  return true;
+        const d = distanceM(anchor, here);
+        const outside = d - position.accuracy > RADIUS_M;
+        const inside = d + position.accuracy < RADIUS_M;
+        if (inside) {
+          outsideSince = null;
+        } else if (outside) {
+          outsideSince ??= Date.now();
+          if (Date.now() - outsideSince >= EXIT_GRACE_MS) {
+            fired = true;
+            void stopGeofence(); // stop GPS immediately, don't wait on React cleanup
+            onLeave();
+          }
+        }
+      },
+    );
+    // stopGeofence() ran while we were awaiting the watcher → tear it right back down.
+    if (!starting) {
+      await BackgroundGeolocation.removeWatcher({ id }).catch(() => {});
+      return false;
+    }
+    watcherId = id;
+    return true;
+  } catch {
+    return false; // permission denied / plugin error — feature just stays off
+  } finally {
+    starting = false;
+  }
 }
 
 export async function stopGeofence(): Promise<void> {
+  starting = false; // cancel any in-flight start
   if (!watcherId) return;
   const id = watcherId;
   watcherId = null;

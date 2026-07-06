@@ -33,6 +33,16 @@ function doPost(e) {
       return json({ ok: true, tabs: out });
     }
 
+    // Serialize all mutations so two devices syncing at once can't compute the
+    // same "first empty column" and clobber each other.
+    var lock = LockService.getScriptLock();
+    try {
+      lock.waitLock(20000);
+    } catch (lockErr) {
+      return json({ ok: false, error: "Sheet is busy — try again in a moment." });
+    }
+    try {
+
     // Bodyweight: upsert year -> kg rows in a dedicated tab.
     if (body.action === "bodyweight") return writeBodyweight(body);
 
@@ -143,6 +153,9 @@ function doPost(e) {
       timeWritten: !!metaWritten["Time"],
       hrWritten: !!metaWritten["Avg HR"],
     });
+    } finally {
+      lock.releaseLock();
+    }
   } catch (err) {
     return json({ ok: false, error: String(err) });
   }
@@ -182,13 +195,16 @@ function createBlock(sheet, body) {
   });
 }
 
-// Classify a block row label as a meta row (Note/Mood/Time/Avg HR), else "".
+// Classify a block row label as a meta row (Note/Mood/Time/Avg HR/…), else "".
+// MUST stay in sync with the label sets in src/lib/sheet.ts — a label the parser
+// treats as meta but this misses would be handled as an exercise and get a
+// duplicate meta row inserted.
 function metaKind(label) {
   var l = String(label).trim().toLowerCase();
-  if (l === "note" || l === "notes") return "Note";
-  if (l === "mood" || l === "feeling") return "Mood";
+  if (l === "note" || l === "notes" || l === "notat" || l === "notater") return "Note";
+  if (l === "mood" || l === "feeling" || l === "humør" || l === "form") return "Mood";
   if (l === "time" || l === "tid" || l === "duration" || l === "varighet") return "Time";
-  if (l === "avg hr" || l === "hr" || l === "puls" || l === "snittpuls" || l === "heart rate") return "Avg HR";
+  if (l === "avg hr" || l === "hr" || l === "puls" || l === "avg puls" || l === "snittpuls" || l === "heart rate") return "Avg HR";
   if (l === "distance" || l === "distanse") return "Distance";
   if (l === "pace" || l === "tempo") return "Pace";
   if (l === "speed" || l === "fart") return "Speed";

@@ -7,6 +7,7 @@ import { cancelBreakNotification, scheduleBreakNotification, showReminder } from
 import { startGeofence, stopGeofence } from "../lib/geofence";
 import { onPipChange, setPipAutoEnter } from "../lib/pip";
 import { startTracking, stopTracking } from "../lib/tracker";
+import { uid } from "../lib/uid";
 import { Capacitor } from "@capacitor/core";
 import { syncWorkout } from "../lib/sheetSync";
 import { cadenceStatus, trainingDue } from "../lib/stats";
@@ -64,6 +65,7 @@ export function Today({
   const native = Capacitor.isNativePlatform();
   const bpmRef = useRef<number | null>(null);
   bpmRef.current = hr.bpm; // always-fresh HR for the GPS track stamps
+  const finishingRef = useRef(false); // in-flight guard so we never double-save
   const lowSince = useRef<number | null>(null);
   const promptDeadline = useRef<number>(0);
   const hrEver = useRef(false); // did HR ever connect this session?
@@ -89,8 +91,11 @@ export function Today({
     };
   }, [draft, templates]);
 
-  // Actually save + sync + return to history.
+  // Actually save + sync + return to history. Guarded so a watchdog (HR/geofence)
+  // and a manual tap can't both save the same session.
   const finishNow = async () => {
+    if (finishingRef.current) return;
+    finishingRef.current = true;
     const track = draft?.trackGps ? await stopTracking() : undefined;
     const row = await finish(getHrStats(), track && track.length >= 2 ? { track } : undefined);
     if (row) {
@@ -291,7 +296,10 @@ export function Today({
   const addExercise = () =>
     update((d) => ({
       ...d,
-      exercises: [...d.exercises, { name: "", scheme: { sets: null, reps: null }, sets: [{ weight: null, reps: null }] }],
+      exercises: [
+        ...d.exercises,
+        { id: uid(), name: "", scheme: { sets: null, reps: null }, sets: [{ id: uid(), weight: null, reps: null }] },
+      ],
     }));
   const removeExercise = (i: number) => update((d) => ({ ...d, exercises: d.exercises.filter((_, idx) => idx !== i) }));
 
@@ -388,7 +396,7 @@ export function Today({
       <div className="exercise-list">
         {draft.exercises.map((ex, i) => (
           <ExerciseCard
-            key={i}
+            key={ex.id ?? i}
             exercise={ex}
             step={weightStep}
             prev={prev?.exercises.find((p) => p.name === ex.name)}

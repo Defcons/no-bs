@@ -10,6 +10,21 @@ export function notificationsSupported(): boolean {
   return native() || (typeof Notification !== "undefined" && "serviceWorker" in navigator);
 }
 
+// Whether notifications are actually permitted right now, per platform. On native
+// the permission lives in LocalNotifications (the web Notification API is always
+// "denied" inside the Android WebView), so checking Notification.permission there
+// would wrongly gate out every native reminder.
+export async function notificationsAllowed(): Promise<boolean> {
+  if (native()) {
+    try {
+      return (await LocalNotifications.checkPermissions()).display === "granted";
+    } catch {
+      return false;
+    }
+  }
+  return typeof Notification !== "undefined" && Notification.permission === "granted";
+}
+
 export async function requestNotifications(): Promise<boolean> {
   if (native()) {
     const p = await LocalNotifications.requestPermissions();

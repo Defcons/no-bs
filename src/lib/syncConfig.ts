@@ -1,7 +1,10 @@
-// Built-in Google Sheets sync config, used as the default on every device so you
-// never have to enter it per-device. Safe to embed here because the app is
-// private behind Cloudflare Access (only the owner can load it) and the Apps Script
-// only appends to the owner's own sheet. A per-device value in Settings overrides these.
+// Built-in Google Sheets sync config, baked into the client so no per-device setup
+// is needed. NOTE: this "secret" is effectively public — anyone who loads the JS
+// bundle can read it, and Cloudflare Access only guards gym.defc0n.no, NOT the
+// script.google.com /exec endpoint. The real protections are just that the endpoint
+// is obscure and the blast radius is one personal spreadsheet (append/read only). If
+// that ever stops being acceptable, move these to per-device Settings (no default)
+// or put the Apps Script behind its own auth.
 export const DEFAULT_SYNC_URL =
   "REDACTED_SYNC_URL";
 export const DEFAULT_SYNC_SECRET = "REDACTED_OLD_SECRET";

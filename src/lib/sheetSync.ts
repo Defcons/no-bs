@@ -35,12 +35,15 @@ const fmtNum = (n: number): string => String(n).replace(".", ",");
 export function cellFor(ex: ExercisePerf): string {
   if (ex.skipped) return "x";
   return ex.sets
-    .filter((s) => s.weight != null)
+    .filter((s) => s.weight != null || s.reps != null)
     .map((s) => {
-      let t = fmtNum(s.weight as number);
+      // Bodyweight set (reps only, no weight) → "(reps)", which parseCell reads back.
+      if (s.weight == null) return s.reps != null ? `(${s.reps})` : "";
+      let t = fmtNum(s.weight);
       if (s.assist != null) t += `(${s.assist})`;
       return t;
     })
+    .filter((t) => t !== "")
     .join("-");
 }
 
@@ -71,13 +74,21 @@ async function post(url: string, payload: unknown): Promise<SyncResult> {
     if (res.status >= 400) return { ok: false, error: `HTTP ${res.status}` };
     return (typeof res.data === "string" ? JSON.parse(res.data) : res.data) as SyncResult;
   }
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "text/plain;charset=utf-8" },
-    body,
-    redirect: "follow",
-  });
-  return (await res.json()) as SyncResult;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 12000); // don't hang Finish on a dead network
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body,
+      redirect: "follow",
+      signal: controller.signal,
+    });
+    if (!res.ok) return { ok: false, error: `HTTP ${res.status}` };
+    return (await res.json()) as SyncResult;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 export function syncConfigured(url: string): boolean {
@@ -138,7 +149,13 @@ export async function syncWorkout(row: StoredWorkout): Promise<SyncResult | null
   };
   try {
     const result = await post(url, payload);
-    if (result.ok && row.id != null) await db.workouts.update(row.id, { synced: true });
+    // Only mark synced if the sheet actually took the exercises (a name mismatch
+    // returns ok:true with written:[] — don't silently claim success then).
+    const wroteExercises = (result.written?.length ?? 0) > 0;
+    const nothingToWrite = payload.exercises.length === 0;
+    if (result.ok && (wroteExercises || nothingToWrite) && row.id != null) {
+      await db.workouts.update(row.id, { synced: true });
+    }
     return result;
   } catch (e) {
     return { ok: false, error: (e as Error).message };
@@ -220,7 +237,12 @@ async function mergeBodyweight(rows: string[][]): Promise<number> {
   const thisYear = new Date().getFullYear();
   const current = entries.find((e) => e.year === thisYear);
   if (current) await setSetting("bodyweightKg", current.kg);
-  const history: BwEntry[] = entries.filter((e) => e.year !== thisYear).sort((a, b) => a.year - b.year);
+  // Merge sheet years over existing local history (sheet wins per year) instead of
+  // replacing — a partial sheet must not wipe local years not yet pushed.
+  const existing = await getSetting<BwEntry[]>("bwHistory", []);
+  const byYear = new Map<number, number>(existing.map((e) => [e.year, e.kg]));
+  for (const e of entries) if (e.year !== thisYear) byYear.set(e.year, e.kg);
+  const history: BwEntry[] = [...byYear.entries()].sort((a, b) => a[0] - b[0]).map(([year, kg]) => ({ year, kg }));
   await setSetting("bwHistory", history);
   return entries.length;
 }

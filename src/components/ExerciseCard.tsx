@@ -2,6 +2,7 @@
 // rows, add/remove set, and an optional per-exercise note.
 import { useState } from "react";
 import type { ExercisePerf, SetEntry } from "../types";
+import { uid } from "../lib/uid";
 import { SetInput } from "./SetInput";
 
 type Props = {
@@ -26,7 +27,7 @@ export function ExerciseCard({ exercise, step, prev, onChange, editableName, onR
     const last = exercise.sets.at(-1);
     // Carry the previous set's weight, but reset reps to the exercise's scheme default.
     const defReps = typeof exercise.scheme.reps === "number" ? exercise.scheme.reps : null;
-    onChange({ ...exercise, sets: [...exercise.sets, { weight: last?.weight ?? null, reps: defReps, done: false }] });
+    onChange({ ...exercise, sets: [...exercise.sets, { id: uid(), weight: last?.weight ?? null, reps: defReps, done: false }] });
   };
   const removeSet = () => {
     if (exercise.sets.length > 1) onChange({ ...exercise, sets: exercise.sets.slice(0, -1) });
@@ -96,7 +97,7 @@ export function ExerciseCard({ exercise, step, prev, onChange, editableName, onR
       <div className="sets">
         {exercise.sets.map((s, i) => (
           <SetInput
-            key={i}
+            key={s.id ?? i}
             index={i}
             set={s}
             step={step}

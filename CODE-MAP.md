@@ -29,6 +29,10 @@ Vite 8 + React 19 + TypeScript, Dexie 4 (IndexedDB), `vite-plugin-pwa`, Web Blue
 - `src/App.tsx` — shell: bootstrap, tab nav, owns HR monitor + settings state, export/reset.
 
 ## Invariants / gotchas
+- **`Code.gs` `metaKind` must match the label sets in `sheet.ts`** (NOTE/MOOD/TIME/HR/SKIP). A label the parser treats as meta but the script doesn't → the script writes a duplicate meta row.
+- **Geofence and GPS tracker watchers must stay mutually exclusive** — geofence only runs for non-custom sessions, the tracker only for `custom + trackGps`. Both are foreground-service geolocation watchers; running two at once double-drains battery. Each `start*` guards a stop-before-`addWatcher`-resolves race (a `starting` flag) to avoid leaking a watcher.
+- **Exercises/sets carry a `uid()` `id`** used as the React key — never key those lists by array index (local `showNote` state would bleed across a reorder/remove).
+- **Only mark a workout `synced` when the sheet took the exercises** (`syncWorkout` checks `result.written`), so a name mismatch (`ok:true, written:[]`) doesn't silently claim success.
 - **Service worker is web-only.** `main.tsx` registers the vite-plugin-pwa SW **only in the browser**; on the native app it *unregisters* any SW + clears caches. A precaching SW on native serves a stale bundle after a Capgo OTA (version badge bumps, UI doesn't) — the classic Capgo-vs-SW trap. `vite.config.ts` sets `injectRegister: null` so registration is manual. Never re-enable auto-registration.
 - The sheet is transposed: dates across columns, exercises as rows under a day-block header; each block has its OWN date columns. Two historical layouts (2018-19 two-col label vs 2021+ combined). Parser detects the date row and reads exercise values at those column indices.
 - `finish()` saves exercises with any set weight OR a note; prefilled (untouched) weights DO get saved by design (prefill = intended lifts).

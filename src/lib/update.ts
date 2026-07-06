@@ -40,6 +40,12 @@ export async function checkAndApplyUpdate(): Promise<UpdateResult> {
     const res = await fetch(VERSION_URL, { cache: "no-store" });
     if (!res.ok) return { status: "error", message: `Update server returned ${res.status}` };
     const latest = (await res.json()) as { version: string; url: string };
+    if (!latest?.url || !latest?.version) return { status: "error", message: "Malformed update info." };
+    // Only ever download from our own origin — never live-load a bundle from a URL
+    // an altered version.json could point elsewhere.
+    if (new URL(latest.url, VERSION_URL).origin !== new URL(VERSION_URL).origin) {
+      return { status: "error", message: "Update rejected (unexpected host)." };
+    }
     const cur = await currentVersion();
     if (latest.version === cur) return { status: "uptodate", message: "You're already on the latest version." };
     const bundle = await CapacitorUpdater.download({ url: latest.url, version: latest.version });
