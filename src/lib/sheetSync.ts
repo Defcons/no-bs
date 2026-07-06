@@ -5,6 +5,7 @@
 //
 // CORS note: we send Content-Type text/plain so the browser makes a "simple"
 // request (no preflight); Apps Script's redirected response carries ACAO:*.
+import { Capacitor, CapacitorHttp } from "@capacitor/core";
 import { db, getSetting, type StoredWorkout } from "../db";
 import type { ExercisePerf } from "../types";
 import { DEFAULT_SYNC_SECRET, DEFAULT_SYNC_URL } from "./syncConfig";
@@ -51,10 +52,22 @@ async function config(): Promise<{ url: string; secret: string }> {
 }
 
 async function post(url: string, payload: unknown): Promise<SyncResult> {
+  const body = JSON.stringify(payload);
+  // Native: use the OS HTTP stack (no WebView CORS, follows the Apps Script
+  // redirect natively). Web: plain fetch with the text/plain "simple request".
+  if (Capacitor.isNativePlatform()) {
+    const res = await CapacitorHttp.post({
+      url,
+      headers: { "Content-Type": "text/plain;charset=utf-8" },
+      data: body,
+    });
+    if (res.status >= 400) return { ok: false, error: `HTTP ${res.status}` };
+    return (typeof res.data === "string" ? JSON.parse(res.data) : res.data) as SyncResult;
+  }
   const res = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "text/plain;charset=utf-8" },
-    body: JSON.stringify(payload),
+    body,
     redirect: "follow",
   });
   return (await res.json()) as SyncResult;
