@@ -129,15 +129,17 @@ export function Today({
     return () => window.clearInterval(id);
   }, [draft, draft?.custom, hr.connected, hrLowThreshold]);
 
-  // Float the rest timer as Picture-in-Picture when you leave the app during a
-  // break; swap in the minimal PiP view while the window is shrunk.
+  // Float as Picture-in-Picture whenever you leave the app during an active
+  // workout; the minimal PiP view shows the break countdown (if resting) or the
+  // running workout time + HR.
   useEffect(() => onPipChange(setPipMode), []);
+  const workoutActive = !!draft;
   useEffect(() => {
-    setPipAutoEnter(!!draft && (draft.restEndsAt ?? 0) > Date.now());
+    setPipAutoEnter(workoutActive);
     return () => {
       setPipAutoEnter(false);
     };
-  }, [draft?.restEndsAt, draft]);
+  }, [workoutActive]);
 
   // Leave-gym auto-end: while a (non-Alternative) workout runs, watch location in
   // the background; when you've clearly left the gym, save + finish the session.

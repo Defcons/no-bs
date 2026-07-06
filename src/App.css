@@ -593,8 +593,13 @@
   background: color-mix(in srgb, var(--accent-2) 14%, transparent);
 }
 .setrow.active {
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 55%, transparent);
-  background: color-mix(in srgb, var(--accent) 7%, transparent);
+  background: color-mix(in srgb, var(--accent) 13%, transparent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 60%, transparent);
+  border-radius: 10px;
+}
+.setrow.active .set-badge {
+  background: color-mix(in srgb, var(--accent) 32%, var(--surface-2));
+  color: var(--accent);
 }
 .setrow .set-note {
   grid-column: 1 / -1;
