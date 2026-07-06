@@ -5,6 +5,8 @@
   height: 100%;
   max-width: 560px;
   margin: 0 auto;
+  /* Keep content clear of the Android/iOS status bar (edge-to-edge WebView). */
+  padding-top: env(safe-area-inset-top);
 }
 .content {
   flex: 1;
