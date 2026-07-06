@@ -1,7 +1,7 @@
 import { Suspense, lazy, useEffect, useRef, useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import "./App.css";
-import { db, ensureBootstrapped, getSetting, setSetting } from "./db";
+import { db, ensureBootstrapped, getSetting, setSetting, type StoredWorkout } from "./db";
 import { daysAgo } from "./lib/format";
 import { type HrMonitor, createHrMonitor, hrAvailable } from "./lib/hr";
 import { Capacitor } from "@capacitor/core";
@@ -29,6 +29,7 @@ export default function App() {
   const [ready, setReady] = useState(false);
   const [tab, setTab] = useState<Tab>("today");
   const [routeHash, setRouteHash] = useState<string | null>(() => readRouteHash());
+  const [pendingEdit, setPendingEdit] = useState<StoredWorkout | null>(null); // History → edit in Today
 
   // Settings (loaded from IndexedDB, persisted on change).
   const [restDefaultSec, setRest] = useState(120);
@@ -238,9 +239,18 @@ export default function App() {
             }}
             getHrStats={getHrStats}
             onFinished={() => setTab("history")}
+            editWorkout={pendingEdit}
+            onEditConsumed={() => setPendingEdit(null)}
           />
         )}
-        {tab === "history" && <History />}
+        {tab === "history" && (
+          <History
+            onEdit={(w) => {
+              setPendingEdit(w);
+              setTab("today");
+            }}
+          />
+        )}
         {tab === "records" && <Records bodyweightKg={bodyweightKg} age={age} bwHistory={bwHistory} />}
         {tab === "settings" && (
           <Settings

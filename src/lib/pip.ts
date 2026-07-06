@@ -4,8 +4,9 @@ import { Capacitor, registerPlugin, type PluginListenerHandle } from "@capacitor
 
 interface PipPlugin {
   isSupported(): Promise<{ supported: boolean }>;
+  isInPip(): Promise<{ inPip: boolean }>;
   enter(options?: { width?: number; height?: number }): Promise<void>;
-  setAutoEnter(options: { enabled: boolean }): Promise<void>;
+  setAutoEnter(options: { enabled: boolean; width?: number; height?: number }): Promise<void>;
   addListener(event: "pipChange", cb: (data: { pip: boolean }) => void): Promise<PluginListenerHandle>;
 }
 
@@ -22,6 +23,15 @@ export async function pipSupported(): Promise<boolean> {
   }
 }
 
+export async function isInPip(): Promise<boolean> {
+  if (!native()) return false;
+  try {
+    return (await Pip.isInPip()).inPip;
+  } catch {
+    return false;
+  }
+}
+
 // Enter PiP now (a tall 2:3 window suits the stacked timer view).
 export async function enterPip(): Promise<void> {
   if (!native()) return;
@@ -33,10 +43,12 @@ export async function enterPip(): Promise<void> {
 }
 
 // Arm/disarm auto-PiP: when armed, leaving the app (Home/recents) floats the timer.
-export async function setPipAutoEnter(enabled: boolean): Promise<void> {
+// width:height sets the PiP window's aspect ratio (kept close to the content so the
+// window is compact).
+export async function setPipAutoEnter(enabled: boolean, width = 1, height = 1): Promise<void> {
   if (!native()) return;
   try {
-    await Pip.setAutoEnter({ enabled });
+    await Pip.setAutoEnter({ enabled, width, height });
   } catch {
     /* unsupported */
   }

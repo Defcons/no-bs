@@ -25,7 +25,7 @@ public class MainActivity extends BridgeActivity {
                 && getPackageManager().hasSystemFeature(android.content.pm.PackageManager.FEATURE_PICTURE_IN_PICTURE)) {
             try {
                 PictureInPictureParams params = new PictureInPictureParams.Builder()
-                        .setAspectRatio(new Rational(2, 3))
+                        .setAspectRatio(new Rational(PipPlugin.autoW, PipPlugin.autoH))
                         .build();
                 enterPictureInPictureMode(params);
             } catch (Exception e) {

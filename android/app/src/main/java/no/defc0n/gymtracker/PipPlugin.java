@@ -21,6 +21,8 @@ public class PipPlugin extends Plugin {
 
     // Read by MainActivity.onUserLeaveHint() to auto-float on Home/recents.
     static boolean autoEnter = false;
+    static int autoW = 1; // aspect ratio of the auto-entered PiP window
+    static int autoH = 1;
 
     private boolean supported() {
         return Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
@@ -31,6 +33,14 @@ public class PipPlugin extends Plugin {
     public void isSupported(PluginCall call) {
         JSObject res = new JSObject();
         res.put("supported", supported());
+        call.resolve(res);
+    }
+
+    @PluginMethod
+    public void isInPip(PluginCall call) {
+        boolean inPip = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && getActivity().isInPictureInPictureMode();
+        JSObject res = new JSObject();
+        res.put("inPip", inPip);
         call.resolve(res);
     }
 
@@ -61,6 +71,8 @@ public class PipPlugin extends Plugin {
     @PluginMethod
     public void setAutoEnter(PluginCall call) {
         autoEnter = call.getBoolean("enabled", false);
+        autoW = call.getInt("width", 1);
+        autoH = call.getInt("height", 1);
         call.resolve();
     }
 

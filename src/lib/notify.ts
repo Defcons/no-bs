@@ -6,6 +6,28 @@ import { LocalNotifications } from "@capacitor/local-notifications";
 
 const native = () => Capacitor.isNativePlatform();
 
+// A high-importance channel so the scheduled "rest over" notification actually makes
+// a sound + heads-up while the app is backgrounded (the in-app Web Audio beep is
+// throttled/silent in the background).
+const REST_CHANNEL = "rest-timer";
+let channelReady = false;
+async function ensureRestChannel(): Promise<void> {
+  if (!native() || channelReady) return;
+  try {
+    await LocalNotifications.createChannel({
+      id: REST_CHANNEL,
+      name: "Rest timer",
+      description: "Alerts when your rest is over",
+      importance: 5, // HIGH → sound + heads-up
+      visibility: 1,
+      vibration: true,
+    });
+    channelReady = true;
+  } catch {
+    /* older Android / no channel support */
+  }
+}
+
 export function notificationsSupported(): boolean {
   return native() || (typeof Notification !== "undefined" && "serviceWorker" in navigator);
 }
@@ -28,6 +50,7 @@ export async function notificationsAllowed(): Promise<boolean> {
 export async function requestNotifications(): Promise<boolean> {
   if (native()) {
     const p = await LocalNotifications.requestPermissions();
+    await ensureRestChannel();
     return p.display === "granted";
   }
   if (typeof Notification === "undefined") return false;
@@ -64,12 +87,14 @@ const BREAK_NOTIF_ID = 7001;
 export async function scheduleBreakNotification(at: number): Promise<void> {
   if (!native()) return;
   try {
+    await ensureRestChannel();
     await LocalNotifications.schedule({
       notifications: [
         {
           id: BREAK_NOTIF_ID,
           title: "Rest over — go! 💪",
           body: "Time for your next set.",
+          channelId: REST_CHANNEL, // high-importance → plays a sound in the background
           schedule: { at: new Date(at), allowWhileIdle: true },
         },
       ],

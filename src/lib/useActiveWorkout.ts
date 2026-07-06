@@ -15,6 +15,7 @@ export type Draft = {
   restEndsAt?: number; // epoch ms; running rest timer survives reload
   custom?: boolean; // "Alternative" free-form session (editable name/exercises)
   trackGps?: boolean; // record a GPS route for this (cardio) session
+  editId?: number; // when set, finishing UPDATES this existing workout (History edit)
   // Full workout timer (auto-runs, but pausable/resettable).
   wRunning: boolean;
   wAccumMs: number;
@@ -56,14 +57,17 @@ function buildExercises(tpl: DayTemplate, history: StoredWorkout[]): ExercisePer
         break;
       }
     }
-    const lastKnown = prevSets?.filter((s) => s.weight != null).at(-1)?.weight ?? null;
+    const weighted = prevSets?.filter((s) => s.weight != null).map((s) => s.weight as number) ?? [];
+    const lastKnown = weighted.at(-1) ?? null;
     const nSets = e.scheme.sets ?? 3;
     const defReps = typeof e.scheme.reps === "number" ? e.scheme.reps : null;
-    const sets: SetEntry[] = Array.from({ length: nSets }, (_, i) => ({
-      id: uid(),
-      weight: prevSets?.[i]?.weight ?? lastKnown,
-      reps: defReps,
-    }));
+    // If last session logged MORE sets than the scheme's default, seed with the
+    // heaviest N (descending); otherwise carry each set's weight across position.
+    const seed: (number | null)[] =
+      weighted.length > nSets
+        ? [...weighted].sort((a, b) => b - a).slice(0, nSets)
+        : Array.from({ length: nSets }, (_, i) => prevSets?.[i]?.weight ?? lastKnown);
+    const sets: SetEntry[] = seed.map((w) => ({ id: uid(), weight: w ?? lastKnown, reps: defReps }));
     return { id: uid(), name: e.name, scheme: e.scheme, sets };
   });
 }
@@ -189,6 +193,38 @@ export function useActiveWorkout() {
     setSetting(DRAFT_KEY, d);
   }, []);
 
+  // Load an existing (past) workout into the editor. Finishing updates it in place.
+  const beginEdit = useCallback((w: StoredWorkout) => {
+    const now = Date.now();
+    const d: Draft = {
+      startedAt: new Date(w.date).getTime() || now,
+      date: w.date,
+      dayName: w.dayName,
+      templateId: w.templateId,
+      editId: w.id,
+      custom: true, // fully editable: rename/add/remove
+      exercises: w.exercises.map((e) => ({
+        id: uid(),
+        name: e.name,
+        scheme: e.scheme,
+        note: e.note,
+        skipped: e.skipped,
+        sets: e.sets.map((s) => ({ ...s, id: uid() })),
+      })),
+      note: w.note,
+      moodBefore: w.moodBefore,
+      moodAfter: w.moodAfter,
+      wRunning: false,
+      wAccumMs: (w.durationSec ?? 0) * 1000, // keep the recorded duration editable
+      wSegStart: now,
+      swRunning: false,
+      swAccumMs: 0,
+      swSegStart: now,
+    };
+    setDraft(d);
+    setSetting(DRAFT_KEY, d);
+  }, []);
+
   // Free-form "Alternative" session: editable title + you add your own exercises.
   const startCustom = useCallback((label = "Alternative") => {
     const now = Date.now();
@@ -293,10 +329,23 @@ export function useActiveWorkout() {
         synced: undefined,
         ...extra,
       };
-      await db.workouts.add(row);
+      const editing = draft.editId != null;
+      if (editing) {
+        // Update the existing workout in place; keep its original date/source/synced.
+        await db.workouts.update(draft.editId!, {
+          dayName: row.dayName,
+          exercises: row.exercises,
+          note: row.note,
+          moodBefore: row.moodBefore,
+          moodAfter: row.moodAfter,
+          durationSec: row.durationSec,
+        });
+      } else {
+        await db.workouts.add(row);
+      }
       setDraft(null);
       await setSetting(DRAFT_KEY, null);
-      return { ...row, custom: draft.custom };
+      return { ...row, custom: draft.custom, edited: editing };
     },
     [draft],
   );
@@ -308,6 +357,7 @@ export function useActiveWorkout() {
     swElapsed,
     start,
     startCustom,
+    beginEdit,
     cancel,
     finish,
     update,

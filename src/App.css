@@ -625,14 +625,17 @@
 .pip-view {
   position: fixed;
   inset: 0;
+  z-index: 60;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 2vh;
+  gap: 1vh;
   background: var(--bg);
   color: var(--text);
   text-align: center;
+  border: 3px solid var(--accent);
+  box-sizing: border-box;
 }
 .pip-view.resting {
   background: color-mix(in srgb, var(--accent) 22%, var(--bg));

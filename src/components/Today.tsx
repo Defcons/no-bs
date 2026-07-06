@@ -5,8 +5,9 @@ import { lastWorkoutForDay, type StoredWorkout } from "../db";
 import { daysAgo, daysAgoLabel, hhmmss, mmss, niceDate } from "../lib/format";
 import { cancelBreakNotification, scheduleBreakNotification, showReminder } from "../lib/notify";
 import { startGeofence, stopGeofence } from "../lib/geofence";
-import { onPipChange, setPipAutoEnter } from "../lib/pip";
+import { isInPip, onPipChange, setPipAutoEnter } from "../lib/pip";
 import { startTracking, stopTracking } from "../lib/tracker";
+import { stepForExercise } from "../lib/steps";
 import { uid } from "../lib/uid";
 import { Capacitor } from "@capacitor/core";
 import { syncWorkout } from "../lib/sheetSync";
@@ -27,6 +28,8 @@ type Props = {
   onWorkoutStart: () => void;
   getHrStats: () => { avg?: number; max?: number };
   onFinished: () => void;
+  editWorkout?: StoredWorkout | null; // a past workout to load into the editor
+  onEditConsumed?: () => void;
 };
 
 export function Today({
@@ -39,6 +42,8 @@ export function Today({
   onWorkoutStart,
   getHrStats,
   onFinished,
+  editWorkout,
+  onEditConsumed,
 }: Props) {
   const {
     draft,
@@ -47,6 +52,7 @@ export function Today({
     swElapsed,
     start,
     startCustom,
+    beginEdit,
     cancel,
     finish,
     update,
@@ -91,6 +97,20 @@ export function Today({
     };
   }, [draft, templates]);
 
+  // Load a past workout into the editor when asked (from History → Edit).
+  useEffect(() => {
+    if (!editWorkout) return;
+    if (draft && draft.editId !== editWorkout.id) {
+      if (!confirm("Discard the workout in progress and edit this one instead?")) {
+        onEditConsumed?.();
+        return;
+      }
+    }
+    beginEdit(editWorkout);
+    onEditConsumed?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editWorkout]);
+
   // Actually save + sync + return to history. Guarded so a watchdog (HR/geofence)
   // and a manual tap can't both save the same session.
   const finishNow = async () => {
@@ -98,7 +118,8 @@ export function Today({
     finishingRef.current = true;
     const track = draft?.trackGps ? await stopTracking() : undefined;
     const row = await finish(getHrStats(), track && track.length >= 2 ? { track } : undefined);
-    if (row) {
+    if (row && !row.edited) {
+      // Edits update the local record only — re-syncing would append a new column.
       const res = await syncWorkout(row);
       if (res && !res.ok) {
         alert(`Saved locally, but Google Sheet sync failed:\n${res.error}\n\nRetry from Settings → Sync now.`);
@@ -144,13 +165,25 @@ export function Today({
   // workout; the minimal PiP view shows the break countdown (if resting) or the
   // running workout time + HR.
   useEffect(() => onPipChange(setPipMode), []);
-  const workoutActive = !!draft;
+  // If the app is foregrounded and NOT actually in PiP, clear any stale PiP overlay
+  // (e.g. the OS closed PiP on screen-lock without firing the mode callback).
   useEffect(() => {
-    setPipAutoEnter(workoutActive);
+    const onVis = async () => {
+      if (document.visibilityState === "visible" && !(await isInPip())) setPipMode(false);
+    };
+    document.addEventListener("visibilitychange", onVis);
+    return () => document.removeEventListener("visibilitychange", onVis);
+  }, []);
+  const workoutActive = !!draft;
+  const hrShown = hr.connected;
+  useEffect(() => {
+    // Compact window: near-square when HR is shown (timer + HR stacked), wide+short
+    // when it's just the timer.
+    setPipAutoEnter(workoutActive, hrShown ? 5 : 5, hrShown ? 4 : 2);
     return () => {
       setPipAutoEnter(false);
     };
-  }, [workoutActive]);
+  }, [workoutActive, hrShown]);
 
   // GPS route recording: while an Alternative session has "Track GPS route" on,
   // record the path (stamped with live HR). The track is attached on finish.
@@ -213,11 +246,6 @@ export function Today({
   }, [hrPrompt]);
 
   if (!loaded) return <div className="pad">Loading…</div>;
-
-  // Shrunk into the PiP window: show only the big timer.
-  if (pipMode && draft) {
-    return <PipView restEndsAt={draft.restEndsAt ?? null} elapsedSec={elapsed} bpm={hr.bpm} />;
-  }
 
   // ---- No active workout: choose a day -----------------------------------
   if (!draft) {
@@ -398,7 +426,7 @@ export function Today({
           <ExerciseCard
             key={ex.id ?? i}
             exercise={ex}
-            step={weightStep}
+            step={stepForExercise(ex.name, weightStep)}
             prev={prev?.exercises.find((p) => p.name === ex.name)}
             onChange={(e) => setExercise(i, e)}
             editableName={draft.custom}
@@ -501,6 +529,10 @@ export function Today({
           </div>
         </div>
       )}
+
+      {/* PiP: overlay the minimal timer view on top (keeps the workout UI mounted
+          underneath, so note toggles etc. survive returning from the background). */}
+      {pipMode && <PipView restEndsAt={draft.restEndsAt ?? null} elapsedSec={elapsed} bpm={hr.bpm} />}
     </div>
   );
 }
