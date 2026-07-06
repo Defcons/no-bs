@@ -7,6 +7,7 @@ import { type HrMonitor, createHrMonitor, hrAvailable } from "./lib/hr";
 import { Capacitor } from "@capacitor/core";
 import { notificationsSupported, requestNotifications, showReminder } from "./lib/notify";
 import { markAppReady } from "./lib/update";
+import { syncBodyweight } from "./lib/sheetSync";
 import type { BwEntry } from "./lib/standards";
 import { trainingDue } from "./lib/stats";
 import { History } from "./components/History";
@@ -142,7 +143,7 @@ export default function App() {
   };
   const persistBw = (v: number) => {
     setBw(v);
-    setSetting("bodyweightKg", v);
+    setSetting("bodyweightKg", v).then(() => syncBodyweight());
   };
   const persistAge = (v: number) => {
     setAge(v);
@@ -154,7 +155,13 @@ export default function App() {
   };
   const persistBwHistory = (v: BwEntry[]) => {
     setBwH(v);
-    setSetting("bwHistory", v);
+    setSetting("bwHistory", v).then(() => syncBodyweight());
+  };
+  // Refresh bodyweight state from settings after an import wrote to them
+  // (no re-sync — importFromSheet already reconciled with the sheet).
+  const reloadBodyweight = async () => {
+    setBw(await getSetting("bodyweightKg", 0));
+    setBwH(await getSetting<BwEntry[]>("bwHistory", []));
   };
 
   const onExport = async () => {
@@ -218,6 +225,7 @@ export default function App() {
             hrLowThreshold={hrLowThreshold}
             setHrLowThreshold={persistHrLow}
             hr={hr}
+            onImported={reloadBodyweight}
             onExport={onExport}
             onReset={onReset}
           />

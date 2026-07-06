@@ -33,6 +33,9 @@ function doPost(e) {
       return json({ ok: true, tabs: out });
     }
 
+    // Bodyweight: upsert year -> kg rows in a dedicated tab.
+    if (body.action === "bodyweight") return writeBodyweight(body);
+
     var ss = SpreadsheetApp.getActiveSpreadsheet();
     var sheet = ss.getSheetByName(String(body.year));
     if (!sheet) return json({ ok: false, error: "no tab named " + body.year });
@@ -48,7 +51,12 @@ function doPost(e) {
         break;
       }
     }
-    if (headerRow < 0) return json({ ok: false, error: "no day block '" + body.dayName + "' in " + body.year });
+    // No matching block: Alternative/free-form sessions get a fresh named block
+    // appended at the end of the year tab (with Note + Mood rows).
+    if (headerRow < 0) {
+      if (body.allowCreate) return createBlock(sheet, body);
+      return json({ ok: false, error: "no day block '" + body.dayName + "' in " + body.year });
+    }
 
     // First empty column in the header row (a session slot); else append at end.
     var col = -1;
@@ -66,15 +74,22 @@ function doPost(e) {
     // Walk the block's rows until the next block header (a row with date cells).
     var written = [];
     var noteRow = -1;
+    var moodRow = -1;
+    var lastBlockRow = headerRow; // last row belonging to this block
     var doneNames = {};
     for (var rr = headerRow + 1; rr < data.length; rr++) {
+      if (rowHasDate(data[rr])) break; // reached the next day-block header
+      lastBlockRow = rr;
       var label = String(data[rr][0]).trim();
       var low = label.toLowerCase();
       if (low === "note" || low === "notes") {
         if (noteRow < 0) noteRow = rr;
         continue;
       }
-      if (rowHasDate(data[rr])) break; // reached the next day-block header
+      if (low === "mood" || low === "feeling") {
+        if (moodRow < 0) moodRow = rr;
+        continue;
+      }
       if (!label) continue;
 
       for (var i = 0; i < body.exercises.length; i++) {
@@ -94,6 +109,20 @@ function doPost(e) {
       noteWritten = true;
     }
 
+    // Mood row ("before→after"). Write into the existing row, or insert one right
+    // after the Note row (else at the end of the block) if the sheet has none yet.
+    var moodWritten = false;
+    if (body.mood) {
+      if (moodRow < 0) {
+        var after = noteRow >= 0 ? noteRow : lastBlockRow; // 0-based
+        sheet.insertRowAfter(after + 1);
+        moodRow = after + 1; // the newly inserted 0-based row index
+        sheet.getRange(moodRow + 1, 1).setValue("Mood");
+      }
+      sheet.getRange(moodRow + 1, col + 1).setValue(body.mood);
+      moodWritten = true;
+    }
+
     var skipped = [];
     for (var k = 0; k < body.exercises.length; k++) {
       if (!doneNames[body.exercises[k].name]) skipped.push(body.exercises[k].name);
@@ -106,10 +135,67 @@ function doPost(e) {
       written: written,
       skipped: skipped,
       noteWritten: noteWritten,
+      moodWritten: moodWritten,
     });
   } catch (err) {
     return json({ ok: false, error: String(err) });
   }
+}
+
+// Append a brand-new day-block (header + exercises + Note + Mood) at the end of a
+// year tab. Used for Alternative/free-form sessions that have no template block.
+function createBlock(sheet, body) {
+  var rows = [[body.dayName, body.date]];
+  for (var i = 0; i < body.exercises.length; i++) {
+    rows.push([body.exercises[i].name, body.exercises[i].cell]);
+  }
+  rows.push(["Note", body.note || ""]);
+  rows.push(["Mood", body.mood || ""]);
+
+  var start = sheet.getLastRow() + 2; // leave one blank spacer row
+  sheet.getRange(start, 1, rows.length, 2).setValues(rows);
+
+  var names = body.exercises.map(function (e) { return e.name; });
+  return json({
+    ok: true,
+    created: true,
+    row: start,
+    written: names,
+    skipped: [],
+    noteWritten: !!body.note,
+    moodWritten: !!body.mood,
+  });
+}
+
+// Upsert bodyweight-by-year into a dedicated "Bodyweight" tab (Year | Kg).
+function writeBodyweight(body) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var name = body.tab || "Bodyweight";
+  var bw = ss.getSheetByName(name);
+  if (!bw) {
+    bw = ss.insertSheet(name);
+    bw.getRange(1, 1, 1, 2).setValues([["Year", "Kg"]]);
+  }
+  var vals = bw.getDataRange().getValues();
+  var rowByYear = {};
+  for (var r = 1; r < vals.length; r++) {
+    var y = String(vals[r][0]).trim();
+    if (y) rowByYear[y] = r + 1; // 1-based sheet row
+  }
+  var entries = body.entries || [];
+  for (var i = 0; i < entries.length; i++) {
+    var year = String(entries[i].year);
+    var kg = Number(entries[i].kg);
+    if (rowByYear[year]) {
+      bw.getRange(rowByYear[year], 2).setValue(kg);
+    } else {
+      var nr = bw.getLastRow() + 1;
+      bw.getRange(nr, 1).setValue(entries[i].year);
+      bw.getRange(nr, 2).setValue(kg);
+      rowByYear[year] = nr;
+    }
+  }
+  return json({ ok: true, bodyweight: true, count: entries.length });
 }
 
 // Does a row look like a day-block header (contains a dd.mm.yy date)?

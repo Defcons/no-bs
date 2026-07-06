@@ -83,7 +83,7 @@ export function Today({
   // Actually save + sync + return to history.
   const finishNow = async () => {
     const row = await finish(getHrStats());
-    if (row && !row.custom) {
+    if (row) {
       const res = await syncWorkout(row);
       if (res && !res.ok) {
         alert(`Saved locally, but Google Sheet sync failed:\n${res.error}\n\nRetry from Settings → Sync now.`);

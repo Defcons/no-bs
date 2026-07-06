@@ -240,8 +240,8 @@ export function useActiveWorkout() {
         moodBefore: draft.moodBefore,
         moodAfter: draft.moodAfter,
         source: "app",
-        // Custom sessions have no matching sheet block → don't queue for sync.
-        synced: draft.custom ? true : undefined,
+        // Alternative sessions sync too — the script auto-creates a named block.
+        synced: undefined,
       };
       await db.workouts.add(row);
       setDraft(null);

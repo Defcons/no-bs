@@ -25,6 +25,7 @@ type Props = {
   hrLowThreshold: number;
   setHrLowThreshold: (v: number) => void;
   hr: { bpm: number | null; connected: boolean; connect: () => void; disconnect: () => void };
+  onImported: () => void;
   onExport: () => void;
   onReset: () => void;
 };
@@ -47,6 +48,7 @@ export function Settings({
   hrLowThreshold,
   setHrLowThreshold,
   hr,
+  onImported,
   onExport,
   onReset,
 }: Props) {
@@ -114,8 +116,14 @@ export function Settings({
 
   const doImport = async () => {
     setStatus("Importing from sheet…");
-    const { added, error } = await importFromSheet();
-    setStatus(error ? `Import failed: ${error}` : added ? `Imported ${added} workout${added === 1 ? "" : "s"} from the sheet.` : "Already up to date — nothing new in the sheet.");
+    const { added, bwYears, error } = await importFromSheet();
+    if (error) {
+      setStatus(`Import failed: ${error}`);
+      return;
+    }
+    const bw = bwYears ? ` · ${bwYears} bodyweight year${bwYears === 1 ? "" : "s"}` : "";
+    setStatus((added ? `Imported ${added} workout${added === 1 ? "" : "s"}` : "Workouts up to date") + bw + ".");
+    if (bwYears) onImported();
   };
 
   return (

@@ -108,6 +108,15 @@ export function parseCell(raw: string): { sets: SetEntry[]; skipped: boolean } {
 }
 
 const NOTE_LABELS = new Set(["note", "notes", "notat", "notater"]);
+const MOOD_LABELS = new Set(["mood", "feeling", "humør", "form"]);
+
+// "6→8" / "6->8" / "6-8" → { before: 6, after: 8 }. Single number → before only.
+function parseMood(txt: string): { before?: number; after?: number } {
+  const m = txt.match(/(\d+)\s*(?:→|->|-|\/)\s*(\d+)/);
+  if (m) return { before: +m[1], after: +m[2] };
+  const one = txt.match(/\d+/);
+  return one ? { before: +one[0] } : {};
+}
 
 // Parse one year's sheet (rows) into a list of workouts (one per block-column session).
 export function parseSheet(rows: string[][], source: string): Workout[] {
@@ -148,14 +157,27 @@ export function parseSheet(rows: string[][], source: string): Workout[] {
       if (r.some((c) => isDateCell(c))) break; // next block header
       const label0 = (r[0] ?? "").trim();
       const label1 = (r[1] ?? "").trim();
-      const isNote = NOTE_LABELS.has(label0.toLowerCase());
+      const low0 = label0.toLowerCase();
 
-      if (isNote) {
+      if (NOTE_LABELS.has(low0)) {
         for (const [col, date] of colDate) {
           const txt = (r[col] ?? "").trim();
           if (!txt) continue;
           const w = workouts.get(key(dayName, date));
           if (w) w.note = w.note ? `${w.note}\n${txt}` : txt;
+        }
+        continue;
+      }
+
+      if (MOOD_LABELS.has(low0)) {
+        for (const [col, date] of colDate) {
+          const txt = (r[col] ?? "").trim();
+          if (!txt) continue;
+          const w = workouts.get(key(dayName, date));
+          if (!w) continue;
+          const { before, after } = parseMood(txt);
+          if (before != null) w.moodBefore = before;
+          if (after != null) w.moodAfter = after;
         }
         continue;
       }
@@ -185,6 +207,17 @@ export function parseSheet(rows: string[][], source: string): Workout[] {
   }
 
   return [...workouts.values()].sort((a, b) => a.date.localeCompare(b.date));
+}
+
+// Parse the "Bodyweight" tab: rows of [year, kg], header row(s) ignored.
+export function parseBodyweightTab(rows: string[][]): { year: number; kg: number }[] {
+  const out: { year: number; kg: number }[] = [];
+  for (const r of rows) {
+    const year = parseInt((r[0] ?? "").trim(), 10);
+    const kg = num((r[1] ?? "").trim());
+    if (year >= 1990 && year < 2100 && kg != null) out.push({ year, kg });
+  }
+  return out;
 }
 
 export function parseWorkbook(byYear: Record<string, string>): Workout[] {

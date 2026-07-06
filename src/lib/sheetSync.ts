@@ -6,10 +6,13 @@
 // CORS note: we send Content-Type text/plain so the browser makes a "simple"
 // request (no preflight); Apps Script's redirected response carries ACAO:*.
 import { Capacitor, CapacitorHttp } from "@capacitor/core";
-import { db, getSetting, type StoredWorkout } from "../db";
-import { parseSheet } from "./sheet";
+import { db, getSetting, setSetting, type StoredWorkout } from "../db";
+import { parseBodyweightTab, parseSheet } from "./sheet";
+import type { BwEntry } from "./standards";
 import type { ExercisePerf } from "../types";
 import { DEFAULT_SYNC_SECRET, DEFAULT_SYNC_URL } from "./syncConfig";
+
+const BODYWEIGHT_TAB = "Bodyweight";
 
 export type SyncResult = {
   ok: boolean;
@@ -89,6 +92,12 @@ export async function testSync(): Promise<SyncResult> {
   }
 }
 
+// "6→8", "6→", "→8", or "" when neither is set.
+function moodStr(row: StoredWorkout): string {
+  if (row.moodBefore == null && row.moodAfter == null) return "";
+  return `${row.moodBefore ?? ""}→${row.moodAfter ?? ""}`;
+}
+
 export async function syncWorkout(row: StoredWorkout): Promise<SyncResult | null> {
   const { url, secret } = await config();
   if (!url) return null; // sync not set up — silently skip
@@ -98,6 +107,8 @@ export async function syncWorkout(row: StoredWorkout): Promise<SyncResult | null
     dayName: row.dayName,
     date: fmtDate(row.date),
     note: row.note ?? "",
+    mood: moodStr(row),
+    allowCreate: true, // Alternative/free-form sessions → auto-create a named block
     exercises: row.exercises.map((e) => ({ name: e.name, cell: cellFor(e) })).filter((e) => e.cell !== ""),
   };
   try {
@@ -132,14 +143,19 @@ export async function syncPending(): Promise<{ done: number; failed: number }> {
 
 // Pull every workout from the sheet and add any this device is missing
 // (deduped by day + date), e.g. sessions logged elsewhere since the last import.
-export async function importFromSheet(): Promise<{ added: number; error?: string }> {
+export async function importFromSheet(): Promise<{ added: number; bwYears?: number; error?: string }> {
   const { url, secret } = await config();
   if (!url) return { added: 0, error: "No sync URL set" };
   try {
     const res = await post(url, { secret, action: "pull" });
     if (!res.ok || !res.tabs) return { added: 0, error: res.error || "Import failed" };
 
-    const parsed = Object.entries(res.tabs).flatMap(([name, rows]) => parseSheet(rows, name));
+    // Bodyweight lives in its own tab — parse it separately, not as a workout block.
+    const bwYears = res.tabs[BODYWEIGHT_TAB] ? await mergeBodyweight(res.tabs[BODYWEIGHT_TAB]) : 0;
+
+    const parsed = Object.entries(res.tabs)
+      .filter(([name]) => name !== BODYWEIGHT_TAB)
+      .flatMap(([name, rows]) => parseSheet(rows, name));
     const existing = await db.workouts.toArray();
     const key = (dayName: string, iso: string) => `${dayName}@@${iso.slice(0, 10)}`;
     const have = new Set(existing.map((w) => key(w.dayName, w.date)));
@@ -156,13 +172,46 @@ export async function importFromSheet(): Promise<{ added: number; error?: string
         dayName: w.dayName,
         exercises: w.exercises,
         note: w.note,
+        moodBefore: w.moodBefore,
+        moodAfter: w.moodAfter,
         source: `sheet:${w.source ?? "?"}`,
         synced: true,
       });
     }
     if (toAdd.length) await db.workouts.bulkAdd(toAdd);
-    return { added: toAdd.length };
+    return { added: toAdd.length, bwYears };
   } catch (e) {
     return { added: 0, error: (e as Error).message };
+  }
+}
+
+// Read the Bodyweight tab and reconcile it into local settings: past years fill
+// "bwHistory", the current year sets "bodyweightKg". Sheet values win on conflict.
+async function mergeBodyweight(rows: string[][]): Promise<number> {
+  const entries = parseBodyweightTab(rows);
+  if (entries.length === 0) return 0;
+  const thisYear = new Date().getFullYear();
+  const current = entries.find((e) => e.year === thisYear);
+  if (current) await setSetting("bodyweightKg", current.kg);
+  const history: BwEntry[] = entries.filter((e) => e.year !== thisYear).sort((a, b) => a.year - b.year);
+  await setSetting("bwHistory", history);
+  return entries.length;
+}
+
+// Push the full bodyweight-by-year table to its own sheet tab (upsert).
+export async function syncBodyweight(): Promise<SyncResult | null> {
+  const { url, secret } = await config();
+  if (!url) return null;
+  const history = await getSetting<BwEntry[]>("bwHistory", []);
+  const currentKg = await getSetting<number>("bodyweightKg", 0);
+  const thisYear = new Date().getFullYear();
+  const map = new Map<number, number>(history.map((e) => [e.year, e.kg]));
+  if (currentKg > 0) map.set(thisYear, currentKg);
+  const entries = [...map.entries()].sort((a, b) => a[0] - b[0]).map(([year, kg]) => ({ year, kg }));
+  if (entries.length === 0) return null;
+  try {
+    return await post(url, { secret, action: "bodyweight", tab: BODYWEIGHT_TAB, entries });
+  } catch (e) {
+    return { ok: false, error: (e as Error).message };
   }
 }

@@ -29,6 +29,8 @@ export type Workout = {
   dayName: string; // e.g. "Chest & Arms"
   exercises: ExercisePerf[];
   note?: string; // per-session day note ("Note" row)
+  moodBefore?: number; // parsed from the "Mood" row ("before→after")
+  moodAfter?: number;
   source?: string; // origin tab name when imported, e.g. "2026"
 };
 
