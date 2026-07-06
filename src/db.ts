@@ -1,7 +1,7 @@
 // IndexedDB (via Dexie) is the local-first source of truth for the running app.
 // The Google Sheet history is imported once on first run for the History/PR views.
 import Dexie, { type Table } from "dexie";
-import type { DayTemplate, ExercisePerf, Scheme } from "./types";
+import type { DayTemplate, ExercisePerf, Scheme, TrackPoint } from "./types";
 
 export interface StoredWorkout {
   id?: number;
@@ -15,6 +15,7 @@ export interface StoredWorkout {
   maxHr?: number;
   moodBefore?: number; // 1-10 feeling before the session
   moodAfter?: number; // 1-10 feeling after the session
+  track?: TrackPoint[]; // GPS route for tracked cardio (e.g. a run)
   source: string; // "app" for new sessions, "sheet:2026" etc. for imports
   synced?: boolean; // written back to the Google Sheet
 }

@@ -13,6 +13,7 @@ export type Draft = {
   note?: string;
   restEndsAt?: number; // epoch ms; running rest timer survives reload
   custom?: boolean; // "Alternative" free-form session (editable name/exercises)
+  trackGps?: boolean; // record a GPS route for this (cardio) session
   // Full workout timer (auto-runs, but pausable/resettable).
   wRunning: boolean;
   wAccumMs: number;
@@ -219,9 +220,10 @@ export function useActiveWorkout() {
     setSetting(DRAFT_KEY, null);
   }, []);
 
-  // Persist the finished session and clear the draft. HR stats optional.
+  // Persist the finished session and clear the draft. HR stats + extra fields
+  // (e.g. a recorded GPS track) optional.
   const finish = useCallback(
-    async (hr?: { avg?: number; max?: number }) => {
+    async (hr?: { avg?: number; max?: number }, extra?: Partial<StoredWorkout>) => {
       if (!draft) return;
       const durationSec = Math.floor(wElapsedMs(draft) / 1000);
       const row: StoredWorkout = {
@@ -242,6 +244,7 @@ export function useActiveWorkout() {
         source: "app",
         // Alternative sessions sync too — the script auto-creates a named block.
         synced: undefined,
+        ...extra,
       };
       await db.workouts.add(row);
       setDraft(null);

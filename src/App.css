@@ -538,6 +538,56 @@
   margin-top: 8px;
 }
 
+/* ---- GPS route (History) ---- */
+.gps-toggle-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.run-detail {
+  margin-bottom: 10px;
+}
+.run-map {
+  height: 240px;
+  width: 100%;
+  border-radius: var(--radius);
+  overflow: hidden;
+  border: 1px solid var(--line);
+}
+.run-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+.run-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  flex: 1 1 60px;
+  padding: 8px 6px;
+  background: var(--surface-2);
+  border-radius: 10px;
+}
+.run-stat-v {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.run-stat-l {
+  font-size: 10px;
+  color: var(--muted);
+}
+/* Leaflet controls/tiles sit on a dark surface — keep attribution legible. */
+.run-map .leaflet-control-attribution {
+  background: rgba(0, 0, 0, 0.6);
+  color: var(--muted);
+}
+.run-map .leaflet-control-attribution a {
+  color: var(--accent);
+}
+
 /* ---- Picture-in-Picture minimal view ---- */
 .pip-view {
   position: fixed;

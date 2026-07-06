@@ -6,6 +6,8 @@ import { daysAgo, daysAgoLabel, hhmmss, mmss, niceDate } from "../lib/format";
 import { cancelBreakNotification, scheduleBreakNotification, showReminder } from "../lib/notify";
 import { startGeofence, stopGeofence } from "../lib/geofence";
 import { onPipChange, setPipAutoEnter } from "../lib/pip";
+import { startTracking, stopTracking } from "../lib/tracker";
+import { Capacitor } from "@capacitor/core";
 import { syncWorkout } from "../lib/sheetSync";
 import { cadenceStatus, trainingDue } from "../lib/stats";
 import { useActiveWorkout } from "../lib/useActiveWorkout";
@@ -59,6 +61,9 @@ export function Today({
   const [showTools, setShowTools] = useState(false);
   const [finishAsk, setFinishAsk] = useState(false);
   const [pipMode, setPipMode] = useState(false);
+  const native = Capacitor.isNativePlatform();
+  const bpmRef = useRef<number | null>(null);
+  bpmRef.current = hr.bpm; // always-fresh HR for the GPS track stamps
   const lowSince = useRef<number | null>(null);
   const promptDeadline = useRef<number>(0);
   const hrEver = useRef(false); // did HR ever connect this session?
@@ -86,7 +91,8 @@ export function Today({
 
   // Actually save + sync + return to history.
   const finishNow = async () => {
-    const row = await finish(getHrStats());
+    const track = draft?.trackGps ? await stopTracking() : undefined;
+    const row = await finish(getHrStats(), track && track.length >= 2 ? { track } : undefined);
     if (row) {
       const res = await syncWorkout(row);
       if (res && !res.ok) {
@@ -140,6 +146,17 @@ export function Today({
       setPipAutoEnter(false);
     };
   }, [workoutActive]);
+
+  // GPS route recording: while an Alternative session has "Track GPS route" on,
+  // record the path (stamped with live HR). The track is attached on finish.
+  const trackGps = !!draft?.trackGps;
+  useEffect(() => {
+    if (!trackGps) return;
+    startTracking(() => bpmRef.current);
+    return () => {
+      stopTracking();
+    };
+  }, [trackGps]);
 
   // Leave-gym auto-end: while a (non-Alternative) workout runs, watch location in
   // the background; when you've clearly left the gym, save + finish the session.
@@ -354,6 +371,18 @@ export function Today({
             />
           </div>
         </>
+      )}
+
+      {draft.custom && native && (
+        <div className="pad gps-toggle-row">
+          <button
+            className={`mini ${draft.trackGps ? "active" : ""}`}
+            onClick={() => update((d) => ({ ...d, trackGps: !d.trackGps }))}
+          >
+            {draft.trackGps ? "◉ Tracking GPS route" : "○ Track GPS route"}
+          </button>
+          {draft.trackGps && <span className="muted tiny">Recording your route — map shows in History.</span>}
+        </div>
       )}
 
       <div className="exercise-list">

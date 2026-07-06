@@ -3,8 +3,10 @@
 import { useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db, type StoredWorkout } from "../db";
-import { daysAgoLabel, niceDate } from "../lib/format";
+import { daysAgoLabel, hhmmss, niceDate } from "../lib/format";
+import { computeRun, fmtDist, fmtPace } from "../lib/runStats";
 import { ExerciseCard } from "./ExerciseCard";
+import { RunMap } from "./RunMap";
 
 export function History() {
   const workouts = useLiveQuery(() => db.workouts.orderBy("date").reverse().toArray(), []);
@@ -38,6 +40,7 @@ export function History() {
 
               {isOpen && (
                 <div className="log-detail">
+                  {w.track && w.track.length >= 2 && <RunDetail track={w.track} />}
                   {w.note && <div className="log-note">📝 {w.note}</div>}
                   {w.exercises.map((e, i) => {
                     const sets = e.sets.filter((s) => s.weight != null);
@@ -88,6 +91,40 @@ export function History() {
       </div>
 
       {editing && <WorkoutEditor workout={editing} onClose={() => setEditing(null)} />}
+    </div>
+  );
+}
+
+function RunDetail({ track }: { track: NonNullable<StoredWorkout["track"]> }) {
+  const s = computeRun(track);
+  if (!s) return null;
+  return (
+    <div className="run-detail">
+      <RunMap track={track} />
+      <div className="run-stats">
+        <div className="run-stat">
+          <span className="run-stat-v">{fmtDist(s.distanceM)}</span>
+          <span className="run-stat-l">distance</span>
+        </div>
+        <div className="run-stat">
+          <span className="run-stat-v">{hhmmss(s.durationSec)}</span>
+          <span className="run-stat-l">time</span>
+        </div>
+        <div className="run-stat">
+          <span className="run-stat-v">{fmtPace(s.avgPaceSecPerKm)}</span>
+          <span className="run-stat-l">avg pace</span>
+        </div>
+        <div className="run-stat">
+          <span className="run-stat-v">{s.avgSpeedKmh.toFixed(1)}</span>
+          <span className="run-stat-l">km/h</span>
+        </div>
+        {s.avgHr != null && (
+          <div className="run-stat">
+            <span className="run-stat-v">♥ {s.avgHr}</span>
+            <span className="run-stat-l">avg / {s.maxHr} max</span>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

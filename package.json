@@ -1,7 +1,7 @@
 {
   "name": "gym-tracker",
   "private": true,
-  "version": "1.5.0",
+  "version": "1.6.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -19,10 +19,12 @@
     "@capgo/capacitor-updater": "^8.50.2",
     "dexie": "^4.4.4",
     "dexie-react-hooks": "^4.4.0",
+    "leaflet": "^1.9.4",
     "react": "^19.2.7",
     "react-dom": "^19.2.7"
   },
   "devDependencies": {
+    "@types/leaflet": "^1.9.21",
     "@types/node": "^24.13.2",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",

@@ -36,6 +36,14 @@ export type Workout = {
   source?: string; // origin tab name when imported, e.g. "2026"
 };
 
+// One recorded GPS sample during a tracked (cardio) session.
+export type TrackPoint = {
+  t: number; // epoch ms
+  lat: number;
+  lng: number;
+  hr?: number; // heart rate at this point, if a monitor was connected
+};
+
 // A reusable day definition (the split): what exercises, in what order, with schemes.
 export type DayTemplate = {
   id?: number;
