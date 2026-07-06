@@ -10,3 +10,7 @@ services:
       - TZ=Europe/Oslo
     ports:
       - "3060:80" # host:container — NPM proxies gym.defc0n.no to this host port
+    volumes:
+      # Persistent dir for the downloadable APK, so it survives image rebuilds.
+      # Served at gym.defc0n.no/dl/gym-tracker.apk
+      - /apps/gym-tracker-dl:/usr/share/nginx/html/dl
