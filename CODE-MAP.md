@@ -29,6 +29,7 @@ Vite 8 + React 19 + TypeScript, Dexie 4 (IndexedDB), `vite-plugin-pwa`, Web Blue
 - `src/App.tsx` — shell: bootstrap, tab nav, owns HR monitor + settings state, export/reset.
 
 ## Invariants / gotchas
+- **Service worker is web-only.** `main.tsx` registers the vite-plugin-pwa SW **only in the browser**; on the native app it *unregisters* any SW + clears caches. A precaching SW on native serves a stale bundle after a Capgo OTA (version badge bumps, UI doesn't) — the classic Capgo-vs-SW trap. `vite.config.ts` sets `injectRegister: null` so registration is manual. Never re-enable auto-registration.
 - The sheet is transposed: dates across columns, exercises as rows under a day-block header; each block has its OWN date columns. Two historical layouts (2018-19 two-col label vs 2021+ combined). Parser detects the date row and reads exercise values at those column indices.
 - `finish()` saves exercises with any set weight OR a note; prefilled (untouched) weights DO get saved by design (prefill = intended lifts).
 - HR only works over HTTPS (or localhost). For real phone use, deploy behind HTTPS (homelab NPM + Tailscale). Pair straps THROUGH the app, not OS Bluetooth.

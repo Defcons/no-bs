@@ -8,6 +8,10 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: "autoUpdate",
+      // We register the SW ourselves (in main.tsx) so we can skip it entirely on
+      // the native app, where a precaching SW would serve stale bundles and defeat
+      // the Capgo OTA updater.
+      injectRegister: null,
       includeAssets: ["favicon.svg"],
       // Don't let the SPA navigation fallback hijack direct file URLs (e.g. the
       // downloadable /gym-tracker.apk) — those should hit the network.
