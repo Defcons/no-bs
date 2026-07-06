@@ -1,7 +1,7 @@
-// Leave-gym auto-end. When a (non-Alternative) workout is running, watch location
-// via a background foreground-service (so it fires even with the screen off); when
-// you've been outside the gym radius for a sustained period, call onLeave() so the
-// session auto-finishes. Native (Android) only — a no-op on the web build.
+// Leave-area auto-end. When a (non-Alternative) workout starts, we anchor to where
+// you are on the first GPS fix; if you then move more than ~100 m away for 5 min
+// while the workout is running, onLeave() fires so the session auto-saves. Uses a
+// background foreground-service so it works with the screen off. Native only.
 import { Capacitor, registerPlugin } from "@capacitor/core";
 import { getSetting } from "../db";
 
@@ -26,15 +26,14 @@ interface BackgroundGeolocationPlugin {
     callback: (position?: BgLocation, error?: BgError) => void,
   ): Promise<string>;
   removeWatcher(options: { id: string }): Promise<void>;
-  openSettings(): Promise<void>;
 }
 
 const BackgroundGeolocation = registerPlugin<BackgroundGeolocationPlugin>("BackgroundGeolocation");
 
-export type GymLocation = { lat: number; lng: number };
+type LatLng = { lat: number; lng: number };
 
 // Great-circle distance in metres.
-export function distanceM(a: GymLocation, b: GymLocation): number {
+export function distanceM(a: LatLng, b: LatLng): number {
   const R = 6371000;
   const toRad = (d: number) => (d * Math.PI) / 180;
   const dLat = toRad(b.lat - a.lat);
@@ -45,89 +44,44 @@ export function distanceM(a: GymLocation, b: GymLocation): number {
   return 2 * R * Math.asin(Math.sqrt(s));
 }
 
-export async function getGym(): Promise<{ gym: GymLocation | null; radius: number; enabled: boolean }> {
-  const lat = await getSetting<number>("gymLat", NaN);
-  const lng = await getSetting<number>("gymLng", NaN);
-  return {
-    gym: Number.isFinite(lat) && Number.isFinite(lng) ? { lat, lng } : null,
-    radius: await getSetting<number>("gymRadiusM", 150),
-    enabled: await getSetting<boolean>("autoEndOnLeave", false),
-  };
-}
-
-// One-shot: grab the current position (to save as the gym location). Resolves on
-// the first fix; rejects on permission denial or timeout.
-export function captureLocation(): Promise<GymLocation> {
-  if (!Capacitor.isNativePlatform()) return Promise.reject(new Error("Native only"));
-  return new Promise((resolve, reject) => {
-    let id = "";
-    let settled = false;
-    const timeout = setTimeout(() => {
-      if (!settled) {
-        settled = true;
-        if (id) BackgroundGeolocation.removeWatcher({ id }).catch(() => {});
-        reject(new Error("Timed out getting a GPS fix — try again outdoors."));
-      }
-    }, 30000);
-    BackgroundGeolocation.addWatcher(
-      { requestPermissions: true, stale: false, distanceFilter: 0 },
-      (position, error) => {
-        if (settled) return;
-        if (error) {
-          settled = true;
-          clearTimeout(timeout);
-          if (id) BackgroundGeolocation.removeWatcher({ id }).catch(() => {});
-          reject(new Error(error.code === "NOT_AUTHORIZED" ? "Location permission denied." : error.message));
-          return;
-        }
-        if (position) {
-          settled = true;
-          clearTimeout(timeout);
-          if (id) BackgroundGeolocation.removeWatcher({ id }).catch(() => {});
-          resolve({ lat: position.latitude, lng: position.longitude });
-        }
-      },
-    ).then((wid) => {
-      id = wid;
-      if (settled) BackgroundGeolocation.removeWatcher({ id }).catch(() => {});
-    });
-  });
-}
-
-const EXIT_GRACE_MS = 2 * 60 * 1000; // must be clearly gone, not a GPS blip
+const RADIUS_M = 100; // how far counts as "left the area"
+const EXIT_GRACE_MS = 5 * 60 * 1000; // ...sustained for this long
+const ANCHOR_MAX_ACCURACY_M = 75; // ignore junk fixes when anchoring
 
 let watcherId: string | null = null;
 
-// Begin watching. Fires onLeave() at most once, after you've been confirmed at the
-// gym and then outside the radius for EXIT_GRACE_MS. Safe to call when not
-// configured (does nothing). Returns whether a watcher actually started.
+// Begin watching for an active workout. Anchors to the first decent fix, then
+// fires onLeave() once you've been >RADIUS_M away for EXIT_GRACE_MS. No-op when the
+// toggle is off or not on native. Returns whether a watcher actually started.
 export async function startGeofence(onLeave: () => void): Promise<boolean> {
   if (!Capacitor.isNativePlatform() || watcherId) return false;
-  const { gym, radius, enabled } = await getGym();
-  if (!enabled || !gym) return false;
+  if (!(await getSetting<boolean>("autoEndOnLeave", false))) return false;
 
-  let wasInside = false; // don't auto-end until we've actually detected being there
+  let anchor: LatLng | null = null;
   let outsideSince: number | null = null;
   let fired = false;
 
   watcherId = await BackgroundGeolocation.addWatcher(
     {
       backgroundTitle: "Gym Tracker",
-      backgroundMessage: "Watching so your workout auto-saves when you leave the gym.",
+      backgroundMessage: "Auto-saves your workout when you leave the area.",
       requestPermissions: true,
       stale: false,
       distanceFilter: 25,
     },
     (position, error) => {
       if (error || !position || fired) return;
-      const d = distanceM(gym, { lat: position.latitude, lng: position.longitude });
-      // Count as "outside" only when clearly beyond the radius given GPS accuracy.
-      const outside = d - position.accuracy > radius;
-      const inside = d + position.accuracy < radius;
+      const here = { lat: position.latitude, lng: position.longitude };
+      if (!anchor) {
+        if (position.accuracy <= ANCHOR_MAX_ACCURACY_M) anchor = here; // lock the start spot
+        return;
+      }
+      const d = distanceM(anchor, here);
+      const outside = d - position.accuracy > RADIUS_M;
+      const inside = d + position.accuracy < RADIUS_M;
       if (inside) {
-        wasInside = true;
         outsideSince = null;
-      } else if (outside && wasInside) {
+      } else if (outside) {
         outsideSince ??= Date.now();
         if (Date.now() - outsideSince >= EXIT_GRACE_MS) {
           fired = true;

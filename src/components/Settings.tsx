@@ -3,12 +3,10 @@
 import { useEffect, useState } from "react";
 import { Capacitor } from "@capacitor/core";
 import { getSetting, setSetting } from "../db";
-import { captureLocation } from "../lib/geofence";
 import { hrAvailable } from "../lib/hr";
 import { notificationsSupported, requestNotifications } from "../lib/notify";
 import { importFromSheet, pendingCount, syncPending, testSync } from "../lib/sheetSync";
 import type { BwEntry } from "../lib/standards";
-import { DEFAULT_SYNC_SECRET, DEFAULT_SYNC_URL } from "../lib/syncConfig";
 import { checkAndApplyUpdate, currentVersion, updatesSupported } from "../lib/update";
 
 type Props = {
@@ -54,55 +52,26 @@ export function Settings({
   onExport,
   onReset,
 }: Props) {
-  const [syncUrl, setSyncUrl] = useState("");
-  const [syncSecret, setSyncSecret] = useState("");
   const [pending, setPending] = useState(0);
   const [status, setStatus] = useState<string>("");
   const [reminders, setReminders] = useState(false);
   const [appVersion, setAppVersion] = useState("");
   const [updateMsg, setUpdateMsg] = useState("");
   const [updating, setUpdating] = useState(false);
-  const [gym, setGym] = useState<{ lat: number; lng: number } | null>(null);
-  const [gymRadius, setGymRadius] = useState(150);
   const [autoEndLeave, setAutoEndLeave] = useState(false);
-  const [geoMsg, setGeoMsg] = useState("");
   const native = Capacitor.isNativePlatform();
 
   useEffect(() => {
-    getSetting<string>("sheetSyncUrl", "").then((v) => setSyncUrl(v || DEFAULT_SYNC_URL));
-    getSetting<string>("sheetSyncSecret", "").then((v) => setSyncSecret(v || DEFAULT_SYNC_SECRET));
     getSetting<boolean>("remindersEnabled", false).then(setReminders);
+    getSetting<boolean>("autoEndOnLeave", false).then(setAutoEndLeave);
     pendingCount().then(setPending);
     currentVersion().then(setAppVersion);
-    (async () => {
-      const lat = await getSetting<number>("gymLat", NaN);
-      const lng = await getSetting<number>("gymLng", NaN);
-      if (Number.isFinite(lat) && Number.isFinite(lng)) setGym({ lat, lng });
-      setGymRadius(await getSetting<number>("gymRadiusM", 150));
-      setAutoEndLeave(await getSetting<boolean>("autoEndOnLeave", false));
-    })();
   }, []);
 
-  const captureGym = async () => {
-    setGeoMsg("Getting a GPS fix…");
-    try {
-      const loc = await captureLocation();
-      await setSetting("gymLat", loc.lat);
-      await setSetting("gymLng", loc.lng);
-      setGym(loc);
-      setGeoMsg(`Gym set ✓ (${loc.lat.toFixed(5)}, ${loc.lng.toFixed(5)})`);
-    } catch (e) {
-      setGeoMsg((e as Error).message);
-    }
-  };
   const toggleAutoEndLeave = () => {
     const v = !autoEndLeave;
     setAutoEndLeave(v);
     setSetting("autoEndOnLeave", v);
-  };
-  const changeRadius = (v: number) => {
-    setGymRadius(v);
-    setSetting("gymRadiusM", v);
   };
 
   const doUpdate = async () => {
@@ -127,15 +96,6 @@ export function Settings({
     } else {
       alert("Notifications are blocked. Enable them for this site in your browser settings, then try again.");
     }
-  };
-
-  const saveUrl = (v: string) => {
-    setSyncUrl(v);
-    setSetting("sheetSyncUrl", v.trim());
-  };
-  const saveSecret = (v: string) => {
-    setSyncSecret(v);
-    setSetting("sheetSyncSecret", v.trim());
   };
 
   const doTest = async () => {
@@ -166,281 +126,268 @@ export function Settings({
     <div className="pad settings">
       <h2>Settings</h2>
 
-      <div className="setting">
-        <label>App update</label>
-        {updatesSupported() ? (
-          <>
-            <div className="row">
-              <button className="mini" onClick={doUpdate} disabled={updating}>
-                {updating ? "Updating…" : "Check for updates"}
+      <details className="settings-group" open>
+        <summary>Workout</summary>
+
+        <div className="setting">
+          <label>Default rest timer</label>
+          <div className="seg">
+            {[60, 90, 120, 150, 180].map((s) => (
+              <button key={s} className={restDefaultSec === s ? "active" : ""} onClick={() => setRestDefaultSec(s)}>
+                {s}s
               </button>
-              <span className="muted tiny">
-                {appVersion ? (appVersion.includes("+") ? `v${appVersion.split("+")[0]} · ${appVersion.split("+")[1]}` : appVersion) : "…"}
-              </span>
-            </div>
-            {updateMsg && <p className="muted tiny">{updateMsg}</p>}
+            ))}
+          </div>
+        </div>
+
+        <div className="setting">
+          <label>Weight step (± buttons)</label>
+          <div className="seg">
+            {[1.25, 2.5, 5].map((s) => (
+              <button key={s} className={weightStep === s ? "active" : ""} onClick={() => setWeightStep(s)}>
+                {String(s).replace(".", ",")} kg
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="setting">
+          <label>Weekly goal (workouts / week)</label>
+          <div className="seg">
+            {[3, 4, 5, 6].map((s) => (
+              <button key={s} className={daysPerWeek === s ? "active" : ""} onClick={() => setDaysPerWeek(s)}>
+                {s}×
+              </button>
+            ))}
+          </div>
+          <p className="muted tiny">Colors the “days since last workout” (green/orange/red) and drives reminders.</p>
+        </div>
+      </details>
+
+      <details className="settings-group">
+        <summary>Heart rate &amp; auto-end</summary>
+
+        <div className="setting">
+          <label>Heart rate</label>
+          {!hrAvailable() ? (
             <p className="muted tiny">
-              Fetches the latest version over-the-air and reloads — no reinstall. (New device features occasionally
-              still need a fresh APK.)
+              Web Bluetooth isn't available in this browser. Use Chrome on Android over HTTPS. Pair your Powerbeats Pro 2
+              (enable HR in the Beats app) or a BLE chest strap through this app — not via the phone's Bluetooth settings.
             </p>
-          </>
-        ) : (
-          <p className="muted tiny">The web app updates itself automatically. This button is for the installed Android app.</p>
-        )}
-      </div>
-
-      <div className="setting">
-        <label>Default rest timer</label>
-        <div className="seg">
-          {[60, 90, 120, 150, 180].map((s) => (
-            <button key={s} className={restDefaultSec === s ? "active" : ""} onClick={() => setRestDefaultSec(s)}>
-              {s}s
+          ) : hr.connected ? (
+            <div className="row">
+              <span className="ok">Connected · {hr.bpm ?? "…"} bpm</span>
+              <button className="mini" onClick={hr.disconnect}>
+                Disconnect
+              </button>
+            </div>
+          ) : (
+            <button className="mini" onClick={hr.connect}>
+              Connect HR device
             </button>
-          ))}
-        </div>
-      </div>
-
-      <div className="setting">
-        <label>Weight step (± buttons)</label>
-        <div className="seg">
-          {[1.25, 2.5, 5].map((s) => (
-            <button key={s} className={weightStep === s ? "active" : ""} onClick={() => setWeightStep(s)}>
-              {String(s).replace(".", ",")} kg
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div className="setting">
-        <label>Weekly goal (workouts / week)</label>
-        <div className="seg">
-          {[3, 4, 5, 6].map((s) => (
-            <button key={s} className={daysPerWeek === s ? "active" : ""} onClick={() => setDaysPerWeek(s)}>
-              {s}×
-            </button>
-          ))}
-        </div>
-        <p className="muted tiny">Colors the “days since last workout” (green/orange/red) and drives reminders.</p>
-      </div>
-
-      <div className="setting">
-        <label>Body profile (for strength ratings)</label>
-        <div className="row">
-          <input
-            type="text"
-            inputMode="decimal"
-            className="bw-input"
-            value={bodyweightKg || ""}
-            placeholder="kg"
-            onChange={(e) => {
-              const n = parseFloat(e.target.value.replace(",", "."));
-              setBodyweightKg(Number.isFinite(n) ? n : 0);
-            }}
-          />
-          <span className="muted">kg</span>
-          <input
-            type="text"
-            inputMode="numeric"
-            className="bw-input"
-            value={age || ""}
-            placeholder="age"
-            onChange={(e) => {
-              const n = parseInt(e.target.value, 10);
-              setAge(Number.isFinite(n) ? n : 0);
-            }}
-          />
-          <span className="muted">yrs</span>
-        </div>
-        <p className="muted tiny">
-          Rates your key lifts against strength standards, adjusted for your bodyweight (allometric) and age.
-        </p>
-      </div>
-
-      <div className="setting">
-        <label>Bodyweight by year</label>
-        <p className="muted tiny">
-          Old records are rated against what you weighed back then. Add past bodyweights; your current weight above
-          covers this year onward.
-        </p>
-        {bwHistory.map((e, i) => (
-          <div className="row" key={i} style={{ marginTop: 8 }}>
+          )}
+          <div className="row" style={{ marginTop: 10 }}>
+            <span className="muted tiny">Auto-end if HR stays below</span>
             <input
               type="text"
               inputMode="numeric"
               className="bw-input"
-              value={e.year || ""}
-              placeholder="year"
-              onChange={(ev) => {
-                const y = parseInt(ev.target.value, 10);
-                setBwHistory(bwHistory.map((x, idx) => (idx === i ? { ...x, year: Number.isFinite(y) ? y : 0 } : x)));
+              value={hrLowThreshold || ""}
+              placeholder="bpm"
+              onChange={(e) => {
+                const n = parseInt(e.target.value, 10);
+                setHrLowThreshold(Number.isFinite(n) ? n : 0);
               }}
             />
-            <span className="muted">→</span>
+            <span className="muted tiny">bpm for 10 min</span>
+          </div>
+          <p className="muted tiny">
+            While HR is connected: if it stays below this for 10 min, the app asks if you're still working out and
+            auto-ends after 5 more min with no reply. Set to 0 to disable.
+          </p>
+        </div>
+
+        {native && (
+          <div className="setting">
+            <label>Auto-end when I leave</label>
+            <button className={`mini ${autoEndLeave ? "active" : ""}`} onClick={toggleAutoEndLeave}>
+              {autoEndLeave ? "On — tap to disable" : "Enable"}
+            </button>
+            <p className="muted tiny">
+              The app remembers where you are when a workout starts. If you move ~100 m away for 5 min while it's
+              running, the session auto-saves. Alternative sessions (e.g. a run) are excluded. Uses a background
+              location service while you train — grant location “Allow all the time”.
+            </p>
+          </div>
+        )}
+      </details>
+
+      <details className="settings-group">
+        <summary>Body &amp; strength</summary>
+
+        <div className="setting">
+          <label>Body profile (for strength ratings)</label>
+          <div className="row">
             <input
               type="text"
               inputMode="decimal"
               className="bw-input"
-              value={e.kg || ""}
+              value={bodyweightKg || ""}
               placeholder="kg"
-              onChange={(ev) => {
-                const k = parseFloat(ev.target.value.replace(",", "."));
-                setBwHistory(bwHistory.map((x, idx) => (idx === i ? { ...x, kg: Number.isFinite(k) ? k : 0 } : x)));
+              onChange={(e) => {
+                const n = parseFloat(e.target.value.replace(",", "."));
+                setBodyweightKg(Number.isFinite(n) ? n : 0);
               }}
             />
             <span className="muted">kg</span>
-            <button className="mini danger" onClick={() => setBwHistory(bwHistory.filter((_, idx) => idx !== i))}>
-              ✕
-            </button>
-          </div>
-        ))}
-        <button
-          className="mini"
-          style={{ marginTop: 8 }}
-          onClick={() => setBwHistory([...bwHistory, { year: new Date().getFullYear() - 1, kg: 0 }])}
-        >
-          ＋ Add year
-        </button>
-      </div>
-
-      <div className="setting">
-        <label>Workout reminders</label>
-        {!notificationsSupported() ? (
-          <p className="muted tiny">Notifications aren't supported in this browser.</p>
-        ) : (
-          <button className={`mini ${reminders ? "active" : ""}`} onClick={toggleReminders}>
-            {reminders ? "On — tap to disable" : "Enable reminders"}
-          </button>
-        )}
-        <p className="muted tiny">
-          Nudges you to train when you're behind your goal. Fires when you open the app; a guaranteed scheduled push
-          (even when the app is closed) would need a small server — ask if you want that.
-        </p>
-      </div>
-
-      <div className="setting">
-        <label>Heart rate</label>
-        {!hrAvailable() ? (
-          <p className="muted tiny">
-            Web Bluetooth isn't available in this browser. Use Chrome on Android over HTTPS. Pair your Powerbeats Pro 2
-            (enable HR in the Beats app) or a BLE chest strap through this app — not via the phone's Bluetooth settings.
-          </p>
-        ) : hr.connected ? (
-          <div className="row">
-            <span className="ok">Connected · {hr.bpm ?? "…"} bpm</span>
-            <button className="mini" onClick={hr.disconnect}>
-              Disconnect
-            </button>
-          </div>
-        ) : (
-          <button className="mini" onClick={hr.connect}>
-            Connect HR device
-          </button>
-        )}
-        <div className="row" style={{ marginTop: 10 }}>
-          <span className="muted tiny">Auto-end if HR stays below</span>
-          <input
-            type="text"
-            inputMode="numeric"
-            className="bw-input"
-            value={hrLowThreshold || ""}
-            placeholder="bpm"
-            onChange={(e) => {
-              const n = parseInt(e.target.value, 10);
-              setHrLowThreshold(Number.isFinite(n) ? n : 0);
-            }}
-          />
-          <span className="muted tiny">bpm for 10 min</span>
-        </div>
-        <p className="muted tiny">
-          While HR is connected: if it stays below this for 10 min, the app asks if you're still working out and
-          auto-ends after 5 more min with no reply. Set to 0 to disable.
-        </p>
-      </div>
-
-      {native && (
-        <div className="setting">
-          <label>Leave-gym auto-end</label>
-          <button className={`mini ${autoEndLeave ? "active" : ""}`} onClick={toggleAutoEndLeave}>
-            {autoEndLeave ? "On — tap to disable" : "Enable"}
-          </button>
-          <div className="row" style={{ marginTop: 10 }}>
-            <button className="mini" onClick={captureGym}>
-              {gym ? "Update gym location" : "Set gym location (here)"}
-            </button>
-            <span className="muted tiny">radius</span>
             <input
               type="text"
               inputMode="numeric"
               className="bw-input"
-              value={gymRadius || ""}
-              placeholder="m"
+              value={age || ""}
+              placeholder="age"
               onChange={(e) => {
                 const n = parseInt(e.target.value, 10);
-                changeRadius(Number.isFinite(n) ? n : 0);
+                setAge(Number.isFinite(n) ? n : 0);
               }}
             />
-            <span className="muted tiny">m</span>
+            <span className="muted">yrs</span>
           </div>
-          {geoMsg && <p className="muted tiny">{geoMsg}</p>}
           <p className="muted tiny">
-            Stand at your gym and tap “Set gym location”. When a (non-Alternative) workout is running and you walk more
-            than {gymRadius}m away for 2 min, the session auto-saves. Uses a background location service while you train.
+            Rates your key lifts against strength standards, adjusted for your bodyweight (allometric) and age.
           </p>
         </div>
-      )}
 
-      <div className="setting">
-        <label>Google Sheets sync</label>
-        <p className="muted tiny">
-          Pre-configured on every device — finished workouts are written back to your sheet automatically. Only change
-          these if you re-deploy the Apps Script.
-        </p>
-        <input
-          type="text"
-          className="full"
-          placeholder="Apps Script Web App URL (…/exec)"
-          value={syncUrl}
-          onChange={(e) => saveUrl(e.target.value)}
-        />
-        <input
-          type="text"
-          className="full"
-          placeholder="Shared secret"
-          value={syncSecret}
-          onChange={(e) => saveSecret(e.target.value)}
-        />
-        <div className="row">
-          <button className="mini" onClick={doTest}>
-            Test connection
-          </button>
-          <button className="mini" onClick={doSyncNow}>
-            Sync now{pending ? ` (${pending} pending)` : ""}
-          </button>
-          <button className="mini" onClick={doImport}>
-            Import from sheet ↓
+        <div className="setting">
+          <label>Bodyweight by year</label>
+          <p className="muted tiny">
+            Old records are rated against what you weighed back then. Add past bodyweights; your current weight above
+            covers this year onward. Synced to the sheet's “Bodyweight” tab.
+          </p>
+          {bwHistory.map((e, i) => (
+            <div className="row" key={i} style={{ marginTop: 8 }}>
+              <input
+                type="text"
+                inputMode="numeric"
+                className="bw-input"
+                value={e.year || ""}
+                placeholder="year"
+                onChange={(ev) => {
+                  const y = parseInt(ev.target.value, 10);
+                  setBwHistory(bwHistory.map((x, idx) => (idx === i ? { ...x, year: Number.isFinite(y) ? y : 0 } : x)));
+                }}
+              />
+              <span className="muted">→</span>
+              <input
+                type="text"
+                inputMode="decimal"
+                className="bw-input"
+                value={e.kg || ""}
+                placeholder="kg"
+                onChange={(ev) => {
+                  const k = parseFloat(ev.target.value.replace(",", "."));
+                  setBwHistory(bwHistory.map((x, idx) => (idx === i ? { ...x, kg: Number.isFinite(k) ? k : 0 } : x)));
+                }}
+              />
+              <span className="muted">kg</span>
+              <button className="mini danger" onClick={() => setBwHistory(bwHistory.filter((_, idx) => idx !== i))}>
+                ✕
+              </button>
+            </div>
+          ))}
+          <button
+            className="mini"
+            style={{ marginTop: 8 }}
+            onClick={() => setBwHistory([...bwHistory, { year: new Date().getFullYear() - 1, kg: 0 }])}
+          >
+            ＋ Add year
           </button>
         </div>
-        {status && <p className="muted tiny">{status}</p>}
-        <p className="muted tiny">
-          “Import from sheet” pulls in any workouts that are in your sheet but missing on this device (e.g. logged
-          elsewhere). It only adds — it never overwrites or deletes.
-        </p>
-      </div>
+      </details>
 
-      <div className="setting">
-        <label>Data</label>
-        <div className="row">
-          <a className="mini linkbtn" href={SHEET_URL} target="_blank" rel="noopener noreferrer">
-            Open Google Sheet ↗
-          </a>
-          <button className="mini" onClick={onExport}>
-            Export backup (JSON)
-          </button>
-          <button className="mini danger" onClick={onReset}>
-            Reset app data
-          </button>
+      <details className="settings-group">
+        <summary>Sheet &amp; data</summary>
+
+        <div className="setting">
+          <label>Google Sheets sync</label>
+          <p className="muted tiny">
+            Pre-configured on every device — finished workouts (sets, note, mood, time, avg HR) are written back to your
+            sheet automatically.
+          </p>
+          <div className="row">
+            <button className="mini" onClick={doTest}>
+              Test connection
+            </button>
+            <button className="mini" onClick={doSyncNow}>
+              Sync now{pending ? ` (${pending} pending)` : ""}
+            </button>
+            <button className="mini" onClick={doImport}>
+              Import from sheet ↓
+            </button>
+          </div>
+          {status && <p className="muted tiny">{status}</p>}
+          <p className="muted tiny">
+            “Import from sheet” pulls in any workouts in your sheet but missing on this device. It only adds — never
+            overwrites or deletes.
+          </p>
         </div>
-      </div>
+
+        <div className="setting">
+          <label>Backup</label>
+          <div className="row">
+            <a className="mini linkbtn" href={SHEET_URL} target="_blank" rel="noopener noreferrer">
+              Open Google Sheet ↗
+            </a>
+            <button className="mini" onClick={onExport}>
+              Export backup (JSON)
+            </button>
+            <button className="mini danger" onClick={onReset}>
+              Reset app data
+            </button>
+          </div>
+        </div>
+      </details>
+
+      <details className="settings-group">
+        <summary>Reminders &amp; updates</summary>
+
+        <div className="setting">
+          <label>Workout reminders</label>
+          {!notificationsSupported() ? (
+            <p className="muted tiny">Notifications aren't supported in this browser.</p>
+          ) : (
+            <button className={`mini ${reminders ? "active" : ""}`} onClick={toggleReminders}>
+              {reminders ? "On — tap to disable" : "Enable reminders"}
+            </button>
+          )}
+          <p className="muted tiny">
+            Nudges you to train when you're behind your goal. Fires when you open the app.
+          </p>
+        </div>
+
+        <div className="setting">
+          <label>App update</label>
+          {updatesSupported() ? (
+            <>
+              <div className="row">
+                <button className="mini" onClick={doUpdate} disabled={updating}>
+                  {updating ? "Updating…" : "Check for updates"}
+                </button>
+                <span className="muted tiny">
+                  {appVersion ? (appVersion.includes("+") ? `v${appVersion.split("+")[0]} · ${appVersion.split("+")[1]}` : appVersion) : "…"}
+                </span>
+              </div>
+              {updateMsg && <p className="muted tiny">{updateMsg}</p>}
+              <p className="muted tiny">
+                Fetches the latest version over-the-air and reloads — no reinstall. (New device features occasionally
+                still need a fresh APK.)
+              </p>
+            </>
+          ) : (
+            <p className="muted tiny">The web app updates itself automatically. This button is for the installed Android app.</p>
+          )}
+        </div>
+      </details>
     </div>
   );
 }

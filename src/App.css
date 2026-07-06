@@ -586,7 +586,10 @@
   grid-template-columns: 18px minmax(0, 1fr) auto auto 28px;
   align-items: center;
   gap: 3px;
-  border-radius: 9px;
+  /* Inner padding gives the done tint / active frame room around the fields so the
+     ring never sits on top of the buttons. */
+  padding: 4px 7px;
+  border-radius: 12px;
   transition: background-color 0.25s ease;
 }
 .setrow.done {
@@ -595,7 +598,6 @@
 .setrow.active {
   background: color-mix(in srgb, var(--accent) 13%, transparent);
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 60%, transparent);
-  border-radius: 10px;
 }
 .setrow.active .set-badge {
   background: color-mix(in srgb, var(--accent) 32%, var(--surface-2));
@@ -968,6 +970,47 @@ input[type="range"] {
 }
 
 /* ---- Settings ---- */
+.settings-group {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  margin-bottom: 10px;
+}
+.settings-group > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+.settings-group > summary::-webkit-details-marker {
+  display: none;
+}
+.settings-group > summary::after {
+  content: "▾";
+  color: var(--muted);
+  font-size: 13px;
+  transition: transform 0.2s ease;
+}
+.settings-group[open] > summary::after {
+  transform: rotate(180deg);
+}
+.settings-group[open] > summary {
+  border-bottom: 1px solid var(--line);
+}
+.settings-group .setting {
+  padding: 0 14px;
+}
+.settings-group .setting:first-of-type {
+  padding-top: 16px;
+}
+.settings-group .setting:last-child {
+  margin-bottom: 0;
+  padding-bottom: 16px;
+}
 .setting {
   margin-bottom: 22px;
 }

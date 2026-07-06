@@ -22,8 +22,15 @@ export function niceDate(iso: string): string {
   return d.toLocaleDateString(undefined, { day: "2-digit", month: "short", year: "numeric" });
 }
 
+// Whole calendar days between that date and today, in LOCAL time. (Date.parse of a
+// "yyyy-mm-dd" string is UTC midnight, so subtracting epochs and rounding gave an
+// off-by-one in timezones ahead of UTC — e.g. yesterday reading as "2 days ago".)
 export function daysAgo(iso: string): number {
-  return Math.max(0, Math.round((Date.now() - Date.parse(iso.slice(0, 10))) / 86400000));
+  const [y, m, d] = iso.slice(0, 10).split("-").map(Number);
+  const then = new Date(y, m - 1, d).getTime();
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  return Math.max(0, Math.round((today - then) / 86400000));
 }
 
 // "today" / "yesterday" / "N days ago"
@@ -33,7 +40,7 @@ export function daysAgoLabel(iso: string): string {
 }
 
 export function ago(iso: string): string {
-  const days = Math.round((Date.now() - Date.parse(iso.slice(0, 10))) / 86400000);
+  const days = daysAgo(iso);
   if (days <= 0) return "today";
   if (days === 1) return "yesterday";
   if (days < 30) return `${days}d ago`;

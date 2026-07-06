@@ -31,6 +31,8 @@ export type Workout = {
   note?: string; // per-session day note ("Note" row)
   moodBefore?: number; // parsed from the "Mood" row ("before→after")
   moodAfter?: number;
+  durationSec?: number; // parsed from the "Time" row ("h:mm:ss")
+  avgHr?: number; // parsed from the "Avg HR" row
   source?: string; // origin tab name when imported, e.g. "2026"
 };
 

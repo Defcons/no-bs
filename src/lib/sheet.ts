@@ -109,6 +109,8 @@ export function parseCell(raw: string): { sets: SetEntry[]; skipped: boolean } {
 
 const NOTE_LABELS = new Set(["note", "notes", "notat", "notater"]);
 const MOOD_LABELS = new Set(["mood", "feeling", "humør", "form"]);
+const TIME_LABELS = new Set(["time", "tid", "duration", "varighet"]);
+const HR_LABELS = new Set(["avg hr", "hr", "puls", "avg puls", "heart rate", "snittpuls"]);
 
 // "6→8" / "6->8" / "6-8" → { before: 6, after: 8 }. Single number → before only.
 function parseMood(txt: string): { before?: number; after?: number } {
@@ -116,6 +118,19 @@ function parseMood(txt: string): { before?: number; after?: number } {
   if (m) return { before: +m[1], after: +m[2] };
   const one = txt.match(/\d+/);
   return one ? { before: +one[0] } : {};
+}
+
+// "1:05:00" / "45:30" / "65 min" → seconds.
+function parseDuration(txt: string): number | null {
+  const parts = txt.trim().match(/^(\d+):(\d{1,2})(?::(\d{1,2}))?$/);
+  if (parts) {
+    const a = +parts[1];
+    const b = +parts[2];
+    const c = parts[3] != null ? +parts[3] : null;
+    return c != null ? a * 3600 + b * 60 + c : a * 60 + b; // h:mm:ss or mm:ss
+  }
+  const min = txt.match(/(\d+)\s*min/i);
+  return min ? +min[1] * 60 : null;
 }
 
 // Parse one year's sheet (rows) into a list of workouts (one per block-column session).
@@ -178,6 +193,24 @@ export function parseSheet(rows: string[][], source: string): Workout[] {
           const { before, after } = parseMood(txt);
           if (before != null) w.moodBefore = before;
           if (after != null) w.moodAfter = after;
+        }
+        continue;
+      }
+
+      if (TIME_LABELS.has(low0)) {
+        for (const [col, date] of colDate) {
+          const secs = parseDuration((r[col] ?? "").trim());
+          const w = workouts.get(key(dayName, date));
+          if (w && secs != null) w.durationSec = secs;
+        }
+        continue;
+      }
+
+      if (HR_LABELS.has(low0)) {
+        for (const [col, date] of colDate) {
+          const n = parseInt((r[col] ?? "").trim(), 10);
+          const w = workouts.get(key(dayName, date));
+          if (w && Number.isFinite(n)) w.avgHr = n;
         }
         continue;
       }

@@ -98,6 +98,15 @@ function moodStr(row: StoredWorkout): string {
   return `${row.moodBefore ?? ""}→${row.moodAfter ?? ""}`;
 }
 
+// Seconds → "1:05:00" (h:mm:ss, hours always shown for an unambiguous sheet cell).
+function durationStr(sec?: number): string {
+  if (!sec || sec <= 0) return "";
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  const s = Math.floor(sec % 60);
+  return `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+}
+
 export async function syncWorkout(row: StoredWorkout): Promise<SyncResult | null> {
   const { url, secret } = await config();
   if (!url) return null; // sync not set up — silently skip
@@ -108,6 +117,8 @@ export async function syncWorkout(row: StoredWorkout): Promise<SyncResult | null
     date: fmtDate(row.date),
     note: row.note ?? "",
     mood: moodStr(row),
+    time: durationStr(row.durationSec),
+    hr: row.avgHr != null ? String(row.avgHr) : "",
     allowCreate: true, // Alternative/free-form sessions → auto-create a named block
     exercises: row.exercises.map((e) => ({ name: e.name, cell: cellFor(e) })).filter((e) => e.cell !== ""),
   };
@@ -174,6 +185,8 @@ export async function importFromSheet(): Promise<{ added: number; bwYears?: numb
         note: w.note,
         moodBefore: w.moodBefore,
         moodAfter: w.moodAfter,
+        durationSec: w.durationSec,
+        avgHr: w.avgHr,
         source: `sheet:${w.source ?? "?"}`,
         synced: true,
       });

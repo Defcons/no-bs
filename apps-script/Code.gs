@@ -72,22 +72,18 @@ function doPost(e) {
     sheet.getRange(headerRow + 1, col + 1).setValue(body.date);
 
     // Walk the block's rows until the next block header (a row with date cells).
+    // Track the per-session meta rows (Note / Mood / Time / Avg HR) as we go.
     var written = [];
-    var noteRow = -1;
-    var moodRow = -1;
+    var metaRow = { Note: -1, Mood: -1, Time: -1, "Avg HR": -1 };
     var lastBlockRow = headerRow; // last row belonging to this block
     var doneNames = {};
     for (var rr = headerRow + 1; rr < data.length; rr++) {
       if (rowHasDate(data[rr])) break; // reached the next day-block header
       lastBlockRow = rr;
       var label = String(data[rr][0]).trim();
-      var low = label.toLowerCase();
-      if (low === "note" || low === "notes") {
-        if (noteRow < 0) noteRow = rr;
-        continue;
-      }
-      if (low === "mood" || low === "feeling") {
-        if (moodRow < 0) moodRow = rr;
+      var kind = metaKind(label);
+      if (kind) {
+        if (metaRow[kind] < 0) metaRow[kind] = rr;
         continue;
       }
       if (!label) continue;
@@ -103,24 +99,28 @@ function doPost(e) {
       }
     }
 
-    var noteWritten = false;
-    if (body.note && noteRow >= 0) {
-      sheet.getRange(noteRow + 1, col + 1).setValue(body.note);
-      noteWritten = true;
-    }
-
-    // Mood row ("before→after"). Write into the existing row, or insert one right
-    // after the Note row (else at the end of the block) if the sheet has none yet.
-    var moodWritten = false;
-    if (body.mood) {
-      if (moodRow < 0) {
-        var after = noteRow >= 0 ? noteRow : lastBlockRow; // 0-based
-        sheet.insertRowAfter(after + 1);
-        moodRow = after + 1; // the newly inserted 0-based row index
-        sheet.getRange(moodRow + 1, 1).setValue("Mood");
+    // Write each meta value into its row, appending the row at the block's end if
+    // the sheet doesn't have one yet (self-healing — later sessions reuse it).
+    var metas = [
+      { label: "Note", value: body.note },
+      { label: "Mood", value: body.mood },
+      { label: "Time", value: body.time },
+      { label: "Avg HR", value: body.hr },
+    ];
+    var metaWritten = {};
+    var insertAt = lastBlockRow; // 0-based; new meta rows go after here
+    for (var mi = 0; mi < metas.length; mi++) {
+      var m = metas[mi];
+      if (!m.value) continue;
+      var target = metaRow[m.label];
+      if (target < 0) {
+        sheet.insertRowAfter(insertAt + 1);
+        target = insertAt + 1;
+        sheet.getRange(target + 1, 1).setValue(m.label);
+        insertAt = target;
       }
-      sheet.getRange(moodRow + 1, col + 1).setValue(body.mood);
-      moodWritten = true;
+      sheet.getRange(target + 1, col + 1).setValue(m.value);
+      metaWritten[m.label] = true;
     }
 
     var skipped = [];
@@ -134,16 +134,18 @@ function doPost(e) {
       row: headerRow + 1,
       written: written,
       skipped: skipped,
-      noteWritten: noteWritten,
-      moodWritten: moodWritten,
+      noteWritten: !!metaWritten["Note"],
+      moodWritten: !!metaWritten["Mood"],
+      timeWritten: !!metaWritten["Time"],
+      hrWritten: !!metaWritten["Avg HR"],
     });
   } catch (err) {
     return json({ ok: false, error: String(err) });
   }
 }
 
-// Append a brand-new day-block (header + exercises + Note + Mood) at the end of a
-// year tab. Used for Alternative/free-form sessions that have no template block.
+// Append a brand-new day-block (header + exercises + Note/Mood/Time/Avg HR) at the
+// end of a year tab. Used for Alternative/free-form sessions with no template block.
 function createBlock(sheet, body) {
   var rows = [[body.dayName, body.date]];
   for (var i = 0; i < body.exercises.length; i++) {
@@ -151,6 +153,8 @@ function createBlock(sheet, body) {
   }
   rows.push(["Note", body.note || ""]);
   rows.push(["Mood", body.mood || ""]);
+  rows.push(["Time", body.time || ""]);
+  rows.push(["Avg HR", body.hr || ""]);
 
   var start = sheet.getLastRow() + 2; // leave one blank spacer row
   sheet.getRange(start, 1, rows.length, 2).setValues(rows);
@@ -164,7 +168,19 @@ function createBlock(sheet, body) {
     skipped: [],
     noteWritten: !!body.note,
     moodWritten: !!body.mood,
+    timeWritten: !!body.time,
+    hrWritten: !!body.hr,
   });
+}
+
+// Classify a block row label as a meta row (Note/Mood/Time/Avg HR), else "".
+function metaKind(label) {
+  var l = String(label).trim().toLowerCase();
+  if (l === "note" || l === "notes") return "Note";
+  if (l === "mood" || l === "feeling") return "Mood";
+  if (l === "time" || l === "tid" || l === "duration" || l === "varighet") return "Time";
+  if (l === "avg hr" || l === "hr" || l === "puls" || l === "snittpuls" || l === "heart rate") return "Avg HR";
+  return "";
 }
 
 // Upsert bodyweight-by-year into a dedicated "Bodyweight" tab (Year | Kg).

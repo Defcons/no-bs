@@ -148,7 +148,7 @@ export function Today({
     let active = true;
     startGeofence(() => {
       if (!active) return;
-      showReminder("Workout saved 💾", "You left the gym, so I finished and saved your session.");
+      showReminder("Workout saved 💾", "You left the workout area, so I finished and saved your session.");
       finishRef.current();
     });
     return () => {
@@ -383,7 +383,14 @@ export function Today({
       </div>
 
       <div className="pad">
-        <label className="field-label">Day note</label>
+        <MoodSlider
+          label="Feeling after"
+          value={draft.moodAfter}
+          onChange={(v) => update((d) => ({ ...d, moodAfter: v }))}
+        />
+        <label className="field-label" style={{ marginTop: 12 }}>
+          Day note
+        </label>
         <textarea
           className="day-note"
           value={draft.note ?? ""}
