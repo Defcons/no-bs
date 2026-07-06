@@ -124,7 +124,9 @@ export function Settings({
               <button className="mini" onClick={doUpdate} disabled={updating}>
                 {updating ? "Updating…" : "Check for updates"}
               </button>
-              <span className="muted tiny">version {appVersion || "…"}</span>
+              <span className="muted tiny">
+                {appVersion ? (appVersion.includes("+") ? `v${appVersion.split("+")[0]} · ${appVersion.split("+")[1]}` : appVersion) : "…"}
+              </span>
             </div>
             {updateMsg && <p className="muted tiny">{updateMsg}</p>}
             <p className="muted tiny">

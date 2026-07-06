@@ -7,10 +7,12 @@ RUN npm ci
 COPY . .
 RUN npm run build
 # OTA bundle for the native app: a zip of the built web app + a version manifest
-# the app polls (see src/lib/update.ts). Served alongside the site.
+# the app polls (see src/lib/update.ts). Version = semver (package.json) + git sha
+# build metadata, so it's human-readable (vX.Y.Z) yet unique per deploy.
 RUN apk add --no-cache zip \
+  && SEMVER="$(node -p "require('./package.json').version")" \
   && (cd dist && zip -qr "/app/bundle-${APP_VERSION}.zip" .) \
-  && printf '{"version":"%s","url":"https://gym.defc0n.no/bundle-%s.zip"}\n' "$APP_VERSION" "$APP_VERSION" > /app/version.json
+  && printf '{"version":"%s+%s","url":"https://gym.defc0n.no/bundle-%s.zip"}\n' "$SEMVER" "$APP_VERSION" "$APP_VERSION" > /app/version.json
 
 FROM nginx:alpine
 RUN rm -rf /usr/share/nginx/html/*
