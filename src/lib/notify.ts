@@ -1,31 +1,73 @@
-// Local workout reminders. The web can't reliably fire a scheduled notification
-// while the app is fully closed without a push backend, so this fires when the
-// app is opened / becomes visible and you're behind your weekly goal.
+// Notifications. On the native app we use Capacitor LocalNotifications (reliable,
+// and can be SCHEDULED to fire when the app is backgrounded/closed). On the web
+// we fall back to the service-worker notification (best-effort in background).
+import { Capacitor } from "@capacitor/core";
+import { LocalNotifications } from "@capacitor/local-notifications";
+
+const native = () => Capacitor.isNativePlatform();
+
 export function notificationsSupported(): boolean {
-  return typeof Notification !== "undefined" && "serviceWorker" in navigator;
+  return native() || (typeof Notification !== "undefined" && "serviceWorker" in navigator);
 }
 
 export async function requestNotifications(): Promise<boolean> {
-  if (!notificationsSupported()) return false;
-  const p = await Notification.requestPermission();
-  return p === "granted";
+  if (native()) {
+    const p = await LocalNotifications.requestPermissions();
+    return p.display === "granted";
+  }
+  if (typeof Notification === "undefined") return false;
+  return (await Notification.requestPermission()) === "granted";
 }
 
+let idc = 8000;
 export async function showReminder(title: string, body: string): Promise<void> {
-  if (!notificationsSupported() || Notification.permission !== "granted") return;
+  if (native()) {
+    try {
+      await LocalNotifications.schedule({ notifications: [{ id: idc++ % 100000, title, body }] });
+    } catch {
+      /* permission not granted */
+    }
+    return;
+  }
+  if (typeof Notification === "undefined" || Notification.permission !== "granted") return;
   try {
     const reg = await navigator.serviceWorker.ready;
-    await reg.showNotification(title, {
-      body,
-      icon: "/icon-192.png",
-      badge: "/icon-192.png",
-      tag: "workout-reminder",
-    });
+    await reg.showNotification(title, { body, icon: "/icon-192.png", badge: "/icon-192.png", tag: "workout-reminder" });
   } catch {
     try {
       new Notification(title, { body });
     } catch {
       /* ignore */
     }
+  }
+}
+
+// Native only: schedule the "rest over" notification for the exact end time so it
+// fires even if the app is in the background. (The web build relies on the in-app
+// timer + SW notification.)
+const BREAK_NOTIF_ID = 7001;
+export async function scheduleBreakNotification(at: number): Promise<void> {
+  if (!native()) return;
+  try {
+    await LocalNotifications.schedule({
+      notifications: [
+        {
+          id: BREAK_NOTIF_ID,
+          title: "Rest over — go! 💪",
+          body: "Time for your next set.",
+          schedule: { at: new Date(at), allowWhileIdle: true },
+        },
+      ],
+    });
+  } catch {
+    /* ignore */
+  }
+}
+export async function cancelBreakNotification(): Promise<void> {
+  if (!native()) return;
+  try {
+    await LocalNotifications.cancel({ notifications: [{ id: BREAK_NOTIF_ID }] });
+  } catch {
+    /* ignore */
   }
 }

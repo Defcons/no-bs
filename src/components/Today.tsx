@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { lastWorkoutForDay, type StoredWorkout } from "../db";
 import { daysAgo, daysAgoLabel, hhmmss, mmss, niceDate } from "../lib/format";
-import { showReminder } from "../lib/notify";
+import { cancelBreakNotification, scheduleBreakNotification, showReminder } from "../lib/notify";
 import { syncWorkout } from "../lib/sheetSync";
 import { cadenceStatus, trainingDue } from "../lib/stats";
 import { useActiveWorkout } from "../lib/useActiveWorkout";
@@ -224,8 +224,16 @@ export function Today({
     update((d) => ({ ...d, exercises: d.exercises.map((e, idx) => (idx === i ? ex : e)) }));
   };
 
-  const startRest = () => update((d) => ({ ...d, restEndsAt: Date.now() + restDefaultSec * 1000 }));
-  const setRest = (endsAt: number | null) => update((d) => ({ ...d, restEndsAt: endsAt ?? undefined }));
+  const startRest = () => {
+    const at = Date.now() + restDefaultSec * 1000;
+    scheduleBreakNotification(at); // native: fires even if app is backgrounded
+    update((d) => ({ ...d, restEndsAt: at }));
+  };
+  const setRest = (endsAt: number | null) => {
+    if (endsAt == null) cancelBreakNotification();
+    else scheduleBreakNotification(endsAt);
+    update((d) => ({ ...d, restEndsAt: endsAt ?? undefined }));
+  };
   const addExercise = () =>
     update((d) => ({
       ...d,

@@ -1,6 +1,7 @@
 // Rest/break countdown. Shows a big remaining time; beeps + vibrates when the
 // rest is over so you know you can start the next set. Survives reload because
 // the target time (endsAt) is stored on the workout draft.
+import { Capacitor } from "@capacitor/core";
 import { useEffect, useRef, useState } from "react";
 import { mmss } from "../lib/format";
 import { showReminder } from "../lib/notify";
@@ -49,8 +50,9 @@ export function RestTimer({ endsAt, onChange }: Props) {
         firedRef.current = true;
         alarm();
         navigator.vibrate?.([300, 120, 300, 120, 300]);
-        // Notification also surfaces the alert when the app is backgrounded.
-        showReminder("Rest over — go! 💪", "Time for your next set.");
+        // Native pre-schedules a notification for this moment (fires in background),
+        // so only fire the web SW notification here to avoid a duplicate.
+        if (!Capacitor.isNativePlatform()) showReminder("Rest over — go! 💪", "Time for your next set.");
       }
     };
     tick();

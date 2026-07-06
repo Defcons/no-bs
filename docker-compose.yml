@@ -1,6 +1,9 @@
 services:
   gym-tracker:
-    build: .
+    build:
+      context: .
+      args:
+        APP_VERSION: ${APP_VERSION:-dev}
     container_name: gym-tracker
     restart: unless-stopped
     environment:

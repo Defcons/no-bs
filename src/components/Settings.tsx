@@ -2,11 +2,12 @@
 // write-back sync, and data backup/reset.
 import { useEffect, useState } from "react";
 import { getSetting, setSetting } from "../db";
-import { bluetoothAvailable } from "../lib/hr";
+import { hrAvailable } from "../lib/hr";
 import { notificationsSupported, requestNotifications } from "../lib/notify";
 import { pendingCount, syncPending, testSync } from "../lib/sheetSync";
 import type { BwEntry } from "../lib/standards";
 import { DEFAULT_SYNC_SECRET, DEFAULT_SYNC_URL } from "../lib/syncConfig";
+import { checkAndApplyUpdate, currentVersion, updatesSupported } from "../lib/update";
 
 type Props = {
   restDefaultSec: number;
@@ -54,13 +55,26 @@ export function Settings({
   const [pending, setPending] = useState(0);
   const [status, setStatus] = useState<string>("");
   const [reminders, setReminders] = useState(false);
+  const [appVersion, setAppVersion] = useState("");
+  const [updateMsg, setUpdateMsg] = useState("");
+  const [updating, setUpdating] = useState(false);
 
   useEffect(() => {
     getSetting<string>("sheetSyncUrl", "").then((v) => setSyncUrl(v || DEFAULT_SYNC_URL));
     getSetting<string>("sheetSyncSecret", "").then((v) => setSyncSecret(v || DEFAULT_SYNC_SECRET));
     getSetting<boolean>("remindersEnabled", false).then(setReminders);
     pendingCount().then(setPending);
+    currentVersion().then(setAppVersion);
   }, []);
+
+  const doUpdate = async () => {
+    setUpdating(true);
+    setUpdateMsg("Checking…");
+    const r = await checkAndApplyUpdate();
+    setUpdateMsg(r.message);
+    setUpdating(false);
+    if (r.status !== "updated") currentVersion().then(setAppVersion);
+  };
 
   const toggleReminders = async () => {
     if (reminders) {
@@ -101,6 +115,27 @@ export function Settings({
   return (
     <div className="pad settings">
       <h2>Settings</h2>
+
+      <div className="setting">
+        <label>App update</label>
+        {updatesSupported() ? (
+          <>
+            <div className="row">
+              <button className="mini" onClick={doUpdate} disabled={updating}>
+                {updating ? "Updating…" : "Check for updates"}
+              </button>
+              <span className="muted tiny">version {appVersion || "…"}</span>
+            </div>
+            {updateMsg && <p className="muted tiny">{updateMsg}</p>}
+            <p className="muted tiny">
+              Fetches the latest version over-the-air and reloads — no reinstall. (New device features occasionally
+              still need a fresh APK.)
+            </p>
+          </>
+        ) : (
+          <p className="muted tiny">The web app updates itself automatically. This button is for the installed Android app.</p>
+        )}
+      </div>
 
       <div className="setting">
         <label>Default rest timer</label>
@@ -232,7 +267,7 @@ export function Settings({
 
       <div className="setting">
         <label>Heart rate</label>
-        {!bluetoothAvailable() ? (
+        {!hrAvailable() ? (
           <p className="muted tiny">
             Web Bluetooth isn't available in this browser. Use Chrome on Android over HTTPS. Pair your Powerbeats Pro 2
             (enable HR in the Beats app) or a BLE chest strap through this app — not via the phone's Bluetooth settings.

@@ -3,8 +3,10 @@ import { useLiveQuery } from "dexie-react-hooks";
 import "./App.css";
 import { db, ensureBootstrapped, getSetting, setSetting } from "./db";
 import { daysAgo } from "./lib/format";
-import { HeartRateMonitor } from "./lib/hr";
-import { notificationsSupported, showReminder } from "./lib/notify";
+import { type HrMonitor, createHrMonitor, hrAvailable } from "./lib/hr";
+import { Capacitor } from "@capacitor/core";
+import { notificationsSupported, requestNotifications, showReminder } from "./lib/notify";
+import { markAppReady } from "./lib/update";
 import type { BwEntry } from "./lib/standards";
 import { trainingDue } from "./lib/stats";
 import { History } from "./components/History";
@@ -32,8 +34,8 @@ export default function App() {
   const [hrAvg, setHrAvg] = useState<number | null>(null);
   const [connected, setConnected] = useState(false);
   const samples = useRef<number[]>([]);
-  const monitor = useRef<HeartRateMonitor | null>(null);
-  if (!monitor.current) monitor.current = new HeartRateMonitor((c) => setConnected(c));
+  const monitor = useRef<HrMonitor | null>(null);
+  if (!monitor.current) monitor.current = createHrMonitor((c) => setConnected(c));
 
   const templates = useLiveQuery(() => db.templates.orderBy("order").toArray(), []);
 
@@ -58,6 +60,7 @@ export default function App() {
 
   useEffect(() => {
     (async () => {
+      markAppReady(); // commit the running OTA bundle (native only)
       await ensureBootstrapped();
       setRest(await getSetting("restDefaultSec", 120));
       setStep(await getSetting("weightStep", 2.5));
@@ -68,6 +71,7 @@ export default function App() {
       setBwH(await getSetting<BwEntry[]>("bwHistory", []));
       setHrLow(await getSetting("hrLowThreshold", 90));
       setReady(true);
+      if (Capacitor.isNativePlatform()) requestNotifications(); // ask once so break alarms work
       await maybeRemind(dpw);
     })();
     const onVis = () => {
@@ -116,7 +120,7 @@ export default function App() {
     monitor.current!.disconnect();
     setBpm(null);
   };
-  const hr = { bpm, avg: hrAvg, connected, connect, disconnect, supported: "bluetooth" in navigator };
+  const hr = { bpm, avg: hrAvg, connected, connect, disconnect, supported: hrAvailable() };
 
   const getHrStats = () => {
     const s = samples.current;

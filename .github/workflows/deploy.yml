@@ -33,6 +33,8 @@ jobs:
             cd /apps/gym-tracker
             git fetch origin
             git reset --hard origin/master
+            export APP_VERSION="$(git rev-parse --short HEAD)"
+            echo "Building OTA bundle version $APP_VERSION"
             docker compose build --no-cache
             docker compose up -d
-            echo "gym-tracker deploy complete"
+            echo "gym-tracker deploy complete ($APP_VERSION)"
