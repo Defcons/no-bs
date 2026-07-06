@@ -280,8 +280,13 @@ export function Today({
               {hr.avg != null && <span className="hr-avg">avg {hr.avg}</span>}
             </span>
           </button>
-          <button className="break-btn" onClick={startRest}>
-            Break
+          <button className="break-btn" onClick={startRest} aria-label="Start rest timer" title="Rest timer">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M6 3.4h12M6 20.6h12" />
+              <path d="M7.6 4c0 4.7 4.4 6 4.4 8s-4.4 3.3-4.4 8" />
+              <path d="M16.4 4c0 4.7-4.4 6-4.4 8s4.4 3.3 4.4 8" />
+              <path d="M9.7 6.6h4.6" opacity="0.5" />
+            </svg>
           </button>
         </div>
       </header>
@@ -289,7 +294,7 @@ export function Today({
       <RestTimer endsAt={draft.restEndsAt ?? null} onChange={setRest} />
 
       <button className="tools-toggle" onClick={() => setShowTools((v) => !v)}>
-        {showTools ? "▴ Hide stopwatch & feeling" : "▾ Stopwatch & feeling"}
+        {showTools ? "▴ Hide stopwatch & sliders" : "▾ Stopwatch & Sliders"}
       </button>
 
       {showTools && (

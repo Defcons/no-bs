@@ -15,12 +15,6 @@ type Props = {
   onMoveDown?: () => void;
 };
 
-function schemeLabel(ex: ExercisePerf): string {
-  const { sets, reps } = ex.scheme;
-  if (sets == null && reps == null) return "";
-  return `${sets ?? "?"}×${reps ?? "?"}`;
-}
-
 export function ExerciseCard({ exercise, step, prev, onChange, editableName, onRemove, onMoveUp, onMoveDown }: Props) {
   const [showNote, setShowNote] = useState(!!exercise.note);
 
@@ -52,8 +46,8 @@ export function ExerciseCard({ exercise, step, prev, onChange, editableName, onR
         ) : (
           <h3>{exercise.name}</h3>
         )}
-        <span className="scheme">{schemeLabel(exercise)}</span>
         <div className="ex-controls">
+          <span className="setsl">Sets:</span>
           <button className="hbtn" aria-label="remove set" onClick={removeSet}>
             −
           </button>
@@ -63,6 +57,7 @@ export function ExerciseCard({ exercise, step, prev, onChange, editableName, onR
           <button className="hbtn" aria-label="add set" onClick={addSet}>
             +
           </button>
+          <span className="hdiv" />
           <button
             className={`hbtn ${exercise.note ? "has-note" : ""}`}
             aria-label="exercise note"
@@ -105,6 +100,7 @@ export function ExerciseCard({ exercise, step, prev, onChange, editableName, onR
             index={i}
             set={s}
             step={step}
+            active={i === exercise.sets.findIndex((x) => !x.done)}
             prevWeight={prev?.sets[i]?.weight ?? prev?.sets.at(-1)?.weight ?? null}
             onChange={(p) => patchSet(i, p)}
           />

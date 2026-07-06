@@ -9,6 +9,7 @@ type Props = {
   index: number;
   set: SetEntry;
   step: number; // +/- increment in kg
+  active?: boolean; // the next set to log (first not-done) — subtle outline
   prevWeight?: number | null; // last session's weight, shown as ghost hint
   onChange: (patch: Partial<SetEntry>) => void;
 };
@@ -23,14 +24,14 @@ function parseWeight(s: string): number | null {
 // Select existing text on focus so typing replaces it (no manual backspacing).
 const selectAll = (e: FocusEvent<HTMLInputElement>) => e.target.select();
 
-export function SetInput({ index, set, step, prevWeight, onChange }: Props) {
+export function SetInput({ index, set, step, active, prevWeight, onChange }: Props) {
   const [showNote, setShowNote] = useState(!!set.note);
   const done = !!set.done;
   // Editing any value marks the set done (green).
   const bump = (d: number) => onChange({ weight: Math.max(0, (set.weight ?? prevWeight ?? 0) + d), done: true });
 
   return (
-    <div className={`setrow ${done ? "done" : ""}`}>
+    <div className={`setrow ${done ? "done" : ""} ${active && !done ? "active" : ""}`}>
       <button className="set-badge" aria-label="toggle set done" onClick={() => onChange({ done: !done })}>
         {index + 1}
       </button>

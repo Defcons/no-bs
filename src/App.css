@@ -294,7 +294,9 @@
   min-width: 0;
 }
 .wb-day {
-  font-weight: 600;
+  font-weight: 700;
+  font-size: 17px;
+  color: var(--accent);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -338,9 +340,22 @@
   }
 }
 .break-btn {
-  background: var(--accent);
-  border-color: var(--accent);
-  font-weight: 600;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, var(--accent) 15%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--line));
+  color: var(--accent);
+}
+.break-btn svg {
+  width: 22px;
+  height: 22px;
+}
+.break-btn:active {
+  background: color-mix(in srgb, var(--accent) 28%, var(--surface));
 }
 .wb-time-row {
   display: flex;
@@ -460,9 +475,13 @@
   display: flex;
   align-items: center;
   gap: 6px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--line);
 }
 .exercise-head h3 {
   font-size: 16px;
+  font-weight: 700;
+  color: var(--accent);
   flex: 1;
   min-width: 0;
   white-space: nowrap;
@@ -474,6 +493,17 @@
   align-items: center;
   gap: 2px;
   margin-left: auto;
+}
+.setsl {
+  font-size: 12px;
+  color: var(--muted);
+  margin-right: 2px;
+}
+.hdiv {
+  width: 1px;
+  align-self: stretch;
+  margin: 2px 4px;
+  background: var(--line);
 }
 .hbtn {
   width: 26px;
@@ -493,11 +523,6 @@
   font-weight: 600;
   font-size: 13px;
   color: var(--muted);
-}
-.scheme {
-  color: var(--muted);
-  font-variant-numeric: tabular-nums;
-  font-size: 14px;
 }
 .mini {
   font-size: 13px;
@@ -529,6 +554,10 @@
 }
 .setrow.done {
   background: color-mix(in srgb, var(--accent-2) 14%, transparent);
+}
+.setrow.active {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 55%, transparent);
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
 }
 .setrow .set-note {
   grid-column: 1 / -1;
