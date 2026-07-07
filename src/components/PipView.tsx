@@ -22,9 +22,9 @@ export function PipView({ restEndsAt, elapsedSec, bpm }: Props) {
 
   return (
     <div className={`pip-view ${resting ? "resting" : ""}`}>
-      <span className="pip-label">{resting ? "BREAK" : "WORKOUT"}</span>
+      {resting && <span className="pip-label">REST</span>}
       <span className="pip-time">{resting ? mmss(restLeft) : hhmmss(elapsedSec)}</span>
-      {bpm != null && <span className="pip-hr">♥ {bpm}</span>}
+      {bpm != null && <span className="pip-hr">♥{bpm}</span>}
     </div>
   );
 }

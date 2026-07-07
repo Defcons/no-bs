@@ -627,27 +627,29 @@
   inset: 0;
   z-index: 60;
   display: flex;
-  flex-direction: column;
-  align-items: center;
+  flex-direction: row;
+  align-items: baseline;
   justify-content: center;
-  gap: 1vh;
+  gap: 3vw;
   background: var(--bg);
   color: var(--text);
   text-align: center;
-  border: 3px solid var(--accent);
+  border: 2px solid var(--accent);
   box-sizing: border-box;
+  overflow: hidden;
 }
 .pip-view.resting {
   background: color-mix(in srgb, var(--accent) 22%, var(--bg));
 }
 .pip-label {
-  font-size: 7vw;
-  letter-spacing: 0.25em;
+  font-size: min(9vw, 28vh);
+  letter-spacing: 0.15em;
   color: var(--muted);
   font-weight: 700;
 }
 .pip-time {
-  font-size: 26vw;
+  /* Sized to the (short) window height so it fits the thin bar. */
+  font-size: min(30vw, 62vh);
   line-height: 1;
   font-weight: 800;
   font-variant-numeric: tabular-nums;
@@ -656,7 +658,7 @@
   color: var(--accent);
 }
 .pip-hr {
-  font-size: 8vw;
+  font-size: min(11vw, 34vh);
   color: var(--danger);
   font-weight: 700;
 }

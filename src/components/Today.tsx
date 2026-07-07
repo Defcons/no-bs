@@ -175,16 +175,14 @@ export function Today({
     return () => document.removeEventListener("visibilitychange", onVis);
   }, []);
   const workoutActive = !!draft;
-  const hrShown = hr.connected;
   useEffect(() => {
-    // Compact window. Android REQUIRES the aspect ratio within [1:2.39 .. 2.39:1] —
-    // 5:2 (=2.5) silently threw and killed PiP. Square when HR is shown (timer + HR
-    // stacked), 2:1 when it's just the timer.
-    setPipAutoEnter(workoutActive, hrShown ? 1 : 2, 1);
+    // A thin, wide bar — the smallest footprint Android allows via aspect ratio
+    // (must stay within [1:2.39 .. 2.39:1]). Everything sits on one line.
+    setPipAutoEnter(workoutActive, 7, 3);
     return () => {
       setPipAutoEnter(false);
     };
-  }, [workoutActive, hrShown]);
+  }, [workoutActive]);
 
   // GPS route recording: while an Alternative session has "Track GPS route" on,
   // record the path (stamped with live HR). The track is attached on finish.
