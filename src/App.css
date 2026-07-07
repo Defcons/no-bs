@@ -1153,6 +1153,110 @@ input[type="range"] {
 .cat .records {
   padding: 0 12px 12px;
 }
+.rec-standards-body {
+  padding: 0 12px 12px;
+}
+
+/* ---- History: filters + collapsible period groups ---- */
+.hist-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 10px 0 14px;
+}
+.seg {
+  display: flex;
+  gap: 3px;
+  padding: 3px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+.seg button {
+  flex: 1;
+  padding: 7px 0;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  font-weight: 600;
+  font-size: 13px;
+  cursor: pointer;
+}
+.seg button.active {
+  background: var(--accent);
+  color: #fff;
+}
+.hist-row2 {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.hist-row2 select {
+  flex: 0 1 auto;
+  min-width: 0;
+  font: inherit;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px;
+}
+.hist-row2 input[type="search"] {
+  flex: 1;
+  min-width: 0;
+}
+.hist-row2 select:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+}
+.hist-group {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  margin-bottom: 8px;
+  overflow: hidden;
+}
+.hist-group > summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  cursor: pointer;
+  font-weight: 600;
+  list-style: none;
+}
+.hist-group > summary::-webkit-details-marker {
+  display: none;
+}
+.hist-group-label {
+  margin-right: auto;
+}
+.hist-group > summary::after {
+  content: "▸";
+  color: var(--muted);
+  transition: transform 0.15s;
+}
+.hist-group[open] > summary::after {
+  transform: rotate(90deg);
+}
+.hist-group .log {
+  padding: 0 10px 8px;
+  gap: 0;
+}
+/* Flatten rows inside a group card — dividers instead of nested cards. */
+.hist-group .log-row {
+  background: transparent;
+  border: none;
+  border-top: 1px solid var(--line);
+  border-radius: 0;
+}
+.hist-group .log-row:first-child {
+  border-top: none;
+}
+.hist-group .log-head {
+  padding: 12px 4px;
+}
 
 /* ---- Strength standards ---- */
 .standards {

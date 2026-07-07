@@ -52,45 +52,6 @@ export function Records({
         <Stat label="Best est. 1RM" value={`${summary.bestE1rm.est.toFixed(0)} kg`} sub={summary.bestE1rm.name} />
       </div>
 
-      <h3 className="section">💪 Strength standards</h3>
-      {bodyweightKg <= 0 ? (
-        <p className="muted tiny">Set your bodyweight in Settings to rate your key lifts against strength standards.</p>
-      ) : (
-        <div className="standards">
-          {KEY_LIFTS.map((kl) => {
-            const rec = records.find((r) => r.name === kl.canon);
-            if (!rec) return null;
-            const e1rm = rec.bestE1rm.est;
-            const year = parseInt(rec.bestE1rm.date.slice(0, 4), 10);
-            const bw = bodyweightForYear(year, bwHistory, bodyweightKg, currentYear);
-            const r = rateLift(adjustThresholds(kl.std, bw, age), e1rm, bw);
-            return (
-              <div key={kl.canon} className="std-row">
-                <div className="std-top">
-                  <span className="std-name">{kl.canon}</span>
-                  <span className={`lvl-badge ${levelClass(r.level)}`}>{r.level ?? "Below beginner"}</span>
-                </div>
-                <div className="std-bar">
-                  <div className="std-fill" style={{ width: `${r.journeyPct}%` }} />
-                  {r.ticks.map((t, i) => (
-                    <span key={i} className="std-tick" style={{ left: `${t}%` }} />
-                  ))}
-                </div>
-                <div className="std-meta tiny muted">
-                  {e1rm.toFixed(0)} kg est-1RM · {r.ratio.toFixed(2)}× BW @ {bw}kg ({year})
-                  {r.next ? ` · ${Math.max(0, r.next.kg - Math.round(e1rm))} kg to ${r.next.level}` : " · Elite 🏆"}
-                  {kl.note ? ` · ${kl.note}` : ""}
-                </div>
-              </div>
-            );
-          })}
-          <p className="muted tiny">
-            Adjusted for your bodyweight{age > 0 ? " and age" : ""} (male). Barbell lifts are reliable; machine lifts
-            (leg press / pulldown) are approximate.
-          </p>
-        </div>
-      )}
-
       <h3 className="section">Consistency</h3>
       <div className="weekbars">
         {perWeek.map((c, i) => (
@@ -100,6 +61,54 @@ export function Records({
         ))}
       </div>
       <p className="muted tiny">Workouts per week — last 12 weeks (right = this week).</p>
+
+      <details className="cat rec-standards">
+        <summary>
+          <span className="cat-name">💪 Strength standards</span>
+          <span className="tiny muted">key lifts vs standards</span>
+        </summary>
+        <div className="rec-standards-body">
+          {bodyweightKg <= 0 ? (
+            <p className="muted tiny">
+              Set your bodyweight in Settings to rate your key lifts against strength standards.
+            </p>
+          ) : (
+            <div className="standards">
+              {KEY_LIFTS.map((kl) => {
+                const rec = records.find((r) => r.name === kl.canon);
+                if (!rec) return null;
+                const e1rm = rec.bestE1rm.est;
+                const year = parseInt(rec.bestE1rm.date.slice(0, 4), 10);
+                const bw = bodyweightForYear(year, bwHistory, bodyweightKg, currentYear);
+                const r = rateLift(adjustThresholds(kl.std, bw, age), e1rm, bw);
+                return (
+                  <div key={kl.canon} className="std-row">
+                    <div className="std-top">
+                      <span className="std-name">{kl.canon}</span>
+                      <span className={`lvl-badge ${levelClass(r.level)}`}>{r.level ?? "Below beginner"}</span>
+                    </div>
+                    <div className="std-bar">
+                      <div className="std-fill" style={{ width: `${r.journeyPct}%` }} />
+                      {r.ticks.map((t, i) => (
+                        <span key={i} className="std-tick" style={{ left: `${t}%` }} />
+                      ))}
+                    </div>
+                    <div className="std-meta tiny muted">
+                      {e1rm.toFixed(0)} kg est-1RM · {r.ratio.toFixed(2)}× BW @ {bw}kg ({year})
+                      {r.next ? ` · ${Math.max(0, r.next.kg - Math.round(e1rm))} kg to ${r.next.level}` : " · Elite 🏆"}
+                      {kl.note ? ` · ${kl.note}` : ""}
+                    </div>
+                  </div>
+                );
+              })}
+              <p className="muted tiny">
+                Adjusted for your bodyweight{age > 0 ? " and age" : ""} (male). Barbell lifts are reliable; machine
+                lifts (leg press / pulldown) are approximate.
+              </p>
+            </div>
+          )}
+        </div>
+      </details>
 
       <h3 className="section">Records by muscle</h3>
       {MUSCLE_ORDER.filter((cat) => byCat[cat]?.length).map((cat) => (
