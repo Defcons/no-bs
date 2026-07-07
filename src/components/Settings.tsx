@@ -2,12 +2,14 @@
 // write-back sync, and data backup/reset.
 import { useEffect, useState } from "react";
 import { Capacitor } from "@capacitor/core";
-import { getSetting, setSetting } from "../db";
+import { db, getSetting, setSetting } from "../db";
+import { saveFile } from "../lib/download";
 import { hrAvailable } from "../lib/hr";
 import { notificationsSupported, requestNotifications } from "../lib/notify";
 import { importFromSheet, pendingCount, syncPending, testSync } from "../lib/sheetSync";
 import type { BwEntry } from "../lib/standards";
 import { checkAndApplyUpdate, currentVersion, updatesSupported } from "../lib/update";
+import { applyBackup, exportXlsx, importXlsx, type ImportedBackup } from "../lib/workbook";
 
 type Props = {
   restDefaultSec: number;
@@ -59,6 +61,7 @@ export function Settings({
   const [updateMsg, setUpdateMsg] = useState("");
   const [updating, setUpdating] = useState(false);
   const [autoEndLeave, setAutoEndLeave] = useState(false);
+  const [backupMsg, setBackupMsg] = useState("");
   const native = Capacitor.isNativePlatform();
 
   useEffect(() => {
@@ -120,6 +123,38 @@ export function Settings({
     const bw = bwYears ? ` · ${bwYears} bodyweight year${bwYears === 1 ? "" : "s"}` : "";
     setStatus((added ? `Imported ${added} workout${added === 1 ? "" : "s"}` : "Workouts up to date") + bw + ".");
     if (bwYears) onImported();
+  };
+
+  const doExportXlsx = async () => {
+    setBackupMsg("Building workbook…");
+    try {
+      const workouts = await db.workouts.toArray();
+      const blob = await exportXlsx(workouts, bwHistory);
+      await saveFile(`gym-backup-${new Date().toISOString().slice(0, 10)}.xlsx`, blob);
+      setBackupMsg(`Backed up ${workouts.length} workouts.`);
+    } catch (e) {
+      setBackupMsg(`Export failed: ${(e as Error).message}`);
+    }
+  };
+
+  const doRestore = async (file: File) => {
+    setBackupMsg("Restoring…");
+    try {
+      const buf = await file.arrayBuffer();
+      let imported: ImportedBackup;
+      if (file.name.toLowerCase().endsWith(".json")) {
+        const j = JSON.parse(new TextDecoder().decode(buf)) as ImportedBackup;
+        imported = { workouts: j.workouts ?? [], bwHistory: j.bwHistory };
+      } else {
+        imported = await importXlsx(buf);
+      }
+      const { added, bwYears } = await applyBackup(imported);
+      const bw = bwYears ? ` · ${bwYears} bodyweight year${bwYears === 1 ? "" : "s"}` : "";
+      setBackupMsg((added ? `Restored ${added} workout${added === 1 ? "" : "s"}` : "Nothing new to restore") + bw + ".");
+      if (bwYears) onImported();
+    } catch (e) {
+      setBackupMsg(`Restore failed: ${(e as Error).message}`);
+    }
   };
 
   return (
@@ -334,12 +369,35 @@ export function Settings({
 
         <div className="setting">
           <label>Backup</label>
+          <p className="muted tiny">
+            Your whole history as an Excel file — opens in Excel/Sheets, keep it anywhere (Drive, Files, wherever).
+            Restoring only adds what's missing; it never overwrites or deletes.
+          </p>
           <div className="row">
+            <button className="mini" onClick={doExportXlsx}>
+              Export backup (.xlsx)
+            </button>
+            <label className="mini linkbtn" style={{ cursor: "pointer" }}>
+              Restore from file
+              <input
+                type="file"
+                accept=".xlsx,.json"
+                style={{ display: "none" }}
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) doRestore(f);
+                  e.target.value = "";
+                }}
+              />
+            </label>
+          </div>
+          {backupMsg && <p className="muted tiny">{backupMsg}</p>}
+          <div className="row" style={{ marginTop: 8 }}>
             <a className="mini linkbtn" href={SHEET_URL} target="_blank" rel="noopener noreferrer">
               Open Google Sheet ↗
             </a>
             <button className="mini" onClick={onExport}>
-              Export backup (JSON)
+              Export (JSON)
             </button>
             <button className="mini danger" onClick={onReset}>
               Reset app data

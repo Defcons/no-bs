@@ -41,6 +41,8 @@ Vite 8 + React 19 + TypeScript, Dexie 4 (IndexedDB), `vite-plugin-pwa`, Web Blue
 - `finish()` saves exercises with any set weight OR a note; prefilled (untouched) weights DO get saved by design (prefill = intended lifts).
 - HR only works over HTTPS (or localhost). For real phone use, deploy behind HTTPS (homelab NPM + Tailscale). Pair straps THROUGH the app, not OS Bluetooth.
 
+- `src/lib/workbook.ts` + `src/lib/download.ts` — **`.xlsx` backup/restore** (SheetJS, lazy-loaded). `exportXlsx`/`workbookTabs` build the transposed year tabs + Bodyweight tab (mirrors the Google-Sheet layout) **plus a hidden `_data` tab of lossless JSON** (incl. GPS tracks); `importXlsx` prefers `_data`, else parses visible tabs via `sheet.ts`; `applyBackup` adds missing workouts (dedup day@@date) + merges bodyweight. `download.ts` `saveFile` = web download / native share-sheet (`@capacitor/filesystem`+`share`). Wired in Settings (Backup). See `docs/ROADMAP.md` for the commercialization plan (local-first, optional cloud, "No BS").
+
 ## Native (Capacitor / Android)
 Wrapped via Capacitor 8 (`android/`, appId `no.defc0n.gymtracker`). Plugins: bluetooth-le (HR), local-notifications, capgo updater (OTA — JS bundle only), background-geolocation (leave-gym), + the in-repo custom **Pip** plugin. **Native changes (new plugin, manifest, Java) need a fresh APK — OTA won't deliver them.** Build: `npm run build && npx cap sync android`, then `android/gradlew.bat assembleDebug` with `JAVA_HOME=C:\Program Files\Android\Android Studio\jbr` → `android/app/build/outputs/apk/debug/app-debug.apk`. JS-only changes ship via OTA (Capgo, see Dockerfile/version.json).
 

@@ -1,7 +1,7 @@
 {
   "name": "gym-tracker",
   "private": true,
-  "version": "1.10.2",
+  "version": "1.11.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -15,13 +15,16 @@
     "@capacitor/android": "^8.4.1",
     "@capacitor/cli": "^8.4.1",
     "@capacitor/core": "^8.4.1",
+    "@capacitor/filesystem": "^8.1.2",
     "@capacitor/local-notifications": "^8.2.0",
+    "@capacitor/share": "^8.0.1",
     "@capgo/capacitor-updater": "^8.50.2",
     "dexie": "^4.4.4",
     "dexie-react-hooks": "^4.4.0",
     "leaflet": "^1.9.4",
     "react": "^19.2.7",
-    "react-dom": "^19.2.7"
+    "react-dom": "^19.2.7",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@types/leaflet": "^1.9.21",
