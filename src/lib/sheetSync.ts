@@ -61,6 +61,13 @@ async function config(): Promise<{ url: string; secret: string }> {
   };
 }
 
+// Google Sheets sync is OPTIONAL. It defaults ON only when a URL is baked in (the
+// personal build) so existing installs keep syncing; a fresh/public build with no
+// default URL is off until the user opts in. Local + file backup is the default.
+export async function syncEnabled(): Promise<boolean> {
+  return getSetting<boolean>("syncEnabled", !!DEFAULT_SYNC_URL);
+}
+
 async function post(url: string, payload: unknown): Promise<SyncResult> {
   const body = JSON.stringify(payload);
   // Native: use the OS HTTP stack (no WebView CORS, follows the Apps Script
@@ -121,6 +128,7 @@ function durationStr(sec?: number): string {
 }
 
 export async function syncWorkout(row: StoredWorkout): Promise<SyncResult | null> {
+  if (!(await syncEnabled())) return null; // sync turned off — local + file backup only
   const { url, secret } = await config();
   if (!url) return null; // sync not set up — silently skip
   const run = computeRun(row.track); // GPS-tracked cardio → distance/pace/speed/route
@@ -162,14 +170,16 @@ export async function syncWorkout(row: StoredWorkout): Promise<SyncResult | null
   }
 }
 
-// Count app-logged sessions not yet written to the sheet.
+// Count app-logged sessions not yet written to the sheet (0 when sync is off).
 export async function pendingCount(): Promise<number> {
+  if (!(await syncEnabled())) return 0;
   const rows = await db.workouts.where("source").equals("app").toArray();
   return rows.filter((r) => !r.synced).length;
 }
 
 // Retry all unsynced app sessions (oldest first).
 export async function syncPending(): Promise<{ done: number; failed: number }> {
+  if (!(await syncEnabled())) return { done: 0, failed: 0 };
   const rows = (await db.workouts.where("source").equals("app").toArray())
     .filter((r) => !r.synced)
     .sort((a, b) => a.date.localeCompare(b.date));

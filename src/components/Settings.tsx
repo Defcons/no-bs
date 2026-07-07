@@ -6,7 +6,7 @@ import { db, getSetting, setSetting } from "../db";
 import { saveFile } from "../lib/download";
 import { hrAvailable } from "../lib/hr";
 import { notificationsSupported, requestNotifications } from "../lib/notify";
-import { importFromSheet, pendingCount, syncPending, testSync } from "../lib/sheetSync";
+import { importFromSheet, pendingCount, syncEnabled, syncPending, testSync } from "../lib/sheetSync";
 import type { BwEntry } from "../lib/standards";
 import { checkAndApplyUpdate, currentVersion, updatesSupported } from "../lib/update";
 import { applyBackup, exportXlsx, importXlsx, type ImportedBackup } from "../lib/workbook";
@@ -62,14 +62,35 @@ export function Settings({
   const [updating, setUpdating] = useState(false);
   const [autoEndLeave, setAutoEndLeave] = useState(false);
   const [backupMsg, setBackupMsg] = useState("");
+  const [syncOn, setSyncOn] = useState(false);
+  const [syncUrl, setSyncUrl] = useState("");
+  const [syncSecret, setSyncSecret] = useState("");
   const native = Capacitor.isNativePlatform();
 
   useEffect(() => {
     getSetting<boolean>("remindersEnabled", false).then(setReminders);
     getSetting<boolean>("autoEndOnLeave", false).then(setAutoEndLeave);
+    syncEnabled().then(setSyncOn);
+    getSetting<string>("sheetSyncUrl", "").then(setSyncUrl);
+    getSetting<string>("sheetSyncSecret", "").then(setSyncSecret);
     pendingCount().then(setPending);
     currentVersion().then(setAppVersion);
   }, []);
+
+  const toggleSync = () => {
+    const v = !syncOn;
+    setSyncOn(v);
+    setSetting("syncEnabled", v);
+    if (v) pendingCount().then(setPending);
+  };
+  const saveSyncUrl = (v: string) => {
+    setSyncUrl(v);
+    setSetting("sheetSyncUrl", v.trim());
+  };
+  const saveSyncSecret = (v: string) => {
+    setSyncSecret(v);
+    setSetting("sheetSyncSecret", v.trim());
+  };
 
   const toggleAutoEndLeave = () => {
     const v = !autoEndLeave;
@@ -341,37 +362,13 @@ export function Settings({
       </details>
 
       <details className="settings-group">
-        <summary>Sheet &amp; data</summary>
-
-        <div className="setting">
-          <label>Google Sheets sync</label>
-          <p className="muted tiny">
-            Pre-configured on every device — finished workouts (sets, note, mood, time, avg HR) are written back to your
-            sheet automatically.
-          </p>
-          <div className="row">
-            <button className="mini" onClick={doTest}>
-              Test connection
-            </button>
-            <button className="mini" onClick={doSyncNow}>
-              Sync now{pending ? ` (${pending} pending)` : ""}
-            </button>
-            <button className="mini" onClick={doImport}>
-              Import from sheet ↓
-            </button>
-          </div>
-          {status && <p className="muted tiny">{status}</p>}
-          <p className="muted tiny">
-            “Import from sheet” pulls in any workouts in your sheet but missing on this device. It only adds — never
-            overwrites or deletes.
-          </p>
-        </div>
+        <summary>Backup &amp; data</summary>
 
         <div className="setting">
           <label>Backup</label>
           <p className="muted tiny">
-            Your whole history as an Excel file — opens in Excel/Sheets, keep it anywhere (Drive, Files, wherever).
-            Restoring only adds what's missing; it never overwrites or deletes.
+            Your data lives on this device. Back it up to an Excel file — opens in Excel/Sheets, keep it anywhere (Drive,
+            Files, wherever). Restoring only adds what's missing; it never overwrites or deletes.
           </p>
           <div className="row">
             <button className="mini" onClick={doExportXlsx}>
@@ -393,9 +390,6 @@ export function Settings({
           </div>
           {backupMsg && <p className="muted tiny">{backupMsg}</p>}
           <div className="row" style={{ marginTop: 8 }}>
-            <a className="mini linkbtn" href={SHEET_URL} target="_blank" rel="noopener noreferrer">
-              Open Google Sheet ↗
-            </a>
             <button className="mini" onClick={onExport}>
               Export (JSON)
             </button>
@@ -403,6 +397,56 @@ export function Settings({
               Reset app data
             </button>
           </div>
+        </div>
+      </details>
+
+      <details className="settings-group">
+        <summary>Google Sheets sync (optional)</summary>
+
+        <div className="setting">
+          <label>Sync finished workouts to a Google Sheet</label>
+          <button className={`mini ${syncOn ? "active" : ""}`} onClick={toggleSync}>
+            {syncOn ? "On — tap to disable" : "Enable"}
+          </button>
+          <p className="muted tiny">
+            Optional. When on, finished workouts (sets, note, mood, time, avg HR, run stats) are written back to a Google
+            Sheet via a small Apps Script. Off by default — the app is fully usable with local + file backup.
+          </p>
+
+          {syncOn && (
+            <>
+              <input
+                type="text"
+                className="full"
+                style={{ marginTop: 8 }}
+                placeholder="Apps Script Web App URL (…/exec)"
+                value={syncUrl}
+                onChange={(e) => saveSyncUrl(e.target.value)}
+              />
+              <input
+                type="text"
+                className="full"
+                placeholder="Shared secret"
+                value={syncSecret}
+                onChange={(e) => saveSyncSecret(e.target.value)}
+              />
+              <div className="row">
+                <button className="mini" onClick={doTest}>
+                  Test connection
+                </button>
+                <button className="mini" onClick={doSyncNow}>
+                  Sync now{pending ? ` (${pending} pending)` : ""}
+                </button>
+                <button className="mini" onClick={doImport}>
+                  Import from sheet ↓
+                </button>
+                <a className="mini linkbtn" href={SHEET_URL} target="_blank" rel="noopener noreferrer">
+                  Open sheet ↗
+                </a>
+              </div>
+              {status && <p className="muted tiny">{status}</p>}
+            </>
+          )}
         </div>
       </details>
 
