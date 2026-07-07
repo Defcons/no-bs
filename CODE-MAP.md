@@ -1,6 +1,6 @@
-# CODE-MAP — gym-tracker
+# CODE-MAP — NoBS (repo `no-bs`, formerly `gym-tracker`)
 
-Installable PWA for fast in-gym set logging. Local-first (IndexedDB via Dexie), imports the owner's Google Sheet history for records. See `project_gym_tracker` / `reference_gym_sheet` in memory.
+**NoBS – Workout Log**: a No-BS gym app — installable PWA + native Android (Capacitor), local-first (IndexedDB via Dexie). Landing page at nobs.codecrafts.cc. See `project_gym_tracker` / `reference_gym_sheet` in memory. NOTE: internal Android appId (`no.defc0n.gymtracker`), the homelab deploy path (`/apps/gym-tracker`), container name, and backend host (`gym.defc0n.no`) intentionally kept on the old name — renaming them would break OTA / installed-app data / live infra for no user benefit.
 
 _Last verified: 2026-07-06_
 
