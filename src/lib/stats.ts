@@ -81,6 +81,7 @@ export function trainingDue(daysSinceLast: number, daysPerWeek: number): boolean
 
 export type LiftRecord = {
   name: string;
+  key: string; // canonKey — used to pull this lift's progression
   count: number; // sets logged
   maxWeight: { weight: number; reps: number; date: string };
   bestE1rm: { est: number; weight: number; reps: number; date: string };
@@ -100,6 +101,7 @@ export function liftRecords(workouts: StoredWorkout[]): LiftRecord[] {
         if (!rec) {
           rec = {
             name,
+            key,
             count: 0,
             maxWeight: { weight: 0, reps: 0, date: "" },
             bestE1rm: { est: 0, weight: 0, reps: 0, date: "" },
@@ -119,6 +121,32 @@ export function liftRecords(workouts: StoredWorkout[]): LiftRecord[] {
   }
   // Most-trained lifts first.
   return [...map.values()].sort((a, b) => b.count - a.count);
+}
+
+export type ProgressPoint = { date: string; e1rm: number; topWeight: number };
+
+// Per-session best (est-1RM + top weight) for one lift, oldest→newest — for the chart.
+export function progression(workouts: StoredWorkout[], key: string): ProgressPoint[] {
+  const byDay = new Map<string, { e1rm: number; topWeight: number }>();
+  for (const w of workouts) {
+    const day = w.date.slice(0, 10);
+    for (const ex of w.exercises) {
+      if (canonKey(ex.name) !== key) continue;
+      const schemeReps = typeof ex.scheme.reps === "number" ? ex.scheme.reps : 0;
+      for (const set of ex.sets) {
+        if (!plausible(set.weight)) continue;
+        const reps = set.reps ?? schemeReps;
+        const e = reps > 0 ? epley(set.weight, reps) : set.weight;
+        const cur = byDay.get(day) ?? { e1rm: 0, topWeight: 0 };
+        if (e > cur.e1rm) cur.e1rm = e;
+        if (set.weight > cur.topWeight) cur.topWeight = set.weight;
+        byDay.set(day, cur);
+      }
+    }
+  }
+  return [...byDay.entries()]
+    .map(([date, v]) => ({ date, e1rm: v.e1rm, topWeight: v.topWeight }))
+    .sort((a, b) => a.date.localeCompare(b.date));
 }
 
 export function workoutVolume(w: StoredWorkout): number {

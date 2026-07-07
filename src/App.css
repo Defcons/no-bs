@@ -952,6 +952,57 @@ input[type="range"] {
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
+.record-head {
+  display: block;
+  width: 100%;
+  background: none;
+  border: none;
+  padding: 0;
+  text-align: left;
+  color: inherit;
+  cursor: pointer;
+}
+.record-name {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.record-chev {
+  color: var(--muted);
+  font-size: 12px;
+}
+/* est-1RM progression chart */
+.progress-chart {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+.pc-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.pc-line {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+.pc-area {
+  fill: color-mix(in srgb, var(--accent) 16%, transparent);
+  stroke: none;
+}
+.pc-dot {
+  fill: var(--accent);
+}
+.pc-cap {
+  margin-top: 4px;
+  text-align: center;
+}
+.pc-empty {
+  margin-top: 10px;
+}
 
 /* ---- Records by muscle (collapsible) ---- */
 .cat {

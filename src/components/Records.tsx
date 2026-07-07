@@ -1,11 +1,12 @@
 // Records: lifetime summary, key lifts rated against strength standards, and
 // per-muscle collapsible personal records.
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
-import { db } from "../db";
+import { db, type StoredWorkout } from "../db";
 import { niceDate } from "../lib/format";
 import { type BwEntry, KEY_LIFTS, adjustThresholds, bodyweightForYear, levelClass, rateLift } from "../lib/standards";
-import { type LiftRecord, MUSCLE_ORDER, liftRecords, muscleGroup, summarize } from "../lib/stats";
+import { type LiftRecord, MUSCLE_ORDER, liftRecords, muscleGroup, progression, summarize } from "../lib/stats";
+import { ProgressChart } from "./ProgressChart";
 
 export function Records({
   bodyweightKg,
@@ -98,24 +99,38 @@ export function Records({
           </summary>
           <div className="records">
             {byCat[cat].map((r) => (
-              <div key={r.name} className="record">
-                <div className="record-name">{r.name}</div>
-                <div className="record-nums">
-                  <div>
-                    <span className="big">{r.maxWeight.weight} kg</span>
-                    <span className="muted"> ×{r.maxWeight.reps}</span>
-                    <div className="tiny muted">max · {niceDate(r.maxWeight.date)}</div>
-                  </div>
-                  <div>
-                    <span className="big">{r.bestE1rm.est.toFixed(0)} kg</span>
-                    <div className="tiny muted">est 1RM · {niceDate(r.bestE1rm.date)}</div>
-                  </div>
-                </div>
-              </div>
+              <RecordRow key={r.name} r={r} workouts={workouts} />
             ))}
           </div>
         </details>
       ))}
+    </div>
+  );
+}
+
+function RecordRow({ r, workouts }: { r: LiftRecord; workouts: StoredWorkout[] }) {
+  const [open, setOpen] = useState(false);
+  const pts = useMemo(() => (open ? progression(workouts, r.key) : []), [open, workouts, r.key]);
+  return (
+    <div className={`record ${open ? "open" : ""}`}>
+      <button className="record-head" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
+        <div className="record-name">
+          {r.name}
+          <span className="record-chev">{open ? "▴" : "▾"}</span>
+        </div>
+        <div className="record-nums">
+          <div>
+            <span className="big">{r.maxWeight.weight} kg</span>
+            <span className="muted"> ×{r.maxWeight.reps}</span>
+            <div className="tiny muted">max · {niceDate(r.maxWeight.date)}</div>
+          </div>
+          <div>
+            <span className="big">{r.bestE1rm.est.toFixed(0)} kg</span>
+            <div className="tiny muted">est 1RM · {niceDate(r.bestE1rm.date)}</div>
+          </div>
+        </div>
+      </button>
+      {open && <ProgressChart points={pts} />}
     </div>
   );
 }
