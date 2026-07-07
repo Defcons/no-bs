@@ -5,6 +5,7 @@ import { Capacitor } from "@capacitor/core";
 import { db, getSetting, setSetting } from "../db";
 import { saveFile } from "../lib/download";
 import { hrAvailable } from "../lib/hr";
+import { overlayHasPermission, overlayRequestPermission } from "../lib/overlay";
 import { notificationsSupported, requestNotifications } from "../lib/notify";
 import { importFromSheet, pendingCount, syncEnabled, syncPending, testSync } from "../lib/sheetSync";
 import type { BwEntry } from "../lib/standards";
@@ -30,6 +31,10 @@ type Props = {
   onImported: () => void;
   onExport: () => void;
   onReset: () => void;
+  floatMode: "pip" | "overlay" | "off";
+  setFloatMode: (v: "pip" | "overlay" | "off") => void;
+  floatSizeSp: number;
+  setFloatSizeSp: (v: number) => void;
 };
 
 const SHEET_URL = "https://docs.google.com/spreadsheets/d/REDACTED_SHEET_ID/edit";
@@ -53,6 +58,10 @@ export function Settings({
   onImported,
   onExport,
   onReset,
+  floatMode,
+  setFloatMode,
+  floatSizeSp,
+  setFloatSizeSp,
 }: Props) {
   const [pending, setPending] = useState(0);
   const [status, setStatus] = useState<string>("");
@@ -76,6 +85,18 @@ export function Settings({
     pendingCount().then(setPending);
     currentVersion().then(setAppVersion);
   }, []);
+
+  const [floatMsg, setFloatMsg] = useState("");
+  const chooseFloat = async (m: "pip" | "overlay" | "off") => {
+    setFloatMode(m);
+    setFloatMsg("");
+    if (m === "overlay" && native) {
+      if (!(await overlayHasPermission())) {
+        setFloatMsg("Grant “Display over other apps”, then come back.");
+        await overlayRequestPermission();
+      }
+    }
+  };
 
   const toggleSync = () => {
     const v = !syncOn;
@@ -218,6 +239,37 @@ export function Settings({
           </div>
           <p className="muted tiny">Colors the “days since last workout” (green/orange/red) and drives reminders.</p>
         </div>
+
+        {native && (
+          <div className="setting">
+            <label>Floating timer (when you leave the app mid-workout)</label>
+            <div className="seg">
+              {(["pip", "overlay", "off"] as const).map((m) => (
+                <button key={m} className={floatMode === m ? "active" : ""} onClick={() => chooseFloat(m)}>
+                  {m === "pip" ? "PiP" : m === "overlay" ? "Bubble" : "Off"}
+                </button>
+              ))}
+            </div>
+            {floatMode === "overlay" && (
+              <div className="row" style={{ marginTop: 8 }}>
+                <span className="muted tiny">Size</span>
+                {[16, 22, 30].map((s, i) => (
+                  <button key={s} className={`mini ${floatSizeSp === s ? "active" : ""}`} onClick={() => setFloatSizeSp(s)}>
+                    {["S", "M", "L"][i]}
+                  </button>
+                ))}
+              </div>
+            )}
+            {floatMsg && <p className="muted tiny">{floatMsg}</p>}
+            <p className="muted tiny">
+              {floatMode === "overlay"
+                ? "A small draggable timer that floats over other apps — drag to move (position remembered), tap it to jump back. Needs “Display over other apps”."
+                : floatMode === "pip"
+                  ? "Android Picture-in-Picture — no extra permission, but its size is fixed by the OS."
+                  : "No floating timer; the rest-over notification (with sound) still fires in the background."}
+            </p>
+          </div>
+        )}
       </details>
 
       <details className="settings-group">

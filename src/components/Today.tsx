@@ -6,6 +6,7 @@ import { daysAgo, daysAgoLabel, hhmmss, mmss, niceDate } from "../lib/format";
 import { cancelBreakNotification, scheduleBreakNotification, showReminder } from "../lib/notify";
 import { startGeofence, stopGeofence } from "../lib/geofence";
 import { isInPip, onPipChange, setPipAutoEnter } from "../lib/pip";
+import { armOverlay, setOverlayState } from "../lib/overlay";
 import { startTracking, stopTracking } from "../lib/tracker";
 import { stepForExercise } from "../lib/steps";
 import { uid } from "../lib/uid";
@@ -30,6 +31,8 @@ type Props = {
   onFinished: () => void;
   editWorkout?: StoredWorkout | null; // a past workout to load into the editor
   onEditConsumed?: () => void;
+  floatMode: "pip" | "overlay" | "off"; // floating timer style
+  floatSizeSp: number; // overlay bubble text size
 };
 
 export function Today({
@@ -44,6 +47,8 @@ export function Today({
   onFinished,
   editWorkout,
   onEditConsumed,
+  floatMode,
+  floatSizeSp,
 }: Props) {
   const {
     draft,
@@ -175,14 +180,38 @@ export function Today({
     return () => document.removeEventListener("visibilitychange", onVis);
   }, []);
   const workoutActive = !!draft;
+  // PiP floating timer (thin 7:3 bar — smallest footprint Android's aspect-ratio API
+  // allows). Only when the user picked "pip" mode.
   useEffect(() => {
-    // A thin, wide bar — the smallest footprint Android allows via aspect ratio
-    // (must stay within [1:2.39 .. 2.39:1]). Everything sits on one line.
-    setPipAutoEnter(workoutActive, 7, 3);
+    setPipAutoEnter(workoutActive && floatMode === "pip", 7, 3);
     return () => {
       setPipAutoEnter(false);
     };
-  }, [workoutActive]);
+  }, [workoutActive, floatMode]);
+
+  // Overlay-bubble floating timer (fully app-controlled — draggable, resizable).
+  const overlayOn = workoutActive && floatMode === "overlay";
+  const overlayState = () => ({
+    restEndsAt: draft?.restEndsAt ?? 0,
+    elapsedSec: elapsed,
+    running: draft?.wRunning ?? false,
+    sinceEpoch: Date.now(),
+    bpm: hr.bpm ?? 0,
+    sizeSp: floatSizeSp,
+  });
+  useEffect(() => {
+    armOverlay(overlayOn, overlayState());
+    return () => {
+      armOverlay(false);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [overlayOn]);
+  // Keep the native cache fresh so it's accurate the moment the app is backgrounded
+  // (native ticks the time itself from elapsedSec + sinceEpoch).
+  useEffect(() => {
+    if (overlayOn) setOverlayState(overlayState());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [overlayOn, draft?.restEndsAt, draft?.wRunning, hr.bpm, floatSizeSp]);
 
   // GPS route recording: while an Alternative session has "Track GPS route" on,
   // record the path (stamped with live HR). The track is attached on finish.

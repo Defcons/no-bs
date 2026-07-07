@@ -14,10 +14,12 @@ public class MainActivity extends BridgeActivity {
     @Override
     public void onCreate(Bundle savedInstanceState) {
         registerPlugin(PipPlugin.class);
+        registerPlugin(OverlayPlugin.class);
         super.onCreate(savedInstanceState);
     }
 
-    // Auto-float the rest timer when the user leaves the app during a break.
+    // Leaving the app during a workout: float the PiP timer, or show the overlay
+    // bubble — whichever the user has armed (they're mutually exclusive).
     @Override
     protected void onUserLeaveHint() {
         if (PipPlugin.autoEnter
@@ -33,6 +35,7 @@ public class MainActivity extends BridgeActivity {
                 // finishing — never crash the app on Home for it.
             }
         }
+        // (The overlay bubble shows/hides via OverlayPlugin's own onPause/onResume.)
     }
 
     // Tell the web layer to swap in / out of the minimal PiP break view.

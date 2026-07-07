@@ -40,6 +40,8 @@ export default function App() {
   const [age, setAge] = useState(0); // 0 = not set
   const [bwHistory, setBwH] = useState<BwEntry[]>([]);
   const [hrLowThreshold, setHrLow] = useState(90);
+  const [floatMode, setFloatMode] = useState<"pip" | "overlay" | "off">("pip");
+  const [floatSizeSp, setFloatSizeSp] = useState(22);
 
   // Heart rate.
   const [bpm, setBpm] = useState<number | null>(null);
@@ -90,6 +92,8 @@ export default function App() {
       setAge(await getSetting("age", 0));
       setBwH(await getSetting<BwEntry[]>("bwHistory", []));
       setHrLow(await getSetting("hrLowThreshold", 90));
+      setFloatMode(await getSetting<"pip" | "overlay" | "off">("floatMode", "pip"));
+      setFloatSizeSp(await getSetting("floatSizeSp", 22));
       setReady(true);
       if (Capacitor.isNativePlatform()) requestNotifications(); // ask once so break alarms work
       await maybeRemind(dpw);
@@ -175,6 +179,14 @@ export default function App() {
     setHrLow(v);
     setSetting("hrLowThreshold", v);
   };
+  const persistFloatMode = (v: "pip" | "overlay" | "off") => {
+    setFloatMode(v);
+    setSetting("floatMode", v);
+  };
+  const persistFloatSize = (v: number) => {
+    setFloatSizeSp(v);
+    setSetting("floatSizeSp", v);
+  };
   const persistBwHistory = (v: BwEntry[]) => {
     setBwH(v);
     setSetting("bwHistory", v).then(() => syncBodyweight());
@@ -238,6 +250,8 @@ export default function App() {
             onFinished={() => setTab("history")}
             editWorkout={pendingEdit}
             onEditConsumed={() => setPendingEdit(null)}
+            floatMode={floatMode}
+            floatSizeSp={floatSizeSp}
           />
         )}
         {tab === "history" && (
@@ -276,6 +290,10 @@ export default function App() {
             onImported={reloadBodyweight}
             onExport={onExport}
             onReset={onReset}
+            floatMode={floatMode}
+            setFloatMode={persistFloatMode}
+            floatSizeSp={floatSizeSp}
+            setFloatSizeSp={persistFloatSize}
           />
         )}
       </main>
