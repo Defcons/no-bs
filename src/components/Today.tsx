@@ -183,7 +183,7 @@ export function Today({
   // PiP floating timer (thin 7:3 bar — smallest footprint Android's aspect-ratio API
   // allows). Only when the user picked "pip" mode.
   useEffect(() => {
-    setPipAutoEnter(workoutActive && floatMode === "pip", 7, 3);
+    setPipAutoEnter(workoutActive && floatMode === "pip", 3, 2);
     return () => {
       setPipAutoEnter(false);
     };
@@ -558,7 +558,9 @@ export function Today({
 
       {/* PiP: overlay the minimal timer view on top (keeps the workout UI mounted
           underneath, so note toggles etc. survive returning from the background). */}
-      {pipMode && <PipView restEndsAt={draft.restEndsAt ?? null} elapsedSec={elapsed} bpm={hr.bpm} />}
+      {pipMode && (
+        <PipView restEndsAt={draft.restEndsAt ?? null} startEpoch={draft.startedAt} bpm={hr.bpm} avg={hr.avg} />
+      )}
     </div>
   );
 }
