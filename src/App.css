@@ -628,9 +628,9 @@
   z-index: 60;
   display: flex;
   flex-direction: row;
-  align-items: baseline;
+  align-items: center;
   justify-content: center;
-  gap: 3vw;
+  gap: 2vw;
   background: var(--bg);
   color: var(--text);
   text-align: center;
@@ -642,17 +642,19 @@
   background: color-mix(in srgb, var(--accent) 22%, var(--bg));
 }
 .pip-label {
-  font-size: min(9vw, 28vh);
-  letter-spacing: 0.15em;
+  font-size: min(6vw, 22vh);
+  letter-spacing: 0.12em;
   color: var(--muted);
   font-weight: 700;
+  white-space: nowrap;
 }
 .pip-time {
   /* Sized to the (short) window height so it fits the thin bar. */
-  font-size: min(30vw, 62vh);
+  font-size: min(26vw, 58vh);
   line-height: 1;
   font-weight: 800;
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 .pip-view.resting .pip-time {
   color: var(--accent);
