@@ -6,7 +6,6 @@ import { daysAgo, daysAgoLabel, hhmmss, mmss, niceDate } from "../lib/format";
 import { cancelBreakNotification, scheduleBreakNotification, showReminder } from "../lib/notify";
 import { startGeofence, stopGeofence } from "../lib/geofence";
 import { isInPip, onPipChange, setPipAutoEnter } from "../lib/pip";
-import { armOverlay, setOverlayState } from "../lib/overlay";
 import { startTracking, stopTracking } from "../lib/tracker";
 import { stepForExercise } from "../lib/steps";
 import { uid } from "../lib/uid";
@@ -31,8 +30,7 @@ type Props = {
   onFinished: () => void;
   editWorkout?: StoredWorkout | null; // a past workout to load into the editor
   onEditConsumed?: () => void;
-  floatMode: "pip" | "overlay" | "off"; // floating timer style
-  floatSizeSp: number; // overlay bubble text size
+  floatMode: "pip" | "off"; // floating timer (PiP) on/off
 };
 
 export function Today({
@@ -48,7 +46,6 @@ export function Today({
   editWorkout,
   onEditConsumed,
   floatMode,
-  floatSizeSp,
 }: Props) {
   const {
     draft,
@@ -188,28 +185,6 @@ export function Today({
       setPipAutoEnter(false);
     };
   }, [workoutActive, floatMode]);
-
-  // Overlay-bubble floating timer (fully app-controlled — draggable, resizable).
-  const overlayOn = workoutActive && floatMode === "overlay";
-  const overlayState = () => ({
-    restEndsAt: draft?.restEndsAt ?? 0,
-    startEpoch: draft?.startedAt ?? Date.now(),
-    bpm: hr.bpm ?? 0,
-    sizeSp: floatSizeSp,
-  });
-  useEffect(() => {
-    armOverlay(overlayOn, overlayState());
-    return () => {
-      armOverlay(false);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [overlayOn]);
-  // Keep the native cache fresh so it's accurate the moment the app is backgrounded
-  // (native ticks the time itself from elapsedSec + sinceEpoch).
-  useEffect(() => {
-    if (overlayOn) setOverlayState(overlayState());
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [overlayOn, draft?.restEndsAt, draft?.startedAt, hr.bpm, floatSizeSp]);
 
   // GPS route recording: while an Alternative session has "Track GPS route" on,
   // record the path (stamped with live HR). The track is attached on finish.

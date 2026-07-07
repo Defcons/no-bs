@@ -40,8 +40,7 @@ export default function App() {
   const [age, setAge] = useState(0); // 0 = not set
   const [bwHistory, setBwH] = useState<BwEntry[]>([]);
   const [hrLowThreshold, setHrLow] = useState(90);
-  const [floatMode, setFloatMode] = useState<"pip" | "overlay" | "off">("pip");
-  const [floatSizeSp, setFloatSizeSp] = useState(22);
+  const [floatMode, setFloatMode] = useState<"pip" | "off">("pip");
 
   // Heart rate.
   const [bpm, setBpm] = useState<number | null>(null);
@@ -92,8 +91,8 @@ export default function App() {
       setAge(await getSetting("age", 0));
       setBwH(await getSetting<BwEntry[]>("bwHistory", []));
       setHrLow(await getSetting("hrLowThreshold", 90));
-      setFloatMode(await getSetting<"pip" | "overlay" | "off">("floatMode", "pip"));
-      setFloatSizeSp(await getSetting("floatSizeSp", 22));
+      // Coerce the removed "overlay" mode back to PiP for anyone who tried it.
+      setFloatMode((await getSetting<string>("floatMode", "pip")) === "off" ? "off" : "pip");
       setReady(true);
       if (Capacitor.isNativePlatform()) requestNotifications(); // ask once so break alarms work
       await maybeRemind(dpw);
@@ -179,13 +178,9 @@ export default function App() {
     setHrLow(v);
     setSetting("hrLowThreshold", v);
   };
-  const persistFloatMode = (v: "pip" | "overlay" | "off") => {
+  const persistFloatMode = (v: "pip" | "off") => {
     setFloatMode(v);
     setSetting("floatMode", v);
-  };
-  const persistFloatSize = (v: number) => {
-    setFloatSizeSp(v);
-    setSetting("floatSizeSp", v);
   };
   const persistBwHistory = (v: BwEntry[]) => {
     setBwH(v);
@@ -251,7 +246,6 @@ export default function App() {
             editWorkout={pendingEdit}
             onEditConsumed={() => setPendingEdit(null)}
             floatMode={floatMode}
-            floatSizeSp={floatSizeSp}
           />
         )}
         {tab === "history" && (
@@ -292,8 +286,6 @@ export default function App() {
             onReset={onReset}
             floatMode={floatMode}
             setFloatMode={persistFloatMode}
-            floatSizeSp={floatSizeSp}
-            setFloatSizeSp={persistFloatSize}
           />
         )}
       </main>

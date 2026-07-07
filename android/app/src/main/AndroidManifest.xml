@@ -58,7 +58,4 @@
 
     <!-- Notifications (break-timer alarm + reminders) -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-
-    <!-- Optional floating timer overlay (requested only if the user enables it) -->
-    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
 </manifest>
