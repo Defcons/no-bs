@@ -1,7 +1,7 @@
 {
   "name": "gym-tracker",
   "private": true,
-  "version": "1.17.0",
+  "version": "1.18.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -34,6 +34,7 @@
     "@types/web-bluetooth": "^0.0.21",
     "@vitejs/plugin-react": "^6.0.3",
     "oxlint": "^1.71.0",
+    "sharp": "^0.35.3",
     "tsx": "^4.22.4",
     "typescript": "~6.0.2",
     "vite": "^8.1.1",
