@@ -25,3 +25,6 @@ dist-ssr
 
 # dev fixtures (personal sheet snapshot)
 dev-fixtures/
+
+# Local secrets / personal build config (never commit)
+.env.local

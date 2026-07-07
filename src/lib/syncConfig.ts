@@ -1,14 +1,12 @@
-// Built-in Google Sheets sync config, baked into the client so no per-device setup
-// is needed. NOTE: this "secret" is effectively public — anyone who loads the JS
-// bundle can read it, and Cloudflare Access only guards gym.defc0n.no, NOT the
-// script.google.com /exec endpoint. The real protections are just that the endpoint
-// is obscure and the blast radius is one personal spreadsheet (append/read only). If
-// that ever stops being acceptable, move these to per-device Settings (no default)
-// or put the Apps Script behind its own auth.
-export const DEFAULT_SYNC_URL =
-  "REDACTED_SYNC_URL";
-export const DEFAULT_SYNC_SECRET = "REDACTED_OLD_SECRET";
+// Optional Google Sheets sync config. In the PUBLIC build these are EMPTY, so sync
+// is off by default and the user configures their own in Settings. A personal build
+// supplies them via a gitignored `.env.local` (VITE_SYNC_URL / VITE_SYNC_SECRET) so
+// it keeps syncing with zero setup.
+//
+// NEVER hardcode a real secret here — it ships in the client bundle.
+export const DEFAULT_SYNC_URL = import.meta.env.VITE_SYNC_URL ?? "";
+export const DEFAULT_SYNC_SECRET = import.meta.env.VITE_SYNC_SECRET ?? "";
 
-// Public origin of the installed PWA — used to build shareable route links that
-// open the in-app map viewer (behind Cloudflare Access, so only the owner can open).
-export const APP_PUBLIC_URL = "https://gym.defc0n.no";
+// Public origin of the installed app — used to build shareable route links that open
+// the in-app map viewer. Empty in the public build (falls back to a relative link).
+export const APP_PUBLIC_URL = import.meta.env.VITE_APP_URL ?? "";

@@ -99,6 +99,43 @@ export const DEFAULT_TEMPLATES: Omit<DayTemplate, "id">[] = [
   },
 ];
 
+// Generic starter split for a fresh (public) install — universal names, editable.
+export const GENERIC_TEMPLATES: Omit<DayTemplate, "id">[] = [
+  {
+    name: "Push",
+    order: 0,
+    exercises: [
+      { name: "Bench Press", scheme: s(3, 5) },
+      { name: "Overhead Press", scheme: s(3, 8) },
+      { name: "Incline Press", scheme: s(3, 8) },
+      { name: "Dips", scheme: s(3, 10) },
+      { name: "Triceps Extension", scheme: s(3, 12) },
+    ],
+  },
+  {
+    name: "Pull",
+    order: 1,
+    exercises: [
+      { name: "Deadlift", scheme: s(3, 5) },
+      { name: "Pull-up", scheme: s(3, 8) },
+      { name: "Barbell Row", scheme: s(3, 8) },
+      { name: "Lat Pulldown", scheme: s(3, 10) },
+      { name: "Biceps Curl", scheme: s(3, 12) },
+    ],
+  },
+  {
+    name: "Legs",
+    order: 2,
+    exercises: [
+      { name: "Squat", scheme: s(3, 5) },
+      { name: "Romanian Deadlift", scheme: s(3, 8) },
+      { name: "Leg Press", scheme: s(3, 10) },
+      { name: "Leg Curl", scheme: s(3, 12) },
+      { name: "Calf Raise", scheme: s(3, 15) },
+    ],
+  },
+];
+
 // --- One-time bootstrap: seed templates + import sheet history ---------------
 // Guarded against concurrent invocation (React StrictMode double-mounts effects
 // in dev, which would otherwise double-seed before the flag is written).
@@ -111,13 +148,16 @@ async function doBootstrap(): Promise<void> {
   const done = await getSetting("bootstrapped", false);
   if (done) return;
 
-  // Belt-and-suspenders: only seed when the tables are actually empty.
+  // Belt-and-suspenders: only seed when the tables are actually empty. Personal
+  // build → my split; public build → a generic starter (both editable/deletable).
   if ((await db.templates.count()) === 0) {
-    await db.templates.bulkAdd(DEFAULT_TEMPLATES as DayTemplate[]);
+    const starters = import.meta.env.VITE_SEED ? DEFAULT_TEMPLATES : GENERIC_TEMPLATES;
+    await db.templates.bulkAdd(starters as DayTemplate[]);
   }
 
-  const alreadyImported = await db.workouts.where("source").startsWith("sheet:").count();
-  if (alreadyImported === 0) {
+  // Personal history seed — ONLY in a personal build (VITE_SEED). A build-time
+  // constant, so Vite tree-shakes the seed data out of the public bundle entirely.
+  if (import.meta.env.VITE_SEED && (await db.workouts.where("source").startsWith("sheet:").count()) === 0) {
     const { parseWorkbook } = await import("./lib/sheet");
     const seed = (await import("./data/history-seed.json")).default as Record<string, string>;
     // Drop sessions dated in the future (sheet typos like a stray "33" year).

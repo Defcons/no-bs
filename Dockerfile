@@ -2,10 +2,19 @@
 FROM node:20-alpine AS build
 WORKDIR /app
 ARG APP_VERSION=dev
+# Personal build config (from GitHub secrets via docker-compose build args). Empty =
+# a clean public build. Written to a throwaway .env.production so Vite bakes them.
+ARG VITE_SYNC_URL=
+ARG VITE_SYNC_SECRET=
+ARG VITE_APP_URL=
+ARG VITE_SEED=
 COPY package.json package-lock.json ./
 RUN npm ci
 COPY . .
-RUN npm run build
+RUN printf 'VITE_SYNC_URL=%s\nVITE_SYNC_SECRET=%s\nVITE_APP_URL=%s\nVITE_SEED=%s\n' \
+      "$VITE_SYNC_URL" "$VITE_SYNC_SECRET" "$VITE_APP_URL" "$VITE_SEED" > .env.production \
+  && npm run build \
+  && rm -f .env.production
 # OTA bundle for the native app: a zip of the built web app + a version manifest
 # the app polls (see src/lib/update.ts). Version = semver (package.json) + git sha
 # build metadata, so it's human-readable (vX.Y.Z) yet unique per deploy.

@@ -4,6 +4,10 @@ services:
       context: .
       args:
         APP_VERSION: ${APP_VERSION:-dev}
+        VITE_SYNC_URL: ${VITE_SYNC_URL:-}
+        VITE_SYNC_SECRET: ${VITE_SYNC_SECRET:-}
+        VITE_APP_URL: ${VITE_APP_URL:-}
+        VITE_SEED: ${VITE_SEED:-}
     container_name: gym-tracker
     restart: unless-stopped
     environment:
