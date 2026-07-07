@@ -34,8 +34,6 @@ type Props = {
   setFloatMode: (v: "pip" | "off") => void;
 };
 
-const SHEET_URL = "https://docs.google.com/spreadsheets/d/REDACTED_SHEET_ID/edit";
-
 export function Settings({
   restDefaultSec,
   setRestDefaultSec,
@@ -69,6 +67,7 @@ export function Settings({
   const [syncOn, setSyncOn] = useState(false);
   const [syncUrl, setSyncUrl] = useState("");
   const [syncSecret, setSyncSecret] = useState("");
+  const [sheetViewUrl, setSheetViewUrl] = useState("");
   const native = Capacitor.isNativePlatform();
 
   useEffect(() => {
@@ -77,6 +76,7 @@ export function Settings({
     syncEnabled().then(setSyncOn);
     getSetting<string>("sheetSyncUrl", "").then(setSyncUrl);
     getSetting<string>("sheetSyncSecret", "").then(setSyncSecret);
+    getSetting<string>("sheetViewUrl", "").then(setSheetViewUrl);
     pendingCount().then(setPending);
     currentVersion().then(setAppVersion);
   }, []);
@@ -94,6 +94,10 @@ export function Settings({
   const saveSyncSecret = (v: string) => {
     setSyncSecret(v);
     setSetting("sheetSyncSecret", v.trim());
+  };
+  const saveSheetViewUrl = (v: string) => {
+    setSheetViewUrl(v);
+    setSetting("sheetViewUrl", v.trim());
   };
 
   const toggleAutoEndLeave = () => {
@@ -452,6 +456,13 @@ export function Settings({
                 value={syncSecret}
                 onChange={(e) => saveSyncSecret(e.target.value)}
               />
+              <input
+                type="text"
+                className="full"
+                placeholder="Your sheet URL (optional — for the 'Open sheet' link)"
+                value={sheetViewUrl}
+                onChange={(e) => saveSheetViewUrl(e.target.value)}
+              />
               <div className="row">
                 <button className="mini" onClick={doTest}>
                   Test connection
@@ -462,9 +473,11 @@ export function Settings({
                 <button className="mini" onClick={doImport}>
                   Import from sheet ↓
                 </button>
-                <a className="mini linkbtn" href={SHEET_URL} target="_blank" rel="noopener noreferrer">
-                  Open sheet ↗
-                </a>
+                {sheetViewUrl && (
+                  <a className="mini linkbtn" href={sheetViewUrl} target="_blank" rel="noopener noreferrer">
+                    Open sheet ↗
+                  </a>
+                )}
               </div>
               {status && <p className="muted tiny">{status}</p>}
             </>
