@@ -49,6 +49,13 @@ export async function checkAndApplyUpdate(): Promise<UpdateResult> {
     const cur = await currentVersion();
     if (latest.version === cur) return { status: "uptodate", message: "You're already on the latest version." };
     const bundle = await CapacitorUpdater.download({ url: latest.url, version: latest.version });
+    // Stamp the new version so that after the reload the app can open on Settings and
+    // confirm the update (App.readJustUpdated reads-and-clears this on boot).
+    try {
+      localStorage.setItem("nobs.justUpdated", latest.version);
+    } catch {
+      /* non-fatal */
+    }
     await CapacitorUpdater.set(bundle); // switches + reloads into the new bundle
     return { status: "updated", message: "Updated — reloading…" };
   } catch (e) {

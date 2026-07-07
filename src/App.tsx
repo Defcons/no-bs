@@ -26,9 +26,22 @@ function readRouteHash(): string | null {
   return m ? decodeURIComponent(m[1]) : null;
 }
 
+// An OTA update reloads the app into the new bundle (update.ts stamps this before
+// the reload). Pure read here (safe under StrictMode double-invoke); we clear it in
+// an effect so the confirmation only shows once, right after the update reload.
+function readJustUpdated(): string | null {
+  try {
+    return localStorage.getItem("nobs.justUpdated");
+  } catch {
+    return null;
+  }
+}
+
 export default function App() {
   const [ready, setReady] = useState(false);
-  const [tab, setTab] = useState<Tab>("today");
+  const [updatedVersion] = useState<string | null>(readJustUpdated);
+  const [showUpdated, setShowUpdated] = useState<boolean>(!!updatedVersion);
+  const [tab, setTab] = useState<Tab>(updatedVersion ? "settings" : "today");
   const [routeHash, setRouteHash] = useState<string | null>(() => readRouteHash());
   const [pendingEdit, setPendingEdit] = useState<StoredWorkout | null>(null); // History → edit in Today
 
@@ -78,6 +91,17 @@ export default function App() {
       await setSetting("lastReminder", today);
     }
   };
+
+  // Clear the just-updated stamp once consumed so the banner shows only this once.
+  useEffect(() => {
+    if (updatedVersion) {
+      try {
+        localStorage.removeItem("nobs.justUpdated");
+      } catch {
+        /* ignore */
+      }
+    }
+  }, [updatedVersion]);
 
   useEffect(() => {
     (async () => {
@@ -229,6 +253,14 @@ export default function App() {
   return (
     <div className="app">
       <main className="content">
+        {showUpdated && (
+          <div className="update-banner" role="status">
+            <span>✓ Updated to v{updatedVersion?.split("+")[0]} — you're on the latest.</span>
+            <button className="update-banner-x" onClick={() => setShowUpdated(false)} aria-label="Dismiss">
+              ×
+            </button>
+          </div>
+        )}
         {tab === "today" && (
           <Today
             templates={templates}
