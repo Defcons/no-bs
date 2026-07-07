@@ -8,7 +8,7 @@ import { CapacitorUpdater } from "@capgo/capacitor-updater";
 const native = () => Capacitor.isNativePlatform();
 
 // The deploy publishes the latest bundle info here (see Dockerfile).
-const VERSION_URL = "https://gym.defc0n.no/version.json";
+const VERSION_URL = "https://app.codecrafts.cc/version.json";
 
 export const updatesSupported = (): boolean => native();
 

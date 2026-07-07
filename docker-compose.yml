@@ -13,7 +13,7 @@ services:
     environment:
       - TZ=Europe/Oslo
     ports:
-      - "3060:80" # host:container — NPM proxies gym.defc0n.no to this host port
+      - "3060:80" # host:container — NPM proxies app.codecrafts.cc (+ gym.defc0n.no, retiring) here
     volumes:
       # Persistent dir for the downloadable APK, so it survives image rebuilds.
       # Served at gym.defc0n.no/dl/gym-tracker.apk
