@@ -26,5 +26,20 @@ dist-ssr
 # dev fixtures (personal sheet snapshot)
 dev-fixtures/
 
-# Local secrets / personal build config (never commit)
+# ---- Secrets, keys & personal build config (NEVER commit) ----
+.env
+.env.*
+!.env.example
 .env.local
+*.pem
+*.key
+*_rsa
+*_ed25519
+id_ed25519*
+id_rsa*
+*.p12
+*.keystore
+*.jks
+secrets/
+**/credentials*.json
+**/serviceAccount*.json
