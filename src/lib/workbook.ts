@@ -120,8 +120,12 @@ export async function exportXlsx(workouts: StoredWorkout[], bwHistory: BwEntry[]
   for (const tab of workbookTabs(workouts, bwHistory)) {
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(tab.rows), tab.name.slice(0, 31));
   }
+  // Lossless JSON, chunked across rows — a single cell can't exceed 32,767 chars.
   const json = JSON.stringify({ v: 1, workouts, bwHistory });
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([["gym-tracker backup — do not edit"], [json]]), DATA_TAB);
+  const CHUNK = 30000;
+  const dataRows: string[][] = [["gym-tracker backup — do not edit"]];
+  for (let i = 0; i < json.length; i += CHUNK) dataRows.push([json.slice(i, i + CHUNK)]);
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(dataRows), DATA_TAB);
   wb.Workbook = { Sheets: wb.SheetNames.map((n) => (n === DATA_TAB ? { Hidden: 1 } : {})) };
   const out = XLSX.write(wb, { bookType: "xlsx", type: "array" }) as ArrayBuffer;
   return new Blob([out], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
@@ -139,7 +143,7 @@ export async function importXlsx(buf: ArrayBuffer): Promise<ImportedBackup> {
 
   if (wb.SheetNames.includes(DATA_TAB)) {
     const rows = aoa(DATA_TAB);
-    const json = rows?.[1]?.[0];
+    const json = rows.slice(1).map((r) => r?.[0] ?? "").join(""); // reassemble chunks
     if (json) {
       try {
         const parsed = JSON.parse(json) as { workouts?: StoredWorkout[]; bwHistory?: BwEntry[] };

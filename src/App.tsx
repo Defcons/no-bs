@@ -7,6 +7,7 @@ import { type HrMonitor, createHrMonitor, hrAvailable } from "./lib/hr";
 import { Capacitor } from "@capacitor/core";
 import { notificationsAllowed, requestNotifications, showReminder } from "./lib/notify";
 import { markAppReady } from "./lib/update";
+import { saveFile } from "./lib/download";
 import { syncBodyweight } from "./lib/sheetSync";
 import type { BwEntry } from "./lib/standards";
 import { trainingDue } from "./lib/stats";
@@ -193,11 +194,7 @@ export default function App() {
       exportedAt: new Date().toISOString(),
     };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = `gym-backup-${new Date().toISOString().slice(0, 10)}.json`;
-    a.click();
-    URL.revokeObjectURL(a.href);
+    await saveFile(`gym-backup-${new Date().toISOString().slice(0, 10)}.json`, blob);
   };
 
   const onReset = async () => {
@@ -245,7 +242,14 @@ export default function App() {
         )}
         {tab === "history" && (
           <History
-            onEdit={(w) => {
+            onEdit={async (w) => {
+              // Only one session lives in the editor at a time. Don't let editing a
+              // past workout clobber a live in-progress one.
+              const active = await getSetting<{ editId?: number } | null>("activeDraft", null);
+              if (active && active.editId == null) {
+                alert("Finish or reset your current workout first, then edit a past one.");
+                return;
+              }
               setPendingEdit(w);
               setTab("today");
             }}

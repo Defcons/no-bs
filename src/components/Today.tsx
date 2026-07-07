@@ -177,9 +177,10 @@ export function Today({
   const workoutActive = !!draft;
   const hrShown = hr.connected;
   useEffect(() => {
-    // Compact window: near-square when HR is shown (timer + HR stacked), wide+short
-    // when it's just the timer.
-    setPipAutoEnter(workoutActive, hrShown ? 5 : 5, hrShown ? 4 : 2);
+    // Compact window. Android REQUIRES the aspect ratio within [1:2.39 .. 2.39:1] —
+    // 5:2 (=2.5) silently threw and killed PiP. Square when HR is shown (timer + HR
+    // stacked), 2:1 when it's just the timer.
+    setPipAutoEnter(workoutActive, hrShown ? 1 : 2, 1);
     return () => {
       setPipAutoEnter(false);
     };
