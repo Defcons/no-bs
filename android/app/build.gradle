@@ -1,4 +1,12 @@
+import groovy.json.JsonSlurper
+
 apply plugin: 'com.android.application'
+
+// Version is single-sourced from package.json so every release bumps the APK.
+// Android only installs an APK whose versionCode is HIGHER than the installed one,
+// so a static versionCode makes new APKs silently "not update". 1.18.0 -> 11800.
+def pkgVersion = new JsonSlurper().parse(file("$rootDir/../package.json")).version
+def (vMajor, vMinor, vPatch) = pkgVersion.tokenize('.').collect { it.toInteger() }
 
 android {
     namespace = "no.defc0n.gymtracker"
@@ -7,8 +15,8 @@ android {
         applicationId "no.defc0n.gymtracker"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "1.0"
+        versionCode vMajor * 10000 + vMinor * 100 + vPatch
+        versionName pkgVersion
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
