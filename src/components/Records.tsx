@@ -5,7 +5,7 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { db, type StoredWorkout } from "../db";
 import { niceDate } from "../lib/format";
 import { type BwEntry, KEY_LIFTS, adjustThresholds, bodyweightForYear, levelClass, rateLift } from "../lib/standards";
-import { type LiftRecord, MUSCLE_ORDER, liftRecords, muscleGroup, progression, summarize } from "../lib/stats";
+import { type LiftRecord, MUSCLE_ORDER, liftRecords, muscleGroup, progression, sessionsPerWeek, summarize } from "../lib/stats";
 import { ProgressChart } from "./ProgressChart";
 
 export function Records({
@@ -28,12 +28,13 @@ export function Records({
     const byCat: Record<string, LiftRecord[]> = {};
     for (const r of records) (byCat[muscleGroup(r.name)] ??= []).push(r);
     for (const c of Object.keys(byCat)) byCat[c].sort((a, b) => b.maxWeight.weight - a.maxWeight.weight);
-    return { summary, records, byCat };
+    return { summary, records, byCat, perWeek: sessionsPerWeek(workouts, 12) };
   }, [workouts]);
   if (!workouts) return <div className="pad">Loading…</div>;
   if (workouts.length === 0) return <div className="pad muted">No workouts yet — log your first one!</div>;
 
-  const { summary, records, byCat } = derived!;
+  const { summary, records, byCat, perWeek } = derived!;
+  const maxWeek = Math.max(1, ...perWeek);
 
   return (
     <div className="pad history">
@@ -89,6 +90,16 @@ export function Records({
           </p>
         </div>
       )}
+
+      <h3 className="section">Consistency</h3>
+      <div className="weekbars">
+        {perWeek.map((c, i) => (
+          <div key={i} className="weekbar" title={`${c} workout${c === 1 ? "" : "s"}`}>
+            <div className="weekbar-fill" style={{ height: `${(c / maxWeek) * 100}%` }} />
+          </div>
+        ))}
+      </div>
+      <p className="muted tiny">Workouts per week — last 12 weeks (right = this week).</p>
 
       <h3 className="section">Records by muscle</h3>
       {MUSCLE_ORDER.filter((cat) => byCat[cat]?.length).map((cat) => (

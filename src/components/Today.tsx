@@ -17,6 +17,7 @@ import type { DayTemplate, ExercisePerf } from "../types";
 import { ExerciseCard } from "./ExerciseCard";
 import { PipView } from "./PipView";
 import { RestTimer } from "./RestTimer";
+import { TemplateEditor } from "./TemplateEditor";
 
 type Props = {
   templates: DayTemplate[];
@@ -70,6 +71,7 @@ export function Today({
   const [showTools, setShowTools] = useState(false);
   const [finishAsk, setFinishAsk] = useState(false);
   const [pipMode, setPipMode] = useState(false);
+  const [editTpl, setEditTpl] = useState<DayTemplate | null>(null); // workout being created/edited
   const native = Capacitor.isNativePlatform();
   const bpmRef = useRef<number | null>(null);
   bpmRef.current = hr.bpm; // always-fresh HR for the GPS track stamps
@@ -275,20 +277,24 @@ export function Today({
             const last = lastByDay[t.name];
             const cad = last ? cadenceStatus(daysAgo(last.date), daysPerWeek, templates.length) : "red";
             return (
-              <button
-                key={t.id ?? t.name}
-                className="day-btn"
-                onClick={() => {
-                  start(t);
-                  onWorkoutStart();
-                }}
-              >
-                <span className="day-name">{t.name}</span>
-                <span className="day-sub">{t.exercises.length} exercises</span>
-                <span className={`day-last cad-${cad}`}>
-                  {last ? `Last: ${niceDate(last.date)} (${daysAgoLabel(last.date)})` : "Never done"}
-                </span>
-              </button>
+              <div key={t.id ?? t.name} className="day-cell">
+                <button
+                  className="day-btn"
+                  onClick={() => {
+                    start(t);
+                    onWorkoutStart();
+                  }}
+                >
+                  <span className="day-name">{t.name}</span>
+                  <span className="day-sub">{t.exercises.length} exercises</span>
+                  <span className={`day-last cad-${cad}`}>
+                    {last ? `Last: ${niceDate(last.date)} (${daysAgoLabel(last.date)})` : "Never done"}
+                  </span>
+                </button>
+                <button className="day-edit" aria-label={`edit ${t.name}`} onClick={() => setEditTpl(t)}>
+                  ✎
+                </button>
+              </div>
             );
           })}
           <button
@@ -301,7 +307,15 @@ export function Today({
             <span className="day-name">＋ Alternative</span>
             <span className="day-sub">Running, crossfit, or your own exercises</span>
           </button>
+          <button
+            className="day-btn new-btn"
+            onClick={() => setEditTpl({ name: "", order: 0, exercises: [] })}
+          >
+            <span className="day-name">＋ New workout</span>
+            <span className="day-sub">Build your own reusable day</span>
+          </button>
         </div>
+        {editTpl && <TemplateEditor template={editTpl} onClose={() => setEditTpl(null)} />}
       </div>
     );
   }

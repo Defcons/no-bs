@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">Gym Tracker</string>
-    <string name="title_activity_main">Gym Tracker</string>
+    <string name="app_name">NoBS</string>
+    <string name="title_activity_main">NoBS</string>
     <string name="package_name">no.defc0n.gymtracker</string>
     <string name="custom_url_scheme">no.defc0n.gymtracker</string>
 </resources>

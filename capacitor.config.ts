@@ -4,7 +4,7 @@ import type { CapacitorConfig } from "@capacitor/cli";
 // gym.defc0n.no is unaffected — this is an additional target.
 const config: CapacitorConfig = {
   appId: "no.defc0n.gymtracker",
-  appName: "Gym Tracker",
+  appName: "NoBS – Workout Log",
   webDir: "dist",
   plugins: {
     // OTA web-layer updates are driven manually from Settings → Update (self-hosted

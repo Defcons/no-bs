@@ -17,9 +17,9 @@ export default defineConfig({
       // downloadable /gym-tracker.apk) — those should hit the network.
       workbox: { navigateFallbackDenylist: [/\.[^/]+$/] },
       manifest: {
-        name: "Gym Tracker",
-        short_name: "Gym",
-        description: "Fast in-gym set logging with rest timer and heart rate",
+        name: "NoBS – Workout Log",
+        short_name: "NoBS",
+        description: "A no-BS workout log: sets, reps, timer, heart rate. Nothing you don't need.",
         theme_color: "#0e1116",
         background_color: "#0e1116",
         display: "standalone",

@@ -53,6 +53,54 @@
   padding: 18px;
   text-align: left;
   background: var(--surface);
+  width: 100%;
+}
+.day-cell {
+  position: relative;
+}
+.day-edit {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  font-size: 15px;
+  color: var(--muted);
+  background: var(--surface-2);
+  border-color: var(--line);
+}
+.new-btn {
+  border-style: dashed;
+}
+/* ---- Template (workout) editor rows ---- */
+.tmpl-title {
+  flex: 1;
+  font-size: 17px;
+  font-weight: 600;
+}
+.tmpl-cols {
+  display: flex;
+  justify-content: space-between;
+  padding: 0 2px 4px;
+}
+.tmpl-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 40px 10px 40px 30px 30px 30px;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 6px;
+}
+.tmpl-name {
+  min-width: 0;
+}
+.tmpl-num {
+  text-align: center;
+  padding: 0 4px;
+}
+.tmpl-x {
+  text-align: center;
+  color: var(--muted);
 }
 .day-name {
   font-size: 19px;
@@ -1002,6 +1050,30 @@ input[type="range"] {
 }
 .pc-empty {
   margin-top: 10px;
+}
+
+/* ---- Consistency (workouts per week) ---- */
+.weekbars {
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+  height: 56px;
+  padding: 6px 2px;
+}
+.weekbar {
+  flex: 1;
+  height: 100%;
+  display: flex;
+  align-items: flex-end;
+  background: var(--surface-2);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.weekbar-fill {
+  width: 100%;
+  min-height: 2px;
+  background: var(--accent);
+  border-radius: 4px 4px 0 0;
 }
 
 /* ---- Records by muscle (collapsible) ---- */

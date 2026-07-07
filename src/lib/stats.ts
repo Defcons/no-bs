@@ -123,6 +123,22 @@ export function liftRecords(workouts: StoredWorkout[]): LiftRecord[] {
   return [...map.values()].sort((a, b) => b.count - a.count);
 }
 
+// Sessions in each of the last `weeks` rolling 7-day windows, oldest→newest
+// (rightmost = the last 7 days). For the consistency trend.
+export function sessionsPerWeek(workouts: StoredWorkout[], weeks = 12): number[] {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const todayMs = today.getTime();
+  const counts = new Array<number>(weeks).fill(0);
+  for (const w of workouts) {
+    const [y, m, d] = w.date.slice(0, 10).split("-").map(Number);
+    const t = new Date(y, m - 1, d).getTime();
+    const idx = Math.floor((todayMs - t) / (7 * 86400000));
+    if (idx >= 0 && idx < weeks) counts[weeks - 1 - idx]++;
+  }
+  return counts;
+}
+
 export type ProgressPoint = { date: string; e1rm: number; topWeight: number };
 
 // Per-session best (est-1RM + top weight) for one lift, oldest→newest — for the chart.
