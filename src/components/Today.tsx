@@ -193,9 +193,7 @@ export function Today({
   const overlayOn = workoutActive && floatMode === "overlay";
   const overlayState = () => ({
     restEndsAt: draft?.restEndsAt ?? 0,
-    elapsedSec: elapsed,
-    running: draft?.wRunning ?? false,
-    sinceEpoch: Date.now(),
+    startEpoch: draft?.startedAt ?? Date.now(),
     bpm: hr.bpm ?? 0,
     sizeSp: floatSizeSp,
   });
@@ -211,7 +209,7 @@ export function Today({
   useEffect(() => {
     if (overlayOn) setOverlayState(overlayState());
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [overlayOn, draft?.restEndsAt, draft?.wRunning, hr.bpm, floatSizeSp]);
+  }, [overlayOn, draft?.restEndsAt, draft?.startedAt, hr.bpm, floatSizeSp]);
 
   // GPS route recording: while an Alternative session has "Track GPS route" on,
   // record the path (stamped with live HR). The track is attached on finish.

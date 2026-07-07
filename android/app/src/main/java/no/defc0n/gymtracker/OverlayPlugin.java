@@ -33,11 +33,10 @@ import com.getcapacitor.annotation.CapacitorPlugin;
 public class OverlayPlugin extends Plugin {
     static boolean armed = false;
 
-    // Latest state pushed from JS (native computes the ticking time from these).
+    // Latest state pushed from JS (native computes the ticking time from these, so it
+    // keeps counting while the WebView is paused).
     private static long restEndsAt = 0;
-    private static long elapsedBaseSec = 0;
-    private static boolean running = false;
-    private static long sinceEpoch = 0;
+    private static long startEpoch = 0; // workout start (ms); WORK time = now - startEpoch
     private static int bpm = 0;
     private static int sizeSp = 22;
 
@@ -86,9 +85,7 @@ public class OverlayPlugin extends Plugin {
 
     private void applyState(PluginCall call) {
         if (call.hasOption("restEndsAt")) restEndsAt = (long) call.getDouble("restEndsAt", 0.0).doubleValue();
-        if (call.hasOption("elapsedSec")) elapsedBaseSec = (long) call.getDouble("elapsedSec", 0.0).doubleValue();
-        if (call.hasOption("sinceEpoch")) sinceEpoch = (long) call.getDouble("sinceEpoch", 0.0).doubleValue();
-        if (call.hasOption("running")) running = call.getBoolean("running", false);
+        if (call.hasOption("startEpoch")) startEpoch = (long) call.getDouble("startEpoch", 0.0).doubleValue();
         if (call.hasOption("bpm")) bpm = call.getInt("bpm", 0);
         if (call.hasOption("sizeSp")) sizeSp = call.getInt("sizeSp", 22);
     }
@@ -180,7 +177,7 @@ public class OverlayPlugin extends Plugin {
         if (restEndsAt > now) {
             text = "BREAK " + mmss((restEndsAt - now) / 1000);
         } else {
-            long secs = elapsedBaseSec + (running ? Math.max(0, (now - sinceEpoch) / 1000) : 0);
+            long secs = startEpoch > 0 ? Math.max(0, (now - startEpoch) / 1000) : 0;
             text = "WORK " + hhmmss(secs);
         }
         if (bpm > 0) text += "   ♥" + bpm;

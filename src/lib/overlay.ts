@@ -6,9 +6,7 @@ import { Capacitor, registerPlugin } from "@capacitor/core";
 
 export type OverlayState = {
   restEndsAt?: number; // epoch ms of the running rest timer (0/none = show workout time)
-  elapsedSec?: number; // workout elapsed seconds at sinceEpoch
-  running?: boolean; // is the workout timer running (tick up)
-  sinceEpoch?: number; // Date.now() when elapsedSec was captured
+  startEpoch?: number; // workout start (ms); native ticks WORK time from this
   bpm?: number; // last heart rate (0 = hide)
   sizeSp?: number; // text size
 };
