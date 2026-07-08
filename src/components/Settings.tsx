@@ -100,10 +100,23 @@ export function Settings({
     setSetting("sheetViewUrl", v.trim());
   };
 
+  // Google Play requires a prominent in-app disclosure + affirmative consent BEFORE
+  // background location is requested. Disabling needs no prompt.
+  const BG_LOCATION_DISCLOSURE =
+    '"Auto-end when I leave" uses your location in the background — even when the app is closed or ' +
+    "not in use — to detect when you leave the gym and automatically save your workout.\n\n" +
+    "• Location is collected only while a workout is running, only for this feature.\n" +
+    "• It stays on your device and is never sent to us or shared with anyone.\n\n" +
+    'Android will then ask you to allow location "All the time". Enable auto-end?';
   const toggleAutoEndLeave = () => {
-    const v = !autoEndLeave;
-    setAutoEndLeave(v);
-    setSetting("autoEndOnLeave", v);
+    if (autoEndLeave) {
+      setAutoEndLeave(false);
+      setSetting("autoEndOnLeave", false);
+      return;
+    }
+    if (!confirm(BG_LOCATION_DISCLOSURE)) return; // declined the disclosure → leave it off
+    setAutoEndLeave(true);
+    setSetting("autoEndOnLeave", true);
   };
 
   const doUpdate = async () => {
@@ -296,9 +309,10 @@ export function Settings({
               {autoEndLeave ? "On — tap to disable" : "Enable"}
             </button>
             <p className="muted tiny">
-              The app remembers where you are when a workout starts. If you move ~100 m away for 5 min while it's
-              running, the session auto-saves. Alternative sessions (e.g. a run) are excluded. Uses a background
-              location service while you train — grant location “Allow all the time”.
+              Off by default. When on, the app remembers where you are when a workout starts; if you move ~100 m away
+              for 5 min while it's running, the session auto-saves. Alternative sessions (e.g. a run) are excluded. This
+              uses location in the background — even when the app is closed — only while a workout is running, and it
+              never leaves your device. Grant location “Allow all the time” when asked.
             </p>
           </div>
         )}

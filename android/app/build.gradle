@@ -8,6 +8,16 @@ apply plugin: 'com.android.application'
 def pkgVersion = new JsonSlurper().parse(file("$rootDir/../package.json")).version
 def (vMajor, vMinor, vPatch) = pkgVersion.tokenize('.').collect { it.toInteger() }
 
+// Release signing (Play upload key). Secrets live in an untracked keystore.properties
+// (see keystore.properties.example). When it's absent — debug builds, CI web builds —
+// release simply stays unsigned so nothing breaks.
+def keystorePropsFile = rootProject.file("keystore.properties")
+def keystoreProps = new Properties()
+def hasSigning = keystorePropsFile.exists()
+if (hasSigning) {
+    keystoreProps.load(new FileInputStream(keystorePropsFile))
+}
+
 android {
     namespace = "no.defc0n.gymtracker"
     compileSdk = rootProject.ext.compileSdkVersion
@@ -24,10 +34,23 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    signingConfigs {
+        if (hasSigning) {
+            release {
+                storeFile rootProject.file(keystoreProps['storeFile'])
+                storePassword keystoreProps['storePassword']
+                keyAlias keystoreProps['keyAlias']
+                keyPassword keystoreProps['keyPassword']
+            }
+        }
+    }
     buildTypes {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            if (hasSigning) {
+                signingConfig signingConfigs.release
+            }
         }
     }
 }

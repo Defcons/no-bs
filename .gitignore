@@ -40,6 +40,7 @@ id_rsa*
 *.p12
 *.keystore
 *.jks
+keystore.properties
 secrets/
 **/credentials*.json
 **/serviceAccount*.json
