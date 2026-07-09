@@ -4,7 +4,7 @@ import { readFileSync, writeFileSync, mkdirSync } from "fs";
 import sharp from "sharp";
 
 const SRC = "REDACTED_LOCAL_PATH";
-const OUT = "C:/Dev/codecrafts-sites/nobs";
+const OUT = "C:/Dev/web/codecrafts-sites/nobs";
 mkdirSync(OUT, { recursive: true });
 
 const body = readFileSync(SRC, "utf8");
