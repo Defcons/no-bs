@@ -46,6 +46,7 @@ function readJustUpdated(): string | null {
 
 export default function App() {
   const [ready, setReady] = useState(false);
+  const [bootError, setBootError] = useState<string | null>(null);
   const [updatedVersion] = useState<string | null>(readJustUpdated);
   const [showUpdated, setShowUpdated] = useState<boolean>(!!updatedVersion);
   const [tab, setTab] = useState<Tab>(updatedVersion ? "settings" : "today");
@@ -132,7 +133,11 @@ export default function App() {
       setReady(true);
       if (Capacitor.isNativePlatform()) requestNotifications(); // ask once so break alarms work
       await maybeRemind(dpw);
-    })();
+    })().catch((e) => {
+      // A boot failure (IndexedDB quota/private mode, seed import) must show a
+      // message + retry — not an eternal "Loading…" spinner.
+      setBootError((e as Error).message || "Something went wrong while starting.");
+    });
     const onVis = () => {
       if (document.visibilityState === "visible") getSetting("daysPerWeek", 4).then(maybeRemind);
     };
@@ -264,6 +269,13 @@ export default function App() {
       </Suspense>
     );
 
+  if (bootError)
+    return (
+      <div className="boot">
+        <p>Couldn't start: {bootError}</p>
+        <button onClick={() => location.reload()}>Try again</button>
+      </div>
+    );
   if (!ready || !templates) return <div className="boot">Loading…</div>;
 
   return (

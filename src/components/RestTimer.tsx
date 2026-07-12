@@ -51,6 +51,13 @@ export function RestTimer({ endsAt, onChange }: Props) {
 
   useEffect(() => {
     if (endsAt == null) return;
+    // Mounting onto an ALREADY-expired timer (tab switch back, reopening the app
+    // on a forgotten draft) must not replay the alarm — it fired when it expired.
+    if (endsAt - Date.now() < -5000) {
+      firedRef.current = true;
+      setRemaining(0);
+      return;
+    }
     firedRef.current = false;
     let id = 0;
     const tick = () => {

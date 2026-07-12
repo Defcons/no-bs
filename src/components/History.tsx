@@ -214,7 +214,7 @@ function LogRow({
           {(w.durationSec || w.moodBefore || w.moodAfter) && (
             <div className="tiny muted log-meta">
               {w.durationSec ? `⏱ ${Math.round(w.durationSec / 60)} min` : ""}
-              {w.avgHr ? ` · ♥ ${w.avgHr} avg / ${w.maxHr} max` : ""}
+              {w.avgHr ? ` · ♥ ${w.avgHr} avg${w.maxHr ? ` / ${w.maxHr} max` : ""}` : ""}
               {w.moodBefore || w.moodAfter ? ` · 🙂 ${w.moodBefore ?? "–"}→${w.moodAfter ?? "–"}/10` : ""}
             </div>
           )}

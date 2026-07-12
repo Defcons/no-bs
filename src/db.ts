@@ -141,7 +141,12 @@ export const GENERIC_TEMPLATES: Omit<DayTemplate, "id">[] = [
 // in dev, which would otherwise double-seed before the flag is written).
 let booting: Promise<void> | null = null;
 export function ensureBootstrapped(): Promise<void> {
-  return (booting ??= doBootstrap());
+  // Don't cache a rejection — a transient IndexedDB failure (quota, private mode)
+  // would otherwise brick every retry until a full restart.
+  return (booting ??= doBootstrap().catch((e) => {
+    booting = null;
+    throw e;
+  }));
 }
 
 async function doBootstrap(): Promise<void> {

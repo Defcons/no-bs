@@ -157,18 +157,28 @@ export function Today({
   const finishNow = async () => {
     if (finishingRef.current) return;
     finishingRef.current = true;
-    const track = draft?.trackGps ? await stopTracking() : undefined;
-    const row = await finish(getHrStats(), track && track.length >= 2 ? { track } : undefined);
-    if (row && !row.edited) {
-      // Edits update the local record only — re-syncing would append a new column.
-      const res = await syncWorkout(row);
-      if (res && !res.ok) {
-        alert(`Saved locally, but Google Sheet sync failed:\n${res.error}\n\nRetry from Settings → Sync now.`);
+    try {
+      cancelBreakNotification(); // no "Rest over!" minutes after the workout ended
+      const track = draft?.trackGps ? await stopTracking() : undefined;
+      const row = await finish(getHrStats(), track && track.length >= 2 ? { track } : undefined);
+      if (row && !row.edited) {
+        // Edits update the local record only — re-syncing would append a new column.
+        const res = await syncWorkout(row);
+        if (res && !res.ok) {
+          alert(`Saved locally, but Google Sheet sync failed:\n${res.error}\n\nRetry from Settings → Sync now.`);
+        }
       }
+      setHrPrompt(false);
+      setFinishAsk(false);
+      onFinished();
+    } catch (e) {
+      // Surface it — a silent failure here read as "the button does nothing".
+      alert(`Couldn't save the workout: ${(e as Error).message}\n\nYour session is still active — try again.`);
+    } finally {
+      // Always release the guard: an error above otherwise dead-ends every
+      // future Finish tap until the tab remounts.
+      finishingRef.current = false;
     }
-    setHrPrompt(false);
-    setFinishAsk(false);
-    onFinished();
   };
   // The Finish button: nudge to rate mood first if it wasn't set.
   const finishWorkout = () => {
@@ -190,17 +200,23 @@ export function Today({
     hrEver.current = false;
     lastHrAt.current = Date.now();
   }, [draft?.startedAt]);
-  // If HR was in use but has been unavailable for 10 min, auto-finish (skip for
-  // Alternative sessions).
+  // If HR was in use but has been unavailable for 10 min, ASK (same prompt flow as
+  // low-HR) rather than force-saving — a dead strap battery mid-set must not end
+  // the session with no warning. Unanswered for 5 min → auto-end.
   useEffect(() => {
     if (!draft || draft.custom || hrLowThreshold <= 0) return;
     const id = window.setInterval(() => {
-      if (hrEver.current && !hr.connected && Date.now() - lastHrAt.current >= 10 * 60 * 1000) {
-        finishRef.current();
+      if (!hrPrompt && hrEver.current && !hr.connected && Date.now() - lastHrAt.current >= 10 * 60 * 1000) {
+        promptDeadline.current = Date.now() + 5 * 60 * 1000;
+        setHrPrompt(true);
+        showReminder(
+          "Still working out?",
+          "Lost your heart-rate signal 10 min ago — tap to keep going, or the session auto-ends in 5 min.",
+        );
       }
     }, 20000);
     return () => window.clearInterval(id);
-  }, [draft, draft?.custom, hr.connected, hrLowThreshold]);
+  }, [draft, draft?.custom, hr.connected, hrLowThreshold, hrPrompt]);
 
   // Float as Picture-in-Picture whenever you leave the app during an active
   // workout; the minimal PiP view shows the break countdown (if resting) or the
@@ -532,13 +548,15 @@ export function Today({
           <div className="hr-modal">
             <h3>Still working out?</h3>
             <p className="muted">
-              Your heart rate's been low. Auto-ending in <b>{mmss(hrPromptLeft)}</b>.
+              {hr.connected ? "Your heart rate's been low." : "Lost your heart-rate signal."} Auto-ending in{" "}
+              <b>{mmss(hrPromptLeft)}</b>.
             </p>
             <div className="row">
               <button
                 className="primary"
                 onClick={() => {
                   lowSince.current = null;
+                  lastHrAt.current = Date.now(); // restart the dropout window too
                   setHrPrompt(false);
                 }}
               >

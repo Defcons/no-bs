@@ -62,10 +62,14 @@
     <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
     <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />
 
-    <!-- Location — leave-gym auto-end (background foreground-service geofence) -->
+    <!-- Location — GPS run tracking + leave-gym auto-end. Both run through the
+         location-type FOREGROUND service, started while the app is open, so plain
+         "While using the app" permission keeps GPS flowing with the screen off.
+         Deliberately NO ACCESS_BACKGROUND_LOCATION: it isn't needed for this
+         pattern, and it's the highest-rejection-rate permission on Play (declaration
+         + demo video + "core functionality" review). Do not re-add casually. -->
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
-    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
 

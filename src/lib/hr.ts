@@ -27,9 +27,13 @@ export function hrAvailable(): boolean {
 }
 
 // Parse a Heart Rate Measurement characteristic value (see BLE HRS spec).
+// Bounds-checked: a runt packet from a flaky strap must not throw inside the
+// notification callback (0 = ignore reading).
 function parseHr(value: DataView): number {
+  if (value.byteLength < 2) return 0;
   const flags = value.getUint8(0);
-  return flags & 0x1 ? value.getUint16(1, true) : value.getUint8(1);
+  if (flags & 0x1) return value.byteLength >= 3 ? value.getUint16(1, true) : 0;
+  return value.getUint8(1);
 }
 
 // --- Web Bluetooth implementation ------------------------------------------
@@ -50,7 +54,7 @@ class WebHeartRateMonitor implements HrMonitor {
 
   private handle = (e: Event) => {
     const c = e.target as BluetoothRemoteGATTCharacteristic;
-    if (c.value) for (const l of this.listeners) l(parseHr(c.value));
+    if (c.value) { const bpm = parseHr(c.value); if (bpm > 0) for (const l of this.listeners) l(bpm); }
   };
 
   async connect(): Promise<void> {
@@ -105,7 +109,7 @@ class NativeHeartRateMonitor implements HrMonitor {
     });
     this.deviceId = device.deviceId;
     await BleClient.startNotifications(device.deviceId, HR_SERVICE, HR_MEASUREMENT, (value) => {
-      for (const l of this.listeners) l(parseHr(value));
+      { const bpm = parseHr(value); if (bpm > 0) for (const l of this.listeners) l(bpm); }
     });
     this.onStatus?.(true);
   }

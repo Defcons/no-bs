@@ -8,8 +8,8 @@
 // bundle.
 import { db, getSetting, setSetting, type StoredWorkout } from "../db";
 import type { BwEntry } from "./standards";
-import type { Scheme } from "../types";
-import { cellFor } from "./sheetSync";
+import type { DayTemplate, Scheme } from "../types";
+import { cellFor, sessionKey } from "./sheetSync";
 import { computeRun, fmtDist, fmtPace } from "./runStats";
 import { parseBodyweightTab, parseSheet } from "./sheet";
 
@@ -114,14 +114,19 @@ export function workbookTabs(workouts: StoredWorkout[], bwHistory: BwEntry[]): S
 }
 
 // Build the .xlsx (visible tabs + hidden lossless _data tab).
-export async function exportXlsx(workouts: StoredWorkout[], bwHistory: BwEntry[]): Promise<Blob> {
+export async function exportXlsx(
+  workouts: StoredWorkout[],
+  bwHistory: BwEntry[],
+  templates: DayTemplate[] = [],
+): Promise<Blob> {
   const XLSX = await import("xlsx");
   const wb = XLSX.utils.book_new();
   for (const tab of workbookTabs(workouts, bwHistory)) {
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(tab.rows), tab.name.slice(0, 31));
   }
   // Lossless JSON, chunked across rows — a single cell can't exceed 32,767 chars.
-  const json = JSON.stringify({ v: 1, workouts, bwHistory });
+  // Templates ride along so a restore on a fresh phone brings the user's split back.
+  const json = JSON.stringify({ v: 2, workouts, bwHistory, templates });
   const CHUNK = 30000;
   const dataRows: string[][] = [["gym-tracker backup — do not edit"]];
   for (let i = 0; i < json.length; i += CHUNK) dataRows.push([json.slice(i, i + CHUNK)]);
@@ -131,7 +136,11 @@ export async function exportXlsx(workouts: StoredWorkout[], bwHistory: BwEntry[]
   return new Blob([out], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
 }
 
-export type ImportedBackup = { workouts: Partial<StoredWorkout>[]; bwHistory?: BwEntry[] };
+export type ImportedBackup = {
+  workouts: Partial<StoredWorkout>[];
+  bwHistory?: BwEntry[];
+  templates?: DayTemplate[];
+};
 
 // Read a backup. Prefers the lossless _data tab; falls back to parsing the visible
 // tabs (so a hand-made / Google-exported .xlsx still imports).
@@ -146,8 +155,13 @@ export async function importXlsx(buf: ArrayBuffer): Promise<ImportedBackup> {
     const json = rows.slice(1).map((r) => r?.[0] ?? "").join(""); // reassemble chunks
     if (json) {
       try {
-        const parsed = JSON.parse(json) as { workouts?: StoredWorkout[]; bwHistory?: BwEntry[] };
-        if (parsed.workouts) return { workouts: parsed.workouts, bwHistory: parsed.bwHistory };
+        const parsed = JSON.parse(json) as {
+          workouts?: StoredWorkout[];
+          bwHistory?: BwEntry[];
+          templates?: DayTemplate[];
+        };
+        if (parsed.workouts)
+          return { workouts: parsed.workouts, bwHistory: parsed.bwHistory, templates: parsed.templates };
       } catch {
         /* fall through to parsing visible tabs */
       }
@@ -161,16 +175,17 @@ export async function importXlsx(buf: ArrayBuffer): Promise<ImportedBackup> {
   return { workouts, bwHistory };
 }
 
-// Apply a restore: add only workouts this device is missing (deduped by day+date),
-// and merge bodyweight years (imported wins per year). Never overwrites or deletes.
+// Apply a restore: add only workouts this device is missing (deduped by a
+// content-aware session key so two genuine same-day sessions both survive), plus
+// any templates the device doesn't have (matched by name), and merge bodyweight
+// years (imported wins per year). Never overwrites or deletes.
 export async function applyBackup(imported: ImportedBackup): Promise<{ added: number; bwYears: number }> {
   const existing = await db.workouts.toArray();
-  const key = (day: string, iso: string) => `${day}@@${iso.slice(0, 10)}`;
-  const have = new Set(existing.map((w) => key(w.dayName, w.date)));
+  const have = new Set(existing.map(sessionKey));
   const toAdd: StoredWorkout[] = [];
   for (const w of imported.workouts) {
     if (!w.dayName || !w.date) continue;
-    const k = key(w.dayName, w.date);
+    const k = sessionKey(w as StoredWorkout);
     if (have.has(k)) continue;
     have.add(k);
     const { id: _id, ...rest } = w as StoredWorkout;
@@ -178,6 +193,15 @@ export async function applyBackup(imported: ImportedBackup): Promise<{ added: nu
     toAdd.push({ ...rest, source: rest.source ?? "restore", synced: rest.synced ?? true } as StoredWorkout);
   }
   if (toAdd.length) await db.workouts.bulkAdd(toAdd);
+
+  // Restore custom templates the device lacks (by name; never overwrites existing).
+  if (imported.templates?.length) {
+    const haveNames = new Set((await db.templates.toArray()).map((t) => t.name.trim().toLowerCase()));
+    const newTpls = imported.templates
+      .filter((t) => t?.name && !haveNames.has(t.name.trim().toLowerCase()))
+      .map(({ id: _tid, ...rest }) => rest as DayTemplate);
+    if (newTpls.length) await db.templates.bulkAdd(newTpls);
+  }
 
   let bwYears = 0;
   if (imported.bwHistory?.length) {

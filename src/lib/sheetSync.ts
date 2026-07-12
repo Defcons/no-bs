@@ -30,21 +30,40 @@ export type SyncResult = {
 // Norwegian decimal comma, matching how the sheet is written (72.5 -> "72,5").
 const fmtNum = (n: number): string => String(n).replace(".", ",");
 
-// Reconstruct a sheet cell like "72,5-70-70" or "70-70-70(2)".
-// Assisted/extra reps are written in parentheses, matching the owner's sheet style.
+// Reconstruct a sheet cell like "72,5-70-70", "70(6)" (off-scheme reps) or
+// "70(6+2)" (6 clean + 2 assisted) — the sheet's own historical conventions, and
+// exactly what parseCell reads back, so a sheet round-trip is lossless.
 export function cellFor(ex: ExercisePerf): string {
   if (ex.skipped) return "x";
+  const schemeReps = typeof ex.scheme?.reps === "number" ? ex.scheme.reps : null;
   return ex.sets
     .filter((s) => s.weight != null || s.reps != null)
     .map((s) => {
       // Bodyweight set (reps only, no weight) → "(reps)", which parseCell reads back.
       if (s.weight == null) return s.reps != null ? `(${s.reps})` : "";
       let t = fmtNum(s.weight);
-      if (s.assist != null) t += `(${s.assist})`;
+      // Annotate reps when they carry information: off-scheme reps or an assist.
+      if (s.assist != null) t += `(${s.reps ?? schemeReps ?? ""}+${s.assist})`;
+      else if (s.reps != null && s.reps !== schemeReps) t += `(${s.reps})`;
       return t;
     })
     .filter((t) => t !== "")
     .join("-");
+}
+
+// Dedup key for restore/import: day + date alone would collapse two genuine
+// same-day sessions (e.g. a morning and an evening run), so include a cheap
+// content signature — identical sessions still dedupe, distinct ones survive.
+// Duration is rounded to minutes so formatting round-trips don't split keys.
+export function sessionKey(w: {
+  dayName: string;
+  date: string;
+  exercises: { name: string; sets: unknown[] }[];
+  durationSec?: number;
+}): string {
+  const nSets = w.exercises.reduce((a, e) => a + e.sets.length, 0);
+  const mins = w.durationSec ? Math.round(w.durationSec / 60) : 0;
+  return `${w.dayName.trim().toLowerCase()}@@${w.date.slice(0, 10)}@@${w.exercises.length}@@${nSets}@@${mins}`;
 }
 
 // ISO date -> "dd.mm.yy" (the sheet's header format).
@@ -77,6 +96,8 @@ async function post(url: string, payload: unknown): Promise<SyncResult> {
       url,
       headers: { "Content-Type": "text/plain;charset=utf-8" },
       data: body,
+      connectTimeout: 15000, // don't hang Finish forever on a black-hole network
+      readTimeout: 20000,
     });
     if (res.status >= 400) return { ok: false, error: `HTTP ${res.status}` };
     return (typeof res.data === "string" ? JSON.parse(res.data) : res.data) as SyncResult;
@@ -127,10 +148,27 @@ function durationStr(sec?: number): string {
   return `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
 }
 
-export async function syncWorkout(row: StoredWorkout): Promise<SyncResult | null> {
+// Serialize all workout pushes: the finish-time push and a concurrent "Sync now"
+// (or double-tap) must not race — combined with the server's same-date column
+// reuse this makes duplicate columns impossible.
+let syncChain: Promise<unknown> = Promise.resolve();
+
+export function syncWorkout(row: StoredWorkout): Promise<SyncResult | null> {
+  const next = syncChain.then(() => syncWorkoutNow(row));
+  syncChain = next.catch(() => {}); // keep the chain alive after failures
+  return next;
+}
+
+async function syncWorkoutNow(row: StoredWorkout): Promise<SyncResult | null> {
   if (!(await syncEnabled())) return null; // sync turned off — local + file backup only
   const { url, secret } = await config();
   if (!url) return null; // sync not set up — silently skip
+  // A queued push may have been superseded (the same row already synced by the
+  // push ahead of it in the chain) — re-check the live row, don't push twice.
+  if (row.id != null) {
+    const live = await db.workouts.get(row.id);
+    if (live?.synced) return { ok: true };
+  }
   const run = computeRun(row.track); // GPS-tracked cardio → distance/pace/speed/route
   // Encode the whole path (thinned) into a link that opens our in-app map viewer.
   const routeLink =
@@ -209,14 +247,13 @@ export async function importFromSheet(): Promise<{ added: number; bwYears?: numb
       .filter(([name]) => name !== BODYWEIGHT_TAB)
       .flatMap(([name, rows]) => parseSheet(rows, name));
     const existing = await db.workouts.toArray();
-    const key = (dayName: string, iso: string) => `${dayName}@@${iso.slice(0, 10)}`;
-    const have = new Set(existing.map((w) => key(w.dayName, w.date)));
+    const have = new Set(existing.map(sessionKey));
     const cutoff = new Date(Date.now() + 2 * 86400000).toISOString().slice(0, 10); // drop future typos
 
     const toAdd: StoredWorkout[] = [];
     for (const w of parsed) {
       if (w.date > cutoff) continue;
-      const k = key(w.dayName, w.date);
+      const k = sessionKey(w);
       if (have.has(k)) continue;
       have.add(k);
       toAdd.push({

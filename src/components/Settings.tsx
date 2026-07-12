@@ -5,7 +5,7 @@ import { Capacitor } from "@capacitor/core";
 import { db, getSetting, setSetting } from "../db";
 import { saveFile } from "../lib/download";
 import { hrAvailable } from "../lib/hr";
-import { cancelTrainingReminders, notificationsSupported, requestNotifications } from "../lib/notify";
+import { cancelTrainingReminders, notificationsSupported, requestNotifications, scheduleTrainingReminders } from "../lib/notify";
 import { importFromSheet, pendingCount, syncEnabled, syncPending, testSync } from "../lib/sheetSync";
 import type { BwEntry } from "../lib/standards";
 import { checkAndApplyUpdate, currentVersion, updatesSupported } from "../lib/update";
@@ -108,14 +108,15 @@ export function Settings({
     setSetting("sheetViewUrl", v.trim());
   };
 
-  // Google Play requires a prominent in-app disclosure + affirmative consent BEFORE
-  // background location is requested. Disabling needs no prompt.
+  // Prominent disclosure + affirmative consent before any location permission
+  // prompt (Play best practice; kept even though we only use while-in-use
+  // location via a foreground service — no ACCESS_BACKGROUND_LOCATION).
   const BG_LOCATION_DISCLOSURE =
-    '"Auto-end when I leave" uses your location in the background — even when the app is closed or ' +
-    "not in use — to detect when you leave the gym and automatically save your workout.\n\n" +
-    "• Location is collected only while a workout is running, only for this feature.\n" +
+    '"Auto-end when I leave" uses your location while a workout is running to detect when you ' +
+    "leave the gym and automatically save your workout.\n\n" +
+    "• Location is used only during a workout, only for this feature — a notification shows while it's active.\n" +
     "• It stays on your device and is never sent to us or shared with anyone.\n\n" +
-    'Android will then ask you to allow location "All the time". Enable auto-end?';
+    'Android will ask to allow location "While using the app". Enable auto-end?';
   const toggleAutoEndLeave = () => {
     if (autoEndLeave) {
       setAutoEndLeave(false);
@@ -169,7 +170,10 @@ export function Settings({
     const granted = await requestNotifications();
     if (granted) {
       setReminders(true);
-      setSetting("remindersEnabled", true);
+      await setSetting("remindersEnabled", true);
+      // Schedule right away — otherwise nothing is armed until the next app open.
+      const last = await db.workouts.orderBy("date").reverse().first();
+      scheduleTrainingReminders(daysPerWeek, last?.date ?? null);
     } else {
       alert("Notifications are blocked. Enable them for this site in your browser settings, then try again.");
     }
@@ -203,7 +207,7 @@ export function Settings({
     setBackupMsg("Building workbook…");
     try {
       const workouts = await db.workouts.toArray();
-      const blob = await exportXlsx(workouts, bwHistory);
+      const blob = await exportXlsx(workouts, bwHistory, await db.templates.toArray());
       await saveFile(`gym-backup-${new Date().toISOString().slice(0, 10)}.xlsx`, blob);
       setBackupMsg(`Backed up ${workouts.length} workouts.`);
     } catch (e) {
@@ -218,7 +222,7 @@ export function Settings({
       let imported: ImportedBackup;
       if (file.name.toLowerCase().endsWith(".json")) {
         const j = JSON.parse(new TextDecoder().decode(buf)) as ImportedBackup;
-        imported = { workouts: j.workouts ?? [], bwHistory: j.bwHistory };
+        imported = { workouts: j.workouts ?? [], bwHistory: j.bwHistory, templates: j.templates };
       } else {
         imported = await importXlsx(buf);
       }
@@ -388,9 +392,9 @@ export function Settings({
             </button>
             <p className="muted tiny">
               Off by default. When on, the app remembers where you are when a workout starts; if you move ~100 m away
-              for 5 min while it's running, the session auto-saves. Alternative sessions (e.g. a run) are excluded. This
-              uses location in the background — even when the app is closed — only while a workout is running, and it
-              never leaves your device. Grant location “Allow all the time” when asked.
+              for 5 min while it's running, the session auto-saves. Alternative sessions (e.g. a run) are excluded.
+              Location is used only while a workout is running (a notification shows while active) and never leaves
+              your device. Grant location “While using the app” when asked.
             </p>
           </div>
         )}

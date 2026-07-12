@@ -124,10 +124,26 @@ export async function scheduleTrainingReminders(daysPerWeek: number, lastWorkout
   try {
     await LocalNotifications.cancel({ notifications: TRAIN_NOTIF_IDS.map((id) => ({ id })) });
     const gapDays = Math.ceil(7 / Math.max(1, daysPerWeek));
-    const base = lastWorkoutISO ? new Date(lastWorkoutISO.slice(0, 10)) : new Date();
-    const due = new Date(base.getFullYear(), base.getMonth(), base.getDate() + gapDays, REMINDER_HOUR, 0, 0);
+    // Parse the date as LOCAL calendar parts — new Date("yyyy-mm-dd") is UTC
+    // midnight, which shifts a day back in UTC-negative timezones.
+    const now = new Date();
+    let y = now.getFullYear();
+    let mo = now.getMonth();
+    let d = now.getDate();
+    if (lastWorkoutISO) {
+      const [py, pm, pd] = lastWorkoutISO.slice(0, 10).split("-").map(Number);
+      if (py && pm && pd) [y, mo, d] = [py, pm - 1, pd];
+    }
+    let due = new Date(y, mo, d + gapDays, REMINDER_HOUR, 0, 0);
+    // Already overdue (the users reminders exist for!) — anchor to today so the
+    // filter below doesn't silently drop every shot.
+    if (due.getTime() <= Date.now()) {
+      due = new Date(now.getFullYear(), now.getMonth(), now.getDate(), REMINDER_HOUR, 0, 0);
+      if (due.getTime() <= Date.now()) due = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, REMINDER_HOUR, 0, 0);
+    }
     const notifications = TRAIN_NOTIF_IDS.map((id, i) => {
-      const at = new Date(due.getTime() + i * 86400000);
+      // Calendar-day steps (not +86400000 ms) so the 17:00 slot survives DST.
+      const at = new Date(due.getFullYear(), due.getMonth(), due.getDate() + i, REMINDER_HOUR, 0, 0);
       return { id, at };
     }).filter((n) => n.at.getTime() > Date.now());
     if (!notifications.length) return;

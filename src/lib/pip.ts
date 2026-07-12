@@ -59,10 +59,14 @@ export function onPipChange(cb: (inPip: boolean) => void): () => void {
   if (!native()) return () => {};
   let handle: PluginListenerHandle | null = null;
   let cancelled = false;
-  Pip.addListener("pipChange", (d) => cb(d.pip)).then((h) => {
-    if (cancelled) h.remove(); // unsubscribed before the listener resolved
-    else handle = h;
-  });
+  Pip.addListener("pipChange", (d) => cb(d.pip))
+    .then((h) => {
+      if (cancelled) h.remove(); // unsubscribed before the listener resolved
+      else handle = h;
+    })
+    .catch(() => {
+      /* plugin missing (old APK) — no PiP events, no unhandled rejection */
+    });
   return () => {
     cancelled = true;
     handle?.remove();

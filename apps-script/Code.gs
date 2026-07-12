@@ -68,18 +68,32 @@ function doPost(e) {
       return json({ ok: false, error: "no day block '" + body.dayName + "' in " + body.year });
     }
 
-    // First empty column in the header row (a session slot); else append at end.
+    // Idempotency: a retry (lost response / earlier partial write) must reuse its
+    // own column, not mint a new one forever. Reuse an existing column with the
+    // same date ONLY if its exercise cells are empty or identical to what we'd
+    // write — a genuinely different same-day session falls through to a new column.
+    var disp = sheet.getRange(headerRow + 1, 1, data.length - headerRow, Math.max(1, sheet.getLastColumn())).getDisplayValues();
+    var want = normDate(body.date);
     var col = -1;
-    for (var c = 1; c < data[headerRow].length; c++) {
-      if (String(data[headerRow][c]).trim() === "") {
-        col = c;
+    for (var c0 = 1; c0 < disp[0].length; c0++) {
+      if (want && normDate(disp[0][c0]) === want && columnCompatible(disp, data, headerRow, c0, body.exercises)) {
+        col = c0;
         break;
+      }
+    }
+    // Else: first empty column in the header row (a session slot); else append.
+    if (col < 0) {
+      for (var c = 1; c < data[headerRow].length; c++) {
+        if (String(data[headerRow][c]).trim() === "") {
+          col = c;
+          break;
+        }
       }
     }
     if (col < 0) col = data[headerRow].length;
 
     // Write the date into the header row.
-    sheet.getRange(headerRow + 1, col + 1).setValue(body.date);
+    sheet.getRange(headerRow + 1, col + 1).setValue(safe(body.date));
 
     // Walk the block's rows until the next block header (a row with date cells).
     // Track the per-session meta rows (Note / Mood / Time / Avg HR) as we go.
@@ -101,7 +115,7 @@ function doPost(e) {
       for (var i = 0; i < body.exercises.length; i++) {
         var ex = body.exercises[i];
         if (!doneNames[ex.name] && matchName(label, ex.name)) {
-          sheet.getRange(rr + 1, col + 1).setValue(ex.cell);
+          sheet.getRange(rr + 1, col + 1).setValue(safe(ex.cell));
           written.push(ex.name);
           doneNames[ex.name] = true;
           break;
@@ -133,7 +147,7 @@ function doPost(e) {
         sheet.getRange(target + 1, 1).setValue(m.label);
         insertAt = target;
       }
-      sheet.getRange(target + 1, col + 1).setValue(m.value);
+      sheet.getRange(target + 1, col + 1).setValue(safe(m.value));
       metaWritten[m.label] = true;
     }
 
@@ -164,11 +178,11 @@ function doPost(e) {
 // Append a brand-new day-block (header + exercises + Note/Mood/Time/Avg HR) at the
 // end of a year tab. Used for Alternative/free-form sessions with no template block.
 function createBlock(sheet, body) {
-  var rows = [[body.dayName, body.date]];
+  var rows = [[safe(body.dayName), safe(body.date)]];
   for (var i = 0; i < body.exercises.length; i++) {
-    rows.push([body.exercises[i].name, body.exercises[i].cell]);
+    rows.push([safe(body.exercises[i].name), safe(body.exercises[i].cell)]);
   }
-  rows.push(["Note", body.note || ""]);
+  rows.push(["Note", safe(body.note) || ""]);
   rows.push(["Mood", body.mood || ""]);
   rows.push(["Time", body.time || ""]);
   rows.push(["Avg HR", body.hr || ""]);
@@ -241,6 +255,41 @@ function writeBodyweight(body) {
     }
   }
   return json({ ok: true, bodyweight: true, count: entries.length });
+}
+
+// Normalize a "dd.mm.yy(yy)" cell (string or Date) to "d.m.yy" for comparison.
+function normDate(v) {
+  if (v instanceof Date) {
+    return v.getDate() + "." + (v.getMonth() + 1) + "." + String(v.getFullYear()).slice(2);
+  }
+  var m = String(v).trim().match(/^(\d{1,2})\.(\d{1,2})\.(\d{2,4})/);
+  if (!m) return "";
+  return +m[1] + "." + +m[2] + "." + String(m[3]).slice(-2);
+}
+
+// A same-date column is "ours to reuse" (a retry) only when every exercise cell
+// we'd write into it is currently empty or already holds exactly our value.
+function columnCompatible(disp, data, headerRow, col, exercises) {
+  for (var r = 1; r < disp.length; r++) {
+    var absRow = headerRow + r;
+    if (absRow >= data.length || rowHasDate(data[absRow])) break; // next block
+    var label = String(data[absRow][0]).trim();
+    if (!label || metaKind(label)) continue;
+    for (var i = 0; i < exercises.length; i++) {
+      if (matchName(label, exercises[i].name)) {
+        var cur = String(disp[r][col] == null ? "" : disp[r][col]).trim();
+        if (cur !== "" && cur !== String(exercises[i].cell).trim()) return false;
+      }
+    }
+  }
+  return true;
+}
+
+// Neutralize spreadsheet formula injection: a value starting with = + - @ would
+// execute as a formula when the sheet is opened. Prefix with ' (renders the same).
+function safe(v) {
+  var s = v == null ? "" : String(v);
+  return /^[=+\-@]/.test(s) ? "'" + s : s;
 }
 
 // Does a row look like a day-block header (contains a dd.mm.yy date)?

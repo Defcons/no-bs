@@ -101,14 +101,18 @@ export function parseCell(raw: string): { sets: SetEntry[]; skipped: boolean } {
     // like "(30)" is reps only (a bodyweight set), not a 30 kg lift.
     const weight = num(tok.split("(")[0]);
     let reps: number | null = wholeReps;
-    // "(7)" or "(4+1)" -> reps 7 / 4 (first number is the clean reps)
-    const paren = tok.match(/\((\d+)(?:\+\d+)?\)/);
-    if (paren) reps = +paren[1];
+    let assist: number | null = null;
+    // "(7)" -> 7 reps; "(4+1)" -> 4 clean reps + 1 assisted; "(+2)" -> assist only.
+    const paren = tok.match(/\((\d*)(?:\+(\d+))?\)/);
+    if (paren) {
+      if (paren[1]) reps = +paren[1];
+      if (paren[2]) assist = +paren[2];
+    }
     // trailing "xN" reps, e.g. "110x3" (but not part of a "(3x8)" already stripped)
     const xr = tok.match(/[xX](\d+)\b(?!\s*\))/);
     if (xr) reps = +xr[1];
-    if (weight == null && reps == null) continue; // junk token (e.g. "skip") — not a set
-    sets.push({ weight, reps, raw: tok });
+    if (weight == null && reps == null && assist == null) continue; // junk token — not a set
+    sets.push({ weight, reps, ...(assist != null ? { assist } : {}), raw: tok });
   }
   return { sets, skipped: false };
 }
