@@ -4,7 +4,7 @@
 
 _Last verified: 2026-07-12_
 
-⚠ **SECURITY INVARIANT:** app.codecrafts.cc + its OTA bundles are PUBLIC (OTA requires it). The CI web deploy must NEVER inject personal config (VITE_SYNC_URL/SECRET/SEED) — that exact bake leaked the sync secret + personal history in every public bundle from the 2026-07 domain migration until 2026-07-12 (fixed: workflow passes only VITE_APP_URL; GH secrets deleted; bundles + APKs now Cache-Control no-store). Public-build check before deploying anything: grep dist/ for the sync secret marker / script.google.com / history-seed.
+⚠ **SECURITY INVARIANT:** app.codecrafts.cc + its OTA bundles are PUBLIC (OTA requires it). The CI web deploy must NEVER inject personal config (VITE_SYNC_URL/SECRET/SEED) — that exact bake leaked the sync secret + personal history in every public bundle from the 2026-07 domain migration until 2026-07-12 (fixed: workflow passes only VITE_APP_URL; GH secrets deleted; bundles + APKs now Cache-Control no-store; Apps Script secret ROTATED + CF cache purged + old bundles verified 404 on 2026-07-12 — incident closed). Public-build check before deploying anything: grep dist/ for the sync secret marker / script.google.com / history-seed.
 
 ## Stack
 Vite 8 + React 19 + TypeScript, Dexie 4 (IndexedDB), `vite-plugin-pwa`, Web Bluetooth for HR. Run `npm run dev`; typecheck `npx tsc --noEmit`.
