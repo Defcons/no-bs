@@ -6,7 +6,8 @@ import { Capacitor, registerPlugin, type PluginListenerHandle } from "@capacitor
 
 interface HwButtonsPlugin {
   setCapture(options: { enabled: boolean }): Promise<void>;
-  addListener(event: "volumeUp", cb: () => void): Promise<PluginListenerHandle>;
+  setMediaCapture(options: { enabled: boolean }): Promise<void>;
+  addListener(event: "volumeUp" | "mediaButton", cb: () => void): Promise<PluginListenerHandle>;
 }
 
 const HwButtons = registerPlugin<HwButtonsPlugin>("HwButtons");
@@ -24,11 +25,22 @@ export async function setVolumeUpCapture(enabled: boolean): Promise<void> {
   }
 }
 
-export function onVolumeUp(cb: () => void): () => void {
+// Arm/disarm headphone/media-button capture. While armed, the headset button
+// starts the break INSTEAD of controlling music — a deliberate, opt-in trade-off.
+export async function setMediaButtonCapture(enabled: boolean): Promise<void> {
+  if (!native()) return;
+  try {
+    await HwButtons.setMediaCapture({ enabled });
+  } catch {
+    /* plugin missing (old APK) */
+  }
+}
+
+function listen(event: "volumeUp" | "mediaButton", cb: () => void): () => void {
   if (!native()) return () => {};
   let handle: PluginListenerHandle | null = null;
   let cancelled = false;
-  HwButtons.addListener("volumeUp", cb)
+  HwButtons.addListener(event, cb)
     .then((h) => {
       if (cancelled) h.remove();
       else handle = h;
@@ -41,3 +53,6 @@ export function onVolumeUp(cb: () => void): () => void {
     handle?.remove();
   };
 }
+
+export const onVolumeUp = (cb: () => void): (() => void) => listen("volumeUp", cb);
+export const onMediaButton = (cb: () => void): (() => void) => listen("mediaButton", cb);

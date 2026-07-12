@@ -31,8 +31,10 @@ const blurOnEnter = (e: KeyboardEvent<HTMLInputElement>) => {
 export function SetInput({ index, set, step, active, prevWeight, onChange }: Props) {
   const [showNote, setShowNote] = useState(!!set.note);
   const done = !!set.done;
-  // Editing any value marks the set done (green).
-  const bump = (d: number) => onChange({ weight: Math.max(0, (set.weight ?? prevWeight ?? 0) + d), done: true });
+  // Only the number badge marks a set done — value edits deliberately do NOT
+  // (user decision 2026-07-12): prefilled weights would otherwise green-flag
+  // sets you never performed.
+  const bump = (d: number) => onChange({ weight: Math.max(0, (set.weight ?? prevWeight ?? 0) + d) });
 
   return (
     <div className={`setrow ${done ? "done" : ""} ${active && !done ? "active" : ""}`}>
@@ -52,7 +54,7 @@ export function SetInput({ index, set, step, active, prevWeight, onChange }: Pro
             placeholder={prevWeight != null ? String(prevWeight) : "—"}
             onFocus={selectAll}
             onKeyDown={blurOnEnter}
-            onChange={(e) => onChange({ weight: parseWeight(e.target.value), done: true })}
+            onChange={(e) => onChange({ weight: parseWeight(e.target.value) })}
           />
           <span className="unit">kg</span>
         </div>
@@ -71,7 +73,7 @@ export function SetInput({ index, set, step, active, prevWeight, onChange }: Pro
           onKeyDown={blurOnEnter}
           onChange={(e) => {
             const n = parseInt(e.target.value, 10);
-            onChange({ reps: Number.isFinite(n) ? n : null, done: true });
+            onChange({ reps: Number.isFinite(n) ? n : null });
           }}
         />
         <span className="unit">×</span>
@@ -88,7 +90,7 @@ export function SetInput({ index, set, step, active, prevWeight, onChange }: Pro
           onKeyDown={blurOnEnter}
           onChange={(e) => {
             const n = parseInt(e.target.value, 10);
-            onChange({ assist: Number.isFinite(n) ? n : null, done: true });
+            onChange({ assist: Number.isFinite(n) ? n : null });
           }}
         />
         <span className="unit">)</span>

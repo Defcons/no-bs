@@ -6,7 +6,7 @@ import { daysAgo, daysAgoLabel, hhmmss, mmss, niceDate } from "../lib/format";
 import { cancelBreakNotification, scheduleBreakNotification, showReminder } from "../lib/notify";
 import { startGeofence, stopGeofence } from "../lib/geofence";
 import { isInPip, onPipChange, setPipAutoEnter } from "../lib/pip";
-import { onVolumeUp, setVolumeUpCapture } from "../lib/hwButtons";
+import { onMediaButton, onVolumeUp, setMediaButtonCapture, setVolumeUpCapture } from "../lib/hwButtons";
 import { startTracking, stopTracking } from "../lib/tracker";
 import { stepForExercise } from "../lib/steps";
 import { uid } from "../lib/uid";
@@ -94,13 +94,16 @@ export function Today({
     getSetting("autoBreakOnDone", false).then(setAutoBreakOnDone);
   }, [draft == null]);
 
-  // Optional: volume-up starts the break (default off). Captured ONLY while a
-  // workout is active — outside that, volume keys behave normally. Native only;
-  // needs an APK with the HwButtons plugin (older APKs silently no-op).
+  // Optional hands-free break starts (both default off, armed ONLY while a
+  // workout is active). Native only; older APKs without the plugin silently no-op.
+  // - volumeUpBreak: volume-up key (phone or headphone volume buttons)
+  // - mediaBtnBreak: headphone play/pause button (takes it over from music!)
   const [volUpBreak, setVolUpBreak] = useState(false);
+  const [mediaBtnBreak, setMediaBtnBreak] = useState(false);
   const startRestRef = useRef<() => void>(() => {});
   useEffect(() => {
     getSetting("volumeUpBreak", false).then(setVolUpBreak);
+    getSetting("mediaBtnBreak", false).then(setMediaBtnBreak);
   }, [draft == null]);
   useEffect(() => {
     const armed = !!draft && volUpBreak;
@@ -112,6 +115,16 @@ export function Today({
       setVolumeUpCapture(false);
     };
   }, [draft == null, volUpBreak]);
+  useEffect(() => {
+    const armed = !!draft && mediaBtnBreak;
+    setMediaButtonCapture(armed);
+    if (!armed) return;
+    const off = onMediaButton(() => startRestRef.current());
+    return () => {
+      off();
+      setMediaButtonCapture(false);
+    };
+  }, [draft == null, mediaBtnBreak]);
 
   // On the picker, load the last session of each day type (for "days ago").
   useEffect(() => {

@@ -71,6 +71,7 @@ export function Settings({
   const [theme, setTheme] = useState<"dark" | "light">("dark");
   const [autoBreak, setAutoBreak] = useState(false);
   const [volUpBreak, setVolUpBreak] = useState(false);
+  const [mediaBtnBreak, setMediaBtnBreak] = useState(false);
   const native = Capacitor.isNativePlatform();
 
   useEffect(() => {
@@ -83,6 +84,7 @@ export function Settings({
     getSetting<string>("theme", "dark").then((t) => setTheme(t === "light" ? "light" : "dark"));
     getSetting("autoBreakOnDone", false).then(setAutoBreak);
     getSetting("volumeUpBreak", false).then(setVolUpBreak);
+    getSetting("mediaBtnBreak", false).then(setMediaBtnBreak);
     pendingCount().then(setPending);
     currentVersion().then(setAppVersion);
   }, []);
@@ -134,6 +136,11 @@ export function Settings({
     const v = !volUpBreak;
     setVolUpBreak(v);
     setSetting("volumeUpBreak", v);
+  };
+  const toggleMediaBtnBreak = () => {
+    const v = !mediaBtnBreak;
+    setMediaBtnBreak(v);
+    setSetting("mediaBtnBreak", v);
   };
 
   const setThemeChoice = (t: "dark" | "light") => {
@@ -293,6 +300,20 @@ export function Settings({
             <p className="muted tiny">
               During a workout, pressing volume-up (phone or headphone volume button) starts the break — the volume
               itself won't change while a workout is active. Needs a current APK.
+            </p>
+          </div>
+        )}
+
+        {native && (
+          <div className="setting">
+            <label>Headphone button starts the break</label>
+            <button className={`mini ${mediaBtnBreak ? "active" : ""}`} onClick={toggleMediaBtnBreak}>
+              {mediaBtnBreak ? "On — tap to disable" : "Enable"}
+            </button>
+            <p className="muted tiny">
+              During a workout, your headphone's play/pause button starts the break. Trade-off: while a workout is
+              active it can't play/pause your music (Android routes the button to one app at a time). Volume buttons
+              keep working for the volume-up option above. Needs a current APK.
             </p>
           </div>
         )}
