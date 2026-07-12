@@ -546,7 +546,8 @@ export function Settings({
                 onChange={(e) => saveSyncUrl(e.target.value)}
               />
               <input
-                type="text"
+                type="password"
+                autoComplete="off"
                 className="full"
                 placeholder="Shared secret"
                 value={syncSecret}

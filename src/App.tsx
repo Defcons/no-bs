@@ -21,9 +21,16 @@ import { Today } from "./components/Today";
 type Tab = "today" | "history" | "records" | "settings";
 
 // A "#route=<encoded polyline>" link (from a sheet Route cell) opens the map viewer.
+// decodeURIComponent throws on truncated %-escapes (links mangled in copy/paste) —
+// this runs in a useState initializer, so an uncaught throw white-screens the app.
 function readRouteHash(): string | null {
   const m = /[#&]route=([^&]+)/.exec(location.hash);
-  return m ? decodeURIComponent(m[1]) : null;
+  if (!m) return null;
+  try {
+    return decodeURIComponent(m[1]);
+  } catch {
+    return null;
+  }
 }
 
 // An OTA update reloads the app into the new bundle (update.ts stamps this before
@@ -226,7 +233,11 @@ export default function App() {
     const data = {
       workouts: await db.workouts.toArray(),
       templates: await db.templates.toArray(),
-      settings: await db.settings.toArray(),
+      // Strip sync credentials — a backup shared for help/debugging must not
+      // leak the user's Apps Script secret (activeDraft is transient noise too).
+      settings: (await db.settings.toArray()).filter(
+        (s) => !["sheetSyncSecret", "sheetSyncUrl", "activeDraft"].includes(String(s.key)),
+      ),
       exportedAt: new Date().toISOString(),
     };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });

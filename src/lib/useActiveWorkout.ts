@@ -274,6 +274,9 @@ export function useActiveWorkout() {
   );
 
   const cancel = useCallback(() => {
+    // Kill any in-flight debounced persist — a stale timer firing after the
+    // null-write would resurrect the draft as a ghost in-progress workout.
+    window.clearTimeout(saveTimer.current);
     setDraft(null);
     setSetting(DRAFT_KEY, null);
   }, []);
@@ -283,6 +286,7 @@ export function useActiveWorkout() {
   const finish = useCallback(
     async (hr?: { avg?: number; max?: number }, extra?: Partial<StoredWorkout>) => {
       if (!draft) return;
+      window.clearTimeout(saveTimer.current); // same ghost-draft guard as cancel()
       const durationSec = Math.floor(wElapsedMs(draft) / 1000);
       const row: StoredWorkout = {
         date: draft.date,

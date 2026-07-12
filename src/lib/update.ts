@@ -59,6 +59,13 @@ export async function checkAndApplyUpdate(): Promise<UpdateResult> {
     await CapacitorUpdater.set(bundle); // switches + reloads into the new bundle
     return { status: "updated", message: "Updated — reloading…" };
   } catch (e) {
+    // The stamp is written before set() (which reloads on success) — clear it on
+    // failure so the next launch doesn't show a false "Updated" banner.
+    try {
+      localStorage.removeItem("nobs.justUpdated");
+    } catch {
+      /* ignore */
+    }
     return { status: "error", message: (e as Error).message };
   }
 }

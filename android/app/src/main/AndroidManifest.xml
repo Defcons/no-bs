@@ -1,8 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
+    <!-- allowBackup=false: users back up via the explicit .xlsx/JSON export; Android
+         auto-backup of WebView/IndexedDB + Capgo bundle prefs restores stale state
+         onto new devices (Capgo prefs then point at bundles that don't exist). -->
     <application
-        android:allowBackup="true"
+        android:allowBackup="false"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"
@@ -25,6 +29,15 @@
             </intent-filter>
 
         </activity>
+
+        <!-- The background-geolocation plugin ships its FGS as exported=true (any app
+             could start/bind our location service). It's only ever bound in-process —
+             lock it down. -->
+        <service
+            android:name="com.equimaps.capacitor_background_geolocation.BackgroundGeolocationService"
+            android:exported="false"
+            tools:node="merge"
+            tools:replace="android:exported" />
 
         <provider
             android:name="androidx.core.content.FileProvider"

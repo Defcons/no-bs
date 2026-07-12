@@ -5,3 +5,4 @@ dev-fixtures
 .github
 android
 *.md
+.env*
