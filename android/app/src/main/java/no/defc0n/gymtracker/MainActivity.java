@@ -5,6 +5,7 @@ import android.app.PictureInPictureParams;
 import android.os.Build;
 import android.os.Bundle;
 import android.util.Rational;
+import android.view.KeyEvent;
 
 import com.getcapacitor.BridgeActivity;
 import com.getcapacitor.PluginHandle;
@@ -14,7 +15,22 @@ public class MainActivity extends BridgeActivity {
     @Override
     public void onCreate(Bundle savedInstanceState) {
         registerPlugin(PipPlugin.class);
+        registerPlugin(HwButtonsPlugin.class);
         super.onCreate(savedInstanceState);
+    }
+
+    // Volume-up → start break (Settings toggle; armed only during an active
+    // workout). Consumed so the media volume doesn't change while armed.
+    @Override
+    public boolean onKeyDown(int keyCode, KeyEvent event) {
+        if (keyCode == KeyEvent.KEYCODE_VOLUME_UP && HwButtonsPlugin.captureVolumeUp) {
+            PluginHandle handle = getBridge() != null ? getBridge().getPlugin("HwButtons") : null;
+            if (handle != null && handle.getInstance() instanceof HwButtonsPlugin) {
+                ((HwButtonsPlugin) handle.getInstance()).notifyVolumeUp();
+                return true;
+            }
+        }
+        return super.onKeyDown(keyCode, event);
     }
 
     // Leaving the app during a workout with the timer armed → float it as PiP.

@@ -1,11 +1,12 @@
 // The main gym screen: start a day, log sets, run the workout + rest timers,
 // see live HR, and finish. This is the primary "as-easy-as-possible" surface.
 import { useEffect, useRef, useState } from "react";
-import { lastWorkoutForDay, type StoredWorkout } from "../db";
+import { getSetting, lastWorkoutForDay, type StoredWorkout } from "../db";
 import { daysAgo, daysAgoLabel, hhmmss, mmss, niceDate } from "../lib/format";
 import { cancelBreakNotification, scheduleBreakNotification, showReminder } from "../lib/notify";
 import { startGeofence, stopGeofence } from "../lib/geofence";
 import { isInPip, onPipChange, setPipAutoEnter } from "../lib/pip";
+import { onVolumeUp, setVolumeUpCapture } from "../lib/hwButtons";
 import { startTracking, stopTracking } from "../lib/tracker";
 import { stepForExercise } from "../lib/steps";
 import { uid } from "../lib/uid";
@@ -59,8 +60,6 @@ export function Today({
     cancel,
     finish,
     update,
-    toggleWorkoutTimer,
-    resetWorkoutTimer,
     startWorkoutTimer,
     toggleStopwatch,
     resetStopwatch,
@@ -88,6 +87,31 @@ export function Today({
     if (draft) lastWorkoutForDay(draft.dayName).then(setPrev);
     else setPrev(undefined);
   }, [draft?.dayName]);
+
+  // Optional: tapping a set's ✓ badge auto-starts the break timer (default off).
+  const [autoBreakOnDone, setAutoBreakOnDone] = useState(false);
+  useEffect(() => {
+    getSetting("autoBreakOnDone", false).then(setAutoBreakOnDone);
+  }, [draft == null]);
+
+  // Optional: volume-up starts the break (default off). Captured ONLY while a
+  // workout is active — outside that, volume keys behave normally. Native only;
+  // needs an APK with the HwButtons plugin (older APKs silently no-op).
+  const [volUpBreak, setVolUpBreak] = useState(false);
+  const startRestRef = useRef<() => void>(() => {});
+  useEffect(() => {
+    getSetting("volumeUpBreak", false).then(setVolUpBreak);
+  }, [draft == null]);
+  useEffect(() => {
+    const armed = !!draft && volUpBreak;
+    setVolumeUpCapture(armed);
+    if (!armed) return;
+    const off = onVolumeUp(() => startRestRef.current());
+    return () => {
+      off();
+      setVolumeUpCapture(false);
+    };
+  }, [draft == null, volUpBreak]);
 
   // On the picker, load the last session of each day type (for "days ago").
   useEffect(() => {
@@ -331,6 +355,7 @@ export function Today({
     scheduleBreakNotification(at); // native: fires even if app is backgrounded
     update((d) => ({ ...d, restEndsAt: at }));
   };
+  startRestRef.current = startRest; // keep the volume-up listener on the live closure
   const setRest = (endsAt: number | null) => {
     if (endsAt == null) cancelBreakNotification();
     else scheduleBreakNotification(endsAt);
@@ -362,15 +387,10 @@ export function Today({
             <div className="wb-day">{draft.dayName}</div>
           )}
           <div className="wb-time-row">
+            {/* Wall-clock since the workout started — deliberately not pausable. */}
             <span className="wb-timer" title="Total workout time">
               {hhmmss(elapsed)}
             </span>
-            <button className="sw-btn" aria-label={draft.wRunning ? "pause workout timer" : "start workout timer"} onClick={toggleWorkoutTimer}>
-              {draft.wRunning ? "⏸" : "▶"}
-            </button>
-            <button className="sw-btn" aria-label="reset workout timer" onClick={resetWorkoutTimer}>
-              ↺
-            </button>
           </div>
         </div>
         <div className="wb-right">
@@ -444,6 +464,7 @@ export function Today({
             step={stepForExercise(ex.name, weightStep)}
             prev={prev?.exercises.find((p) => p.name === ex.name)}
             onChange={(e) => setExercise(i, e)}
+            onSetDone={autoBreakOnDone ? startRest : undefined}
             editableName={draft.custom}
             onRemove={draft.custom ? () => removeExercise(i) : undefined}
             onMoveUp={i > 0 ? () => moveExercise(i, -1) : undefined}

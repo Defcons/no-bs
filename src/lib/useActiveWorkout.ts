@@ -16,7 +16,10 @@ export type Draft = {
   custom?: boolean; // "Alternative" free-form session (editable name/exercises)
   trackGps?: boolean; // record a GPS route for this (cardio) session
   editId?: number; // when set, finishing UPDATES this existing workout (History edit)
-  // Full workout timer (auto-runs, but pausable/resettable).
+  // Full workout timer: pure WALL-CLOCK since it started (user decision 2026-07-08 —
+  // no pause/reset/idle-cap). wRunning = "has started" (Start button / first edit),
+  // wSegStart = the start epoch. wAccumMs is only used as the FIXED recorded
+  // duration when editing a past workout (wRunning stays false there).
   wRunning: boolean;
   wAccumMs: number;
   wSegStart: number;
@@ -38,10 +41,11 @@ function isoNow(): string {
 function swElapsedMs(d: Draft): number {
   return d.swAccumMs + (d.swRunning ? Date.now() - d.swSegStart : 0);
 }
-// Exported so PipView shows the exact same (pausable) time as the in-app header —
-// computing from startedAt alone drifts as soon as the timer is paused/late-started.
+// Workout time: wall-clock since start once started; a not-started draft shows 0,
+// and an edit draft shows the fixed recorded duration (wAccumMs). Exported so
+// PipView ticks from the exact same math as the in-app header.
 export function wElapsedMs(d: Pick<Draft, "wAccumMs" | "wRunning" | "wSegStart">): number {
-  return d.wAccumMs + (d.wRunning ? Date.now() - d.wSegStart : 0);
+  return d.wRunning ? Date.now() - d.wSegStart : d.wAccumMs;
 }
 
 // Build fresh exercises for a day, pre-filling each set with last week's number
@@ -83,10 +87,6 @@ export function useActiveWorkout() {
   const draftRef = useRef<Draft | null>(null);
   draftRef.current = draft;
 
-  // A background gap longer than this isn't counted as workout time (a forgotten
-  // session left running overnight shouldn't write a multi-hour duration).
-  const IDLE_CAP_MS = 30 * 60 * 1000;
-
   // Load any persisted draft on mount (migrate pre-stopwatch drafts).
   useEffect(() => {
     getSetting<Draft | null>(DRAFT_KEY, null).then((d) => {
@@ -97,40 +97,29 @@ export function useActiveWorkout() {
       }
       if (d && d.wAccumMs === undefined) {
         d.wRunning = true;
-        d.wAccumMs = Math.max(0, Date.now() - d.startedAt);
-        d.wSegStart = Date.now();
+        d.wAccumMs = 0;
+        d.wSegStart = d.startedAt;
       }
-      // Killed-and-reopened after a long idle gap: don't count the closed time.
-      if (d && d.wRunning && Date.now() - d.wSegStart > IDLE_CAP_MS) d.wSegStart = Date.now();
+      // Migrate a running pausable-era draft: fold banked time into the anchor so
+      // wall-clock elapsed (now - wSegStart) keeps the total it had accumulated.
+      if (d && d.wRunning && d.wAccumMs > 0) {
+        d.wSegStart -= d.wAccumMs;
+        d.wAccumMs = 0;
+      }
       setDraft(d);
       setLoaded(true);
     });
   }, []);
 
   // Persist immediately when backgrounded/closed (the debounce could otherwise lose
-  // the last edit if the OS kills the app), and drop long idle gaps from the timer.
+  // the last edit if the OS kills the app).
   useEffect(() => {
-    let hiddenAt = 0;
     const flush = () => {
       window.clearTimeout(saveTimer.current);
       setSetting(DRAFT_KEY, draftRef.current);
     };
     const onVis = () => {
-      if (document.visibilityState === "hidden") {
-        hiddenAt = Date.now();
-        flush();
-      } else if (hiddenAt) {
-        const gap = Date.now() - hiddenAt;
-        hiddenAt = 0;
-        if (gap > IDLE_CAP_MS) {
-          setDraft((d) => {
-            if (!d || !d.wRunning) return d;
-            const next = { ...d, wSegStart: d.wSegStart + gap };
-            setSetting(DRAFT_KEY, next);
-            return next;
-          });
-        }
-      }
+      if (document.visibilityState === "hidden") flush();
     };
     document.addEventListener("visibilitychange", onVis);
     window.addEventListener("pagehide", flush);
@@ -247,24 +236,12 @@ export function useActiveWorkout() {
     setSetting(DRAFT_KEY, d);
   }, []);
 
-  // Full workout timer controls.
-  const toggleWorkoutTimer = useCallback(
-    () =>
-      update((d) =>
-        d.wRunning
-          ? { ...d, wRunning: false, wAccumMs: d.wAccumMs + (Date.now() - d.wSegStart) }
-          : { ...d, wRunning: true, wSegStart: Date.now() },
-      ),
-    [update],
-  );
-  const resetWorkoutTimer = useCallback(
-    () => update((d) => ({ ...d, wAccumMs: 0, wSegStart: Date.now() })),
-    [update],
-  );
   // Idempotent: start the workout timer if it isn't already running (called on
-  // the first weight/rep edit).
+  // the Start button / first weight-rep edit). From then on it's pure wall-clock —
+  // no pause/reset. Editing a past workout must NOT restart the clock (its
+  // recorded duration lives in wAccumMs and is kept as-is).
   const startWorkoutTimer = useCallback(
-    () => update((d) => (d.wRunning ? d : { ...d, wRunning: true, wSegStart: Date.now() })),
+    () => update((d) => (d.wRunning || d.editId != null ? d : { ...d, wRunning: true, wSegStart: Date.now() })),
     [update],
   );
 
@@ -363,8 +340,6 @@ export function useActiveWorkout() {
     cancel,
     finish,
     update,
-    toggleWorkoutTimer,
-    resetWorkoutTimer,
     startWorkoutTimer,
     toggleStopwatch,
     resetStopwatch,

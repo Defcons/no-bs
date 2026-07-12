@@ -69,6 +69,8 @@ export function Settings({
   const [syncSecret, setSyncSecret] = useState("");
   const [sheetViewUrl, setSheetViewUrl] = useState("");
   const [theme, setTheme] = useState<"dark" | "light">("dark");
+  const [autoBreak, setAutoBreak] = useState(false);
+  const [volUpBreak, setVolUpBreak] = useState(false);
   const native = Capacitor.isNativePlatform();
 
   useEffect(() => {
@@ -79,6 +81,8 @@ export function Settings({
     getSetting<string>("sheetSyncSecret", "").then(setSyncSecret);
     getSetting<string>("sheetViewUrl", "").then(setSheetViewUrl);
     getSetting<string>("theme", "dark").then((t) => setTheme(t === "light" ? "light" : "dark"));
+    getSetting("autoBreakOnDone", false).then(setAutoBreak);
+    getSetting("volumeUpBreak", false).then(setVolUpBreak);
     pendingCount().then(setPending);
     currentVersion().then(setAppVersion);
   }, []);
@@ -119,6 +123,17 @@ export function Settings({
     if (!confirm(BG_LOCATION_DISCLOSURE)) return; // declined the disclosure → leave it off
     setAutoEndLeave(true);
     setSetting("autoEndOnLeave", true);
+  };
+
+  const toggleAutoBreak = () => {
+    const v = !autoBreak;
+    setAutoBreak(v);
+    setSetting("autoBreakOnDone", v);
+  };
+  const toggleVolUpBreak = () => {
+    const v = !volUpBreak;
+    setVolUpBreak(v);
+    setSetting("volumeUpBreak", v);
   };
 
   const setThemeChoice = (t: "dark" | "light") => {
@@ -260,6 +275,27 @@ export function Settings({
           </div>
           <p className="muted tiny">Colors the “days since last workout” (green/orange/red) and drives reminders.</p>
         </div>
+
+        <div className="setting">
+          <label>Auto-start break when a set is marked done</label>
+          <button className={`mini ${autoBreak ? "active" : ""}`} onClick={toggleAutoBreak}>
+            {autoBreak ? "On — tap to disable" : "Enable"}
+          </button>
+          <p className="muted tiny">Tap a set's number badge (✓) and the break timer starts by itself.</p>
+        </div>
+
+        {native && (
+          <div className="setting">
+            <label>Volume-up starts the break</label>
+            <button className={`mini ${volUpBreak ? "active" : ""}`} onClick={toggleVolUpBreak}>
+              {volUpBreak ? "On — tap to disable" : "Enable"}
+            </button>
+            <p className="muted tiny">
+              During a workout, pressing volume-up (phone or headphone volume button) starts the break — the volume
+              itself won't change while a workout is active. Needs a current APK.
+            </p>
+          </div>
+        )}
 
         {native && (
           <div className="setting">
@@ -471,7 +507,11 @@ export function Settings({
           </button>
           <p className="muted tiny">
             Optional. When on, finished workouts (sets, note, mood, time, avg HR, run stats) are written back to a Google
-            Sheet via a small Apps Script. Off by default — the app is fully usable with local + file backup.
+            Sheet via a small Apps Script. Off by default — the app is fully usable with local + file backup.{" "}
+            <a href="https://nobs.codecrafts.cc/sheets-setup/" target="_blank" rel="noopener noreferrer">
+              Setup guide ↗
+            </a>{" "}
+            (one-time, ~5 min).
           </p>
 
           {syncOn && (

@@ -10,18 +10,22 @@ type Props = {
   step: number;
   prev?: ExercisePerf; // last session's performance of this exercise (for hints)
   onChange: (ex: ExercisePerf) => void;
+  onSetDone?: () => void; // set explicitly marked done via its badge (not weight edits)
   editableName?: boolean; // custom sessions: let the user name the exercise
   onRemove?: () => void; // custom sessions: remove this exercise
   onMoveUp?: () => void; // reorder within this session only
   onMoveDown?: () => void;
 };
 
-export function ExerciseCard({ exercise, step, prev, onChange, editableName, onRemove, onMoveUp, onMoveDown }: Props) {
+export function ExerciseCard({ exercise, step, prev, onChange, onSetDone, editableName, onRemove, onMoveUp, onMoveDown }: Props) {
   const [showNote, setShowNote] = useState(!!exercise.note);
 
   const patchSet = (i: number, patch: Partial<SetEntry>) => {
     const sets = exercise.sets.map((s, idx) => (idx === i ? { ...s, ...patch } : s));
     onChange({ ...exercise, sets });
+    // A bare {done:true} patch = the set badge was tapped (weight/rep edits also
+    // set done, but always alongside their value) — that's the "set finished" signal.
+    if (patch.done === true && Object.keys(patch).length === 1) onSetDone?.();
   };
   const addSet = () => {
     const last = exercise.sets.at(-1);
