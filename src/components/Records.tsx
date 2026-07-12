@@ -1,5 +1,5 @@
-// Records: lifetime summary, key lifts rated against strength standards, and
-// per-muscle collapsible personal records.
+// Records: lifetime summary, activity heatmap (year × month), key lifts rated
+// against strength standards, and per-muscle collapsible personal records.
 import { useMemo, useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db, type StoredWorkout } from "../db";
@@ -61,6 +61,9 @@ export function Records({
         ))}
       </div>
       <p className="muted tiny">Workouts per week — last 12 weeks (right = this week).</p>
+
+      <h3 className="section">Activity by year</h3>
+      <ActivityHeatmap workouts={workouts} />
 
       <details className="cat rec-standards">
         <summary>
@@ -151,6 +154,70 @@ function RecordRow({ r, workouts }: { r: LiftRecord; workouts: StoredWorkout[] }
         </div>
       </button>
       {open && <ProgressChart points={pts} />}
+    </div>
+  );
+}
+
+// Year × month heatmap: rows = years (newest first), cells shaded by session count
+// relative to the busiest month IN VIEW — active periods pop out at a glance.
+const RANGE_CHOICES = [3, 5, 0] as const; // 0 = all years
+function ActivityHeatmap({ workouts }: { workouts: StoredWorkout[] }) {
+  const [range, setRange] = useState<number>(5);
+  const { years, counts } = useMemo(() => {
+    const counts = new Map<string, number>(); // "YYYY-MM" → sessions
+    const yearSet = new Set<number>();
+    for (const w of workouts) {
+      const ym = w.date.slice(0, 7);
+      counts.set(ym, (counts.get(ym) ?? 0) + 1);
+      yearSet.add(+w.date.slice(0, 4));
+    }
+    return { years: [...yearSet].sort((a, b) => b - a), counts };
+  }, [workouts]);
+
+  const shown = range ? years.slice(0, range) : years;
+  const max = Math.max(1, ...shown.flatMap((y) => Array.from({ length: 12 }, (_, m) => counts.get(`${y}-${String(m + 1).padStart(2, "0")}`) ?? 0)));
+
+  return (
+    <div className="heatmap-wrap">
+      {years.length > 3 && (
+        <div className="seg heatmap-seg">
+          {RANGE_CHOICES.map((r) => (
+            <button key={r} className={range === r ? "active" : ""} onClick={() => setRange(r)}>
+              {r ? `${r} yrs` : `All (${years.length})`}
+            </button>
+          ))}
+        </div>
+      )}
+      <div className="heatmap">
+        <div className="heatmap-row heatmap-head">
+          <span className="heatmap-year" />
+          {["J", "F", "M", "A", "M", "J", "J", "A", "S", "O", "N", "D"].map((m, i) => (
+            <span key={i} className="heatmap-m tiny muted">
+              {m}
+            </span>
+          ))}
+        </div>
+        {shown.map((y) => (
+          <div key={y} className="heatmap-row">
+            <span className="heatmap-year tiny muted">{y}</span>
+            {Array.from({ length: 12 }, (_, m) => {
+              const c = counts.get(`${y}-${String(m + 1).padStart(2, "0")}`) ?? 0;
+              const pct = Math.round((c / max) * 88);
+              return (
+                <span
+                  key={m}
+                  className="heatmap-cell"
+                  title={`${y}-${String(m + 1).padStart(2, "0")}: ${c} workout${c === 1 ? "" : "s"}`}
+                  style={c ? { background: `color-mix(in srgb, var(--accent) ${pct}%, var(--surface))` } : undefined}
+                >
+                  {c > 0 && <span className={`heatmap-n ${pct > 50 ? "hi" : ""}`}>{c}</span>}
+                </span>
+              );
+            })}
+          </div>
+        ))}
+      </div>
+      <p className="muted tiny">Sessions per month — darker blue = more active.</p>
     </div>
   );
 }

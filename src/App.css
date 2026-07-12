@@ -1164,7 +1164,8 @@ input[type="range"] {
   gap: 8px;
   margin: 10px 0 14px;
 }
-.seg {
+/* Pill-box variant, scoped so it doesn't bleed into the Settings .seg buttons. */
+.hist-controls .seg {
   display: flex;
   gap: 3px;
   padding: 3px;
@@ -1172,7 +1173,7 @@ input[type="range"] {
   border: 1px solid var(--line);
   border-radius: 10px;
 }
-.seg button {
+.hist-controls .seg button {
   flex: 1;
   padding: 7px 0;
   border: none;
@@ -1183,7 +1184,7 @@ input[type="range"] {
   font-size: 13px;
   cursor: pointer;
 }
-.seg button.active {
+.hist-controls .seg button.active {
   background: var(--accent);
   color: #fff;
 }
@@ -1256,6 +1257,50 @@ input[type="range"] {
 }
 .hist-group .log-head {
   padding: 12px 4px;
+}
+
+/* ---- Activity heatmap (Records: year × month) ---- */
+.heatmap-wrap {
+  display: grid;
+  gap: 8px;
+}
+.heatmap-seg {
+  max-width: 260px;
+}
+.heatmap {
+  display: grid;
+  gap: 3px;
+}
+.heatmap-row {
+  display: grid;
+  grid-template-columns: 34px repeat(12, 1fr);
+  gap: 3px;
+  align-items: center;
+}
+.heatmap-m {
+  text-align: center;
+}
+.heatmap-year {
+  text-align: right;
+  padding-right: 4px;
+}
+.heatmap-cell {
+  aspect-ratio: 1;
+  border-radius: 5px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+}
+.heatmap-n {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.heatmap-n.hi {
+  color: #fff;
 }
 
 /* ---- Strength standards ---- */

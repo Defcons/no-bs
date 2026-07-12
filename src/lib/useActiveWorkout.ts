@@ -38,7 +38,9 @@ function isoNow(): string {
 function swElapsedMs(d: Draft): number {
   return d.swAccumMs + (d.swRunning ? Date.now() - d.swSegStart : 0);
 }
-function wElapsedMs(d: Draft): number {
+// Exported so PipView shows the exact same (pausable) time as the in-app header —
+// computing from startedAt alone drifts as soon as the timer is paused/late-started.
+export function wElapsedMs(d: Pick<Draft, "wAccumMs" | "wRunning" | "wSegStart">): number {
   return d.wAccumMs + (d.wRunning ? Date.now() - d.wSegStart : 0);
 }
 

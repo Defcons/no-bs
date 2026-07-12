@@ -5,7 +5,7 @@ import { db, ensureBootstrapped, getSetting, setSetting, type StoredWorkout } fr
 import { daysAgo } from "./lib/format";
 import { type HrMonitor, createHrMonitor, hrAvailable } from "./lib/hr";
 import { Capacitor } from "@capacitor/core";
-import { notificationsAllowed, requestNotifications, showReminder } from "./lib/notify";
+import { notificationsAllowed, requestNotifications, scheduleTrainingReminders, showReminder } from "./lib/notify";
 import { markAppReady } from "./lib/update";
 import { saveFile } from "./lib/download";
 import { syncBodyweight } from "./lib/sheetSync";
@@ -78,9 +78,11 @@ export default function App() {
   const maybeRemind = async (dpw: number) => {
     const enabled = await getSetting("remindersEnabled", false);
     if (!enabled || !(await notificationsAllowed())) return;
+    const last = await db.workouts.orderBy("date").reverse().first();
+    // Pre-schedule closed-app reminders from the latest workout (native no-ops on web).
+    await scheduleTrainingReminders(dpw, last?.date ?? null);
     const today = new Date().toISOString().slice(0, 10);
     if ((await getSetting("lastReminder", "")) === today) return;
-    const last = await db.workouts.orderBy("date").reverse().first();
     const days = last ? daysAgo(last.date) : 999;
     const trainedToday = last ? last.date.slice(0, 10) === today : false;
     if (!trainedToday && trainingDue(days, dpw)) {
@@ -106,6 +108,9 @@ export default function App() {
   useEffect(() => {
     (async () => {
       markAppReady(); // commit the running OTA bundle (native only)
+      // Apply the stored theme ASAP (Settings toggles it live; dark = default).
+      const theme = await getSetting<string>("theme", "dark");
+      if (theme === "light") document.documentElement.dataset.theme = "light";
       await ensureBootstrapped();
       setRest(await getSetting("restDefaultSec", 120));
       setStep(await getSetting("weightStep", 2.5));
@@ -274,7 +279,11 @@ export default function App() {
               setHrAvg(null);
             }}
             getHrStats={getHrStats}
-            onFinished={() => setTab("history")}
+            onFinished={() => {
+              setTab("history");
+              // Finishing a workout moves the next "due" date — reschedule.
+              maybeRemind(daysPerWeek);
+            }}
             editWorkout={pendingEdit}
             onEditConsumed={() => setPendingEdit(null)}
             floatMode={floatMode}

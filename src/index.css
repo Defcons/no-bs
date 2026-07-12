@@ -17,6 +17,23 @@
   background: var(--bg);
 }
 
+/* Light theme — toggled via Settings → Appearance (App boot applies the stored
+   choice to <html data-theme>). Same var names, so components need no changes. */
+:root[data-theme="light"] {
+  --bg: #f2f4f8;
+  --surface: #ffffff;
+  --surface-2: #e9edf3;
+  --line: #d4dbe4;
+  --text: #1b2431;
+  --muted: #5d6b7d;
+  --accent: #3574e8;
+  --accent-2: #0f9d6e;
+  --danger: #dc2626;
+  --warn: #d97706;
+
+  color-scheme: light;
+}
+
 * {
   box-sizing: border-box;
   -webkit-tap-highlight-color: transparent;

@@ -2,7 +2,7 @@
 // optional note. Weight is the primary input; reps is pre-filled from the scheme.
 // Units ("kg"/"reps") are static suffixes inside each field so they don't throw
 // off vertical alignment.
-import { type FocusEvent, useState } from "react";
+import { type FocusEvent, type KeyboardEvent, useState } from "react";
 import type { SetEntry } from "../types";
 
 type Props = {
@@ -23,6 +23,10 @@ function parseWeight(s: string): number | null {
 
 // Select existing text on focus so typing replaces it (no manual backspacing).
 const selectAll = (e: FocusEvent<HTMLInputElement>) => e.target.select();
+// Enter (the keyboard's ✓/done key on phones) dismisses the keyboard.
+const blurOnEnter = (e: KeyboardEvent<HTMLInputElement>) => {
+  if (e.key === "Enter") e.currentTarget.blur();
+};
 
 export function SetInput({ index, set, step, active, prevWeight, onChange }: Props) {
   const [showNote, setShowNote] = useState(!!set.note);
@@ -47,6 +51,7 @@ export function SetInput({ index, set, step, active, prevWeight, onChange }: Pro
             value={set.weight ?? ""}
             placeholder={prevWeight != null ? String(prevWeight) : "—"}
             onFocus={selectAll}
+            onKeyDown={blurOnEnter}
             onChange={(e) => onChange({ weight: parseWeight(e.target.value), done: true })}
           />
           <span className="unit">kg</span>
@@ -63,6 +68,7 @@ export function SetInput({ index, set, step, active, prevWeight, onChange }: Pro
           value={set.reps ?? ""}
           placeholder="—"
           onFocus={selectAll}
+          onKeyDown={blurOnEnter}
           onChange={(e) => {
             const n = parseInt(e.target.value, 10);
             onChange({ reps: Number.isFinite(n) ? n : null, done: true });
@@ -79,6 +85,7 @@ export function SetInput({ index, set, step, active, prevWeight, onChange }: Pro
           value={set.assist ?? ""}
           placeholder="–"
           onFocus={selectAll}
+          onKeyDown={blurOnEnter}
           onChange={(e) => {
             const n = parseInt(e.target.value, 10);
             onChange({ assist: Number.isFinite(n) ? n : null, done: true });
@@ -100,6 +107,7 @@ export function SetInput({ index, set, step, active, prevWeight, onChange }: Pro
           className="set-note"
           type="text"
           value={set.note ?? ""}
+          onKeyDown={blurOnEnter}
           placeholder="note for this set…"
           onChange={(e) => onChange({ note: e.target.value || undefined })}
         />

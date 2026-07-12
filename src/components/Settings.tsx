@@ -5,7 +5,7 @@ import { Capacitor } from "@capacitor/core";
 import { db, getSetting, setSetting } from "../db";
 import { saveFile } from "../lib/download";
 import { hrAvailable } from "../lib/hr";
-import { notificationsSupported, requestNotifications } from "../lib/notify";
+import { cancelTrainingReminders, notificationsSupported, requestNotifications } from "../lib/notify";
 import { importFromSheet, pendingCount, syncEnabled, syncPending, testSync } from "../lib/sheetSync";
 import type { BwEntry } from "../lib/standards";
 import { checkAndApplyUpdate, currentVersion, updatesSupported } from "../lib/update";
@@ -68,6 +68,7 @@ export function Settings({
   const [syncUrl, setSyncUrl] = useState("");
   const [syncSecret, setSyncSecret] = useState("");
   const [sheetViewUrl, setSheetViewUrl] = useState("");
+  const [theme, setTheme] = useState<"dark" | "light">("dark");
   const native = Capacitor.isNativePlatform();
 
   useEffect(() => {
@@ -77,6 +78,7 @@ export function Settings({
     getSetting<string>("sheetSyncUrl", "").then(setSyncUrl);
     getSetting<string>("sheetSyncSecret", "").then(setSyncSecret);
     getSetting<string>("sheetViewUrl", "").then(setSheetViewUrl);
+    getSetting<string>("theme", "dark").then((t) => setTheme(t === "light" ? "light" : "dark"));
     pendingCount().then(setPending);
     currentVersion().then(setAppVersion);
   }, []);
@@ -119,6 +121,13 @@ export function Settings({
     setSetting("autoEndOnLeave", true);
   };
 
+  const setThemeChoice = (t: "dark" | "light") => {
+    setTheme(t);
+    setSetting("theme", t);
+    if (t === "light") document.documentElement.dataset.theme = "light";
+    else delete document.documentElement.dataset.theme;
+  };
+
   const doUpdate = async () => {
     setUpdating(true);
     setUpdateMsg("Checking…");
@@ -132,6 +141,7 @@ export function Settings({
     if (reminders) {
       setReminders(false);
       setSetting("remindersEnabled", false);
+      cancelTrainingReminders(); // drop any pre-scheduled closed-app nudges
       return;
     }
     const granted = await requestNotifications();
@@ -205,6 +215,17 @@ export function Settings({
 
       <details className="settings-group" open>
         <summary>Workout</summary>
+
+        <div className="setting">
+          <label>Appearance</label>
+          <div className="seg">
+            {(["dark", "light"] as const).map((t) => (
+              <button key={t} className={theme === t ? "active" : ""} onClick={() => setThemeChoice(t)}>
+                {t === "dark" ? "🌙 Dark" : "☀️ Light"}
+              </button>
+            ))}
+          </div>
+        </div>
 
         <div className="setting">
           <label>Default rest timer</label>

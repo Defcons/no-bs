@@ -111,3 +111,43 @@ export async function cancelBreakNotification(): Promise<void> {
     /* ignore */
   }
 }
+
+// Native only: pre-schedule "time to train" reminders so they fire even when the
+// app is CLOSED (the on-open nudge in App.maybeRemind can't). Rescheduled from
+// scratch on every app open + workout finish, so the dates track the latest
+// workout: first shot the day training becomes due (lastWorkout + 7/dpw days),
+// then daily follow-ups, all at REMINDER_HOUR.
+const TRAIN_NOTIF_IDS = [7101, 7102, 7103];
+const REMINDER_HOUR = 17; // late afternoon — gym time for most people
+export async function scheduleTrainingReminders(daysPerWeek: number, lastWorkoutISO: string | null): Promise<void> {
+  if (!native()) return;
+  try {
+    await LocalNotifications.cancel({ notifications: TRAIN_NOTIF_IDS.map((id) => ({ id })) });
+    const gapDays = Math.ceil(7 / Math.max(1, daysPerWeek));
+    const base = lastWorkoutISO ? new Date(lastWorkoutISO.slice(0, 10)) : new Date();
+    const due = new Date(base.getFullYear(), base.getMonth(), base.getDate() + gapDays, REMINDER_HOUR, 0, 0);
+    const notifications = TRAIN_NOTIF_IDS.map((id, i) => {
+      const at = new Date(due.getTime() + i * 86400000);
+      return { id, at };
+    }).filter((n) => n.at.getTime() > Date.now());
+    if (!notifications.length) return;
+    await LocalNotifications.schedule({
+      notifications: notifications.map((n) => ({
+        id: n.id,
+        title: "Time to train 💪",
+        body: `Keep your ${daysPerWeek}×/week streak going — log a workout today.`,
+        schedule: { at: n.at, allowWhileIdle: true },
+      })),
+    });
+  } catch {
+    /* permission not granted */
+  }
+}
+export async function cancelTrainingReminders(): Promise<void> {
+  if (!native()) return;
+  try {
+    await LocalNotifications.cancel({ notifications: TRAIN_NOTIF_IDS.map((id) => ({ id })) });
+  } catch {
+    /* ignore */
+  }
+}

@@ -548,7 +548,12 @@ export function Today({
       {/* PiP: overlay the minimal timer view on top (keeps the workout UI mounted
           underneath, so note toggles etc. survive returning from the background). */}
       {pipMode && (
-        <PipView restEndsAt={draft.restEndsAt ?? null} startEpoch={draft.startedAt} bpm={hr.bpm} avg={hr.avg} />
+        <PipView
+          restEndsAt={draft.restEndsAt ?? null}
+          timer={{ wAccumMs: draft.wAccumMs, wRunning: draft.wRunning, wSegStart: draft.wSegStart }}
+          bpm={hr.bpm}
+          avg={hr.avg}
+        />
       )}
     </div>
   );
