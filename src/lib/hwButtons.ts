@@ -7,16 +7,18 @@ import { Capacitor, registerPlugin, type PluginListenerHandle } from "@capacitor
 interface HwButtonsPlugin {
   setCapture(options: { enabled: boolean }): Promise<void>;
   setMediaCapture(options: { enabled: boolean }): Promise<void>;
-  addListener(event: "volumeUp" | "mediaButton", cb: () => void): Promise<PluginListenerHandle>;
+  addListener(event: "volumeKey" | "mediaButton", cb: () => void): Promise<PluginListenerHandle>;
 }
 
 const HwButtons = registerPlugin<HwButtonsPlugin>("HwButtons");
 
 const native = () => Capacitor.isNativePlatform();
 
-// Arm/disarm volume-up capture. Arm ONLY while a workout is active — while armed
-// the volume-up key no longer changes media volume.
-export async function setVolumeUpCapture(enabled: boolean): Promise<void> {
+// Arm/disarm volume-key capture (both up and down). Arm ONLY while a workout is
+// active — while armed the volume keys no longer change media volume. Only works
+// while the app is in the FOREGROUND (Android doesn't deliver volume keys to a
+// backgrounded/PiP app).
+export async function setVolumeCapture(enabled: boolean): Promise<void> {
   if (!native()) return;
   try {
     await HwButtons.setCapture({ enabled });
@@ -36,7 +38,7 @@ export async function setMediaButtonCapture(enabled: boolean): Promise<void> {
   }
 }
 
-function listen(event: "volumeUp" | "mediaButton", cb: () => void): () => void {
+function listen(event: "volumeKey" | "mediaButton", cb: () => void): () => void {
   if (!native()) return () => {};
   let handle: PluginListenerHandle | null = null;
   let cancelled = false;
@@ -54,5 +56,5 @@ function listen(event: "volumeUp" | "mediaButton", cb: () => void): () => void {
   };
 }
 
-export const onVolumeUp = (cb: () => void): (() => void) => listen("volumeUp", cb);
+export const onVolumeKey = (cb: () => void): (() => void) => listen("volumeKey", cb);
 export const onMediaButton = (cb: () => void): (() => void) => listen("mediaButton", cb);

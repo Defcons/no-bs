@@ -8,11 +8,17 @@
   /* Keep content clear of the Android/iOS status bar (edge-to-edge WebView). */
   padding-top: env(safe-area-inset-top);
 }
-.content {
+/* Each tab is its own always-mounted scroll container (see App.tsx) — hidden
+   panels keep their DOM + scroll offset so returning to a tab restores position. */
+.tabpanel {
   flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
   padding-bottom: 8px;
+  min-height: 0;
+}
+.tabpanel[hidden] {
+  display: none;
 }
 /* ---- OTA update confirmation banner (shown once after an update reload) ---- */
 .update-banner {
@@ -738,11 +744,13 @@
   gap: 3vw;
 }
 .pip-label {
-  font-size: min(7vw, 15vh);
-  letter-spacing: 0.12em;
+  font-size: min(6vw, 13vh);
+  line-height: 1;
+  letter-spacing: 0.1em;
   color: var(--muted);
   font-weight: 700;
   white-space: nowrap;
+  text-align: right;
 }
 .pip-time {
   font-size: min(22vw, 34vh);
@@ -750,6 +758,10 @@
   font-weight: 800;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+}
+/* h:mm:ss is ~40% wider than m:ss — shrink so an hour-plus workout still fits. */
+.pip-time.long {
+  font-size: min(15vw, 24vh);
 }
 .pip-view.resting .pip-time {
   color: var(--accent);
@@ -760,6 +772,11 @@
   font-weight: 700;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+}
+.pip-hr-avg {
+  font-size: 0.45em;
+  color: var(--muted);
+  font-weight: 600;
 }
 
 /* ---- Set rows ---- */
@@ -1442,6 +1459,20 @@ input[type="range"] {
 .setting input.full {
   width: 100%;
   margin-bottom: 8px;
+}
+.setting select {
+  font: inherit;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px;
+  flex: 1;
+  min-width: 0;
+}
+.setting select:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
 }
 .row {
   display: flex;

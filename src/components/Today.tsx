@@ -1,12 +1,13 @@
 // The main gym screen: start a day, log sets, run the workout + rest timers,
 // see live HR, and finish. This is the primary "as-easy-as-possible" surface.
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { getSetting, lastWorkoutForDay, type StoredWorkout } from "../db";
 import { daysAgo, daysAgoLabel, hhmmss, mmss, niceDate } from "../lib/format";
 import { cancelBreakNotification, scheduleBreakNotification, showReminder } from "../lib/notify";
 import { startGeofence, stopGeofence } from "../lib/geofence";
-import { isInPip, onPipChange, setPipAutoEnter } from "../lib/pip";
-import { onMediaButton, onVolumeUp, setMediaButtonCapture, setVolumeUpCapture } from "../lib/hwButtons";
+import { exitPip, isInPip, onPipChange, setPipAutoEnter } from "../lib/pip";
+import { onMediaButton, onVolumeKey, setMediaButtonCapture, setVolumeCapture } from "../lib/hwButtons";
 import { startTracking, stopTracking } from "../lib/tracker";
 import { stepForExercise } from "../lib/steps";
 import { uid } from "../lib/uid";
@@ -100,26 +101,28 @@ export function Today({
   // - mediaBtnBreak: headphone play/pause button (takes it over from music!)
   const [volUpBreak, setVolUpBreak] = useState(false);
   const [mediaBtnBreak, setMediaBtnBreak] = useState(false);
-  const startRestRef = useRef<() => void>(() => {});
+  // The button action: start a break, or skip/dismiss the one that's running.
+  // Reassigned every render (below) so it sees the live draft.
+  const hwBreakRef = useRef<() => void>(() => {});
   useEffect(() => {
     getSetting("volumeUpBreak", false).then(setVolUpBreak);
     getSetting("mediaBtnBreak", false).then(setMediaBtnBreak);
   }, [draft == null]);
   useEffect(() => {
     const armed = !!draft && volUpBreak;
-    setVolumeUpCapture(armed);
+    setVolumeCapture(armed);
     if (!armed) return;
-    const off = onVolumeUp(() => startRestRef.current());
+    const off = onVolumeKey(() => hwBreakRef.current());
     return () => {
       off();
-      setVolumeUpCapture(false);
+      setVolumeCapture(false);
     };
   }, [draft == null, volUpBreak]);
   useEffect(() => {
     const armed = !!draft && mediaBtnBreak;
     setMediaButtonCapture(armed);
     if (!armed) return;
-    const off = onMediaButton(() => startRestRef.current());
+    const off = onMediaButton(() => hwBreakRef.current());
     return () => {
       off();
       setMediaButtonCapture(false);
@@ -154,26 +157,31 @@ export function Today({
 
   // Actually save + sync + return to history. Guarded so a watchdog (HR/geofence)
   // and a manual tap can't both save the same session.
-  const finishNow = async () => {
+  // `auto` = ended by a watchdog (left the gym / HR strap off), not a manual tap.
+  // An auto-end logs duration up to the last logged set (draft.lastActivityAt),
+  // not "now", and closes any lingering PiP window.
+  const finishNow = async (auto = false) => {
     if (finishingRef.current) return;
     finishingRef.current = true;
     try {
       cancelBreakNotification(); // no "Rest over!" minutes after the workout ended
       const track = draft?.trackGps ? await stopTracking() : undefined;
-      const row = await finish(getHrStats(), track && track.length >= 2 ? { track } : undefined);
+      const endedAt = auto ? draft?.lastActivityAt : undefined;
+      const row = await finish(getHrStats(), track && track.length >= 2 ? { track } : undefined, { endedAt });
       if (row && !row.edited) {
         // Edits update the local record only — re-syncing would append a new column.
         const res = await syncWorkout(row);
-        if (res && !res.ok) {
+        if (res && !res.ok && !auto) {
           alert(`Saved locally, but Google Sheet sync failed:\n${res.error}\n\nRetry from Settings → Sync now.`);
         }
       }
       setHrPrompt(false);
       setFinishAsk(false);
+      if (auto) exitPip(); // a stale PiP window would otherwise linger on the picker
       onFinished();
     } catch (e) {
       // Surface it — a silent failure here read as "the button does nothing".
-      alert(`Couldn't save the workout: ${(e as Error).message}\n\nYour session is still active — try again.`);
+      if (!auto) alert(`Couldn't save the workout: ${(e as Error).message}\n\nYour session is still active — try again.`);
     } finally {
       // Always release the guard: an error above otherwise dead-ends every
       // future Finish tap until the tab remounts.
@@ -183,10 +191,11 @@ export function Today({
   // The Finish button: nudge to rate mood first if it wasn't set.
   const finishWorkout = () => {
     if (draft && (draft.moodBefore == null || draft.moodAfter == null)) setFinishAsk(true);
-    else finishNow();
+    else finishNow(false);
   };
-  const finishRef = useRef(finishNow);
-  finishRef.current = finishNow;
+  // Watchdogs call this (auto-end); manual paths call finishNow(false) directly.
+  const finishRef = useRef<() => void>(() => {});
+  finishRef.current = () => finishNow(true);
 
   // Track HR availability for the drop-out auto-finish.
   useEffect(() => {
@@ -376,19 +385,25 @@ export function Today({
   // ---- Active workout ------------------------------------------------------
   const setExercise = (i: number, ex: ExercisePerf) => {
     startWorkoutTimer(); // first edit starts the workout timer
-    update((d) => ({ ...d, exercises: d.exercises.map((e, idx) => (idx === i ? ex : e)) }));
+    // Editing a set is "activity" — stamp it so an auto-end logs up to here.
+    update((d) => ({ ...d, lastActivityAt: Date.now(), exercises: d.exercises.map((e, idx) => (idx === i ? ex : e)) }));
   };
 
   const startRest = () => {
     const at = Date.now() + restDefaultSec * 1000;
     scheduleBreakNotification(at); // native: fires even if app is backgrounded
-    update((d) => ({ ...d, restEndsAt: at }));
+    update((d) => ({ ...d, restEndsAt: at, lastActivityAt: Date.now() }));
   };
-  startRestRef.current = startRest; // keep the volume-up listener on the live closure
   const setRest = (endsAt: number | null) => {
     if (endsAt == null) cancelBreakNotification();
     else scheduleBreakNotification(endsAt);
     update((d) => ({ ...d, restEndsAt: endsAt ?? undefined }));
+  };
+  // Hardware button (volume / headset): if a break is set, skip/dismiss it;
+  // otherwise start one. Reassigned each render so it sees the current draft.
+  hwBreakRef.current = () => {
+    if (draft?.restEndsAt != null) setRest(null);
+    else startRest();
   };
   const addExercise = () =>
     update((d) => ({
@@ -562,7 +577,7 @@ export function Today({
               >
                 Yes, keep going
               </button>
-              <button className="ghost" onClick={finishNow}>
+              <button className="ghost" onClick={() => finishNow(false)}>
                 End now
               </button>
             </div>
@@ -586,10 +601,10 @@ export function Today({
               onChange={(v) => update((d) => ({ ...d, moodAfter: v }))}
             />
             <div className="row" style={{ marginTop: 14 }}>
-              <button className="primary" onClick={finishNow}>
+              <button className="primary" onClick={() => finishNow(false)}>
                 Finish workout
               </button>
-              <button className="ghost" onClick={finishNow}>
+              <button className="ghost" onClick={() => finishNow(false)}>
                 Skip
               </button>
             </div>
@@ -597,16 +612,19 @@ export function Today({
         </div>
       )}
 
-      {/* PiP: overlay the minimal timer view on top (keeps the workout UI mounted
-          underneath, so note toggles etc. survive returning from the background). */}
-      {pipMode && (
-        <PipView
-          restEndsAt={draft.restEndsAt ?? null}
-          timer={{ wAccumMs: draft.wAccumMs, wRunning: draft.wRunning, wSegStart: draft.wSegStart }}
-          bpm={hr.bpm}
-          avg={hr.avg}
-        />
-      )}
+      {/* PiP: portal the minimal timer view to <body> so it covers whatever tab is
+          showing (Today stays mounted but hidden when you're on another tab — the
+          portal escapes that so PiP works from any tab). */}
+      {pipMode &&
+        createPortal(
+          <PipView
+            restEndsAt={draft.restEndsAt ?? null}
+            timer={{ wAccumMs: draft.wAccumMs, wRunning: draft.wRunning, wSegStart: draft.wSegStart }}
+            bpm={hr.bpm}
+            avg={hr.avg}
+          />,
+          document.body,
+        )}
     </div>
   );
 }

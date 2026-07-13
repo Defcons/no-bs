@@ -30,6 +30,10 @@ export type Draft = {
   // Mood 1-10.
   moodBefore?: number;
   moodAfter?: number;
+  // Epoch ms of the last real activity (a set edited/marked done, a break started).
+  // An AUTO-end (left the gym / HR strap off) logs duration up to THIS, not "now" —
+  // so the walk to the locker room + drive home isn't counted as workout time.
+  lastActivityAt?: number;
 };
 
 const DRAFT_KEY = "activeDraft";
@@ -179,6 +183,7 @@ export function useActiveWorkout() {
       swRunning: false,
       swAccumMs: 0,
       swSegStart: now,
+      lastActivityAt: now,
     };
     setDraft(d);
     setSetting(DRAFT_KEY, d);
@@ -211,6 +216,7 @@ export function useActiveWorkout() {
       swRunning: false,
       swAccumMs: 0,
       swSegStart: now,
+      lastActivityAt: now,
     };
     setDraft(d);
     setSetting(DRAFT_KEY, d);
@@ -231,6 +237,7 @@ export function useActiveWorkout() {
       swRunning: false,
       swAccumMs: 0,
       swSegStart: now,
+      lastActivityAt: now,
     };
     setDraft(d);
     setSetting(DRAFT_KEY, d);
@@ -284,10 +291,15 @@ export function useActiveWorkout() {
   // Persist the finished session and clear the draft. HR stats + extra fields
   // (e.g. a recorded GPS track) optional.
   const finish = useCallback(
-    async (hr?: { avg?: number; max?: number }, extra?: Partial<StoredWorkout>) => {
+    async (hr?: { avg?: number; max?: number }, extra?: Partial<StoredWorkout>, opts?: { endedAt?: number }) => {
       if (!draft) return;
       window.clearTimeout(saveTimer.current); // same ghost-draft guard as cancel()
-      const durationSec = Math.floor(wElapsedMs(draft) / 1000);
+      // Manual finish → wall-clock. Auto-end → up to the last logged set (opts.endedAt),
+      // clamped so it can never go negative or below a couple of minutes.
+      const durationSec =
+        opts?.endedAt != null
+          ? Math.max(60, Math.floor((opts.endedAt - draft.startedAt) / 1000))
+          : Math.floor(wElapsedMs(draft) / 1000);
       const row: StoredWorkout = {
         date: draft.date,
         dayName: draft.dayName,

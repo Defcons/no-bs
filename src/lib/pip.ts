@@ -6,6 +6,8 @@ interface PipPlugin {
   isSupported(): Promise<{ supported: boolean }>;
   isInPip(): Promise<{ inPip: boolean }>;
   enter(options?: { width?: number; height?: number }): Promise<void>;
+  exit(): Promise<void>;
+  setKeepAwake(options: { enabled: boolean }): Promise<void>;
   setAutoEnter(options: { enabled: boolean; width?: number; height?: number }): Promise<void>;
   addListener(event: "pipChange", cb: (data: { pip: boolean }) => void): Promise<PluginListenerHandle>;
 }
@@ -39,6 +41,27 @@ export async function enterPip(): Promise<void> {
     await Pip.enter({ width: 2, height: 3 });
   } catch {
     /* unsupported */
+  }
+}
+
+// Keep the screen on (native window flag — also holds in PiP, unlike web Wake Lock).
+export async function setKeepAwake(enabled: boolean): Promise<void> {
+  if (!native()) return;
+  try {
+    await Pip.setKeepAwake({ enabled });
+  } catch {
+    /* unsupported */
+  }
+}
+
+// Leave PiP (expand back to full screen). Called when the workout auto-ends while
+// floating so a stale PiP window doesn't linger showing the normal app.
+export async function exitPip(): Promise<void> {
+  if (!native()) return;
+  try {
+    await Pip.exit();
+  } catch {
+    /* unsupported / not in PiP */
   }
 }
 

@@ -128,7 +128,7 @@ export async function exportXlsx(
   // Templates ride along so a restore on a fresh phone brings the user's split back.
   const json = JSON.stringify({ v: 2, workouts, bwHistory, templates });
   const CHUNK = 30000;
-  const dataRows: string[][] = [["gym-tracker backup — do not edit"]];
+  const dataRows: string[][] = [["NoBS – Workout Log backup — do not edit"]];
   for (let i = 0; i < json.length; i += CHUNK) dataRows.push([json.slice(i, i + CHUNK)]);
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(dataRows), DATA_TAB);
   wb.Workbook = { Sheets: wb.SheetNames.map((n) => (n === DATA_TAB ? { Hidden: 1 } : {})) };

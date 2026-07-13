@@ -26,14 +26,14 @@ import com.getcapacitor.annotation.CapacitorPlugin;
 @CapacitorPlugin(name = "HwButtons")
 public class HwButtonsPlugin extends Plugin {
 
-    // Read by MainActivity.onKeyDown().
-    static boolean captureVolumeUp = false;
+    // Read by MainActivity.onKeyDown() — captures BOTH volume up and down.
+    static boolean captureVolume = false;
 
     private MediaSession session;
 
     @PluginMethod
     public void setCapture(PluginCall call) {
-        captureVolumeUp = Boolean.TRUE.equals(call.getBoolean("enabled", false));
+        captureVolume = Boolean.TRUE.equals(call.getBoolean("enabled", false));
         call.resolve();
     }
 
@@ -96,8 +96,8 @@ public class HwButtonsPlugin extends Plugin {
         stopSession();
     }
 
-    // Called by MainActivity when a captured key fires.
-    void notifyVolumeUp() {
-        notifyListeners("volumeUp", new JSObject());
+    // Called by MainActivity when a captured volume key (up or down) fires.
+    void notifyVolumeKey() {
+        notifyListeners("volumeKey", new JSObject());
     }
 }

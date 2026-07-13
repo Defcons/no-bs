@@ -1,6 +1,7 @@
 package no.defc0n.gymtracker;
 
 import android.app.PictureInPictureParams;
+import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.os.Build;
 import android.util.Rational;
@@ -68,11 +69,49 @@ public class PipPlugin extends Plugin {
         call.resolve();
     }
 
+    // Keep the screen on via the window flag — unlike the web Wake Lock API this
+    // also holds while the window is in PiP. Toggled by the "keep screen on" setting.
+    @PluginMethod
+    public void setKeepAwake(PluginCall call) {
+        final boolean on = Boolean.TRUE.equals(call.getBoolean("enabled", false));
+        getActivity().runOnUiThread(() -> {
+            try {
+                if (on) {
+                    getActivity().getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+                } else {
+                    getActivity().getWindow().clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+                }
+            } catch (Exception e) {
+                /* ignore */
+            }
+        });
+        call.resolve();
+    }
+
     @PluginMethod
     public void setAutoEnter(PluginCall call) {
         autoEnter = call.getBoolean("enabled", false);
         autoW = call.getInt("width", 1);
         autoH = call.getInt("height", 1);
+        call.resolve();
+    }
+
+    // Leave PiP by bringing the activity back to full screen. Used when the workout
+    // auto-ends while floating, so a stale PiP window (now showing the normal app)
+    // doesn't linger. Android has no "close PiP to nothing" — expanding is the exit.
+    @PluginMethod
+    public void exit(PluginCall call) {
+        getActivity().runOnUiThread(() -> {
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && getActivity().isInPictureInPictureMode()) {
+                    Intent intent = new Intent(getContext(), MainActivity.class);
+                    intent.setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_REORDER_TO_FRONT);
+                    getActivity().startActivity(intent);
+                }
+            } catch (Exception e) {
+                // best-effort — never crash the finish flow over it
+            }
+        });
         call.resolve();
     }
 

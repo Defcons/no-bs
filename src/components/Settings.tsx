@@ -8,6 +8,7 @@ import { hrAvailable } from "../lib/hr";
 import { cancelTrainingReminders, notificationsSupported, requestNotifications, scheduleTrainingReminders } from "../lib/notify";
 import { importFromSheet, pendingCount, syncEnabled, syncPending, testSync } from "../lib/sheetSync";
 import type { BwEntry } from "../lib/standards";
+import { BREAK_SOUNDS, type BreakSoundId, playBreakSound } from "../lib/sounds";
 import { checkAndApplyUpdate, currentVersion, updatesSupported } from "../lib/update";
 import { applyBackup, exportXlsx, importXlsx, type ImportedBackup } from "../lib/workbook";
 
@@ -32,6 +33,8 @@ type Props = {
   onReset: () => void;
   floatMode: "pip" | "off";
   setFloatMode: (v: "pip" | "off") => void;
+  keepScreenOn: boolean;
+  setKeepScreenOn: (v: boolean) => void;
 };
 
 export function Settings({
@@ -55,6 +58,8 @@ export function Settings({
   onReset,
   floatMode,
   setFloatMode,
+  keepScreenOn,
+  setKeepScreenOn,
 }: Props) {
   const [pending, setPending] = useState(0);
   const [status, setStatus] = useState<string>("");
@@ -72,6 +77,7 @@ export function Settings({
   const [autoBreak, setAutoBreak] = useState(false);
   const [volUpBreak, setVolUpBreak] = useState(false);
   const [mediaBtnBreak, setMediaBtnBreak] = useState(false);
+  const [breakSound, setBreakSound] = useState<BreakSoundId>("beep");
   const native = Capacitor.isNativePlatform();
 
   useEffect(() => {
@@ -85,6 +91,7 @@ export function Settings({
     getSetting("autoBreakOnDone", false).then(setAutoBreak);
     getSetting("volumeUpBreak", false).then(setVolUpBreak);
     getSetting("mediaBtnBreak", false).then(setMediaBtnBreak);
+    getSetting<BreakSoundId>("breakSound", "beep").then(setBreakSound);
     pendingCount().then(setPending);
     currentVersion().then(setAppVersion);
   }, []);
@@ -265,6 +272,30 @@ export function Settings({
         </div>
 
         <div className="setting">
+          <label>Break-over sound</label>
+          <div className="row">
+            <select
+              value={breakSound}
+              onChange={(e) => {
+                const v = e.target.value as BreakSoundId;
+                setBreakSound(v);
+                setSetting("breakSound", v);
+                playBreakSound(v); // preview on change
+              }}
+            >
+              {BREAK_SOUNDS.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.label}
+                </option>
+              ))}
+            </select>
+            <button className="mini" onClick={() => playBreakSound(breakSound)}>
+              ▶ Preview
+            </button>
+          </div>
+        </div>
+
+        <div className="setting">
           <label>Weight step (± buttons)</label>
           <div className="seg">
             {[1.25, 2.5, 5].map((s) => (
@@ -297,27 +328,29 @@ export function Settings({
 
         {native && (
           <div className="setting">
-            <label>Volume-up starts the break</label>
+            <label>Volume buttons control the break</label>
             <button className={`mini ${volUpBreak ? "active" : ""}`} onClick={toggleVolUpBreak}>
               {volUpBreak ? "On — tap to disable" : "Enable"}
             </button>
             <p className="muted tiny">
-              During a workout, pressing volume-up (phone or headphone volume button) starts the break — the volume
-              itself won't change while a workout is active. Needs a current APK.
+              During a workout, press <b>either</b> volume button (phone or headphone) to start the break — press again
+              to skip/dismiss a running one. The volume itself won't change while a workout is active. Works only while
+              the app is on screen (Android doesn't send volume keys to a backgrounded app). Needs a current APK.
             </p>
           </div>
         )}
 
         {native && (
           <div className="setting">
-            <label>Headphone button starts the break</label>
+            <label>Headphone button controls the break</label>
             <button className={`mini ${mediaBtnBreak ? "active" : ""}`} onClick={toggleMediaBtnBreak}>
               {mediaBtnBreak ? "On — tap to disable" : "Enable"}
             </button>
             <p className="muted tiny">
-              During a workout, your headphone's play/pause button starts the break. Trade-off: while a workout is
-              active it can't play/pause your music (Android routes the button to one app at a time). Volume buttons
-              keep working for the volume-up option above. Needs a current APK.
+              During a workout, your headphone's play/pause button starts the break (press again to skip it).{" "}
+              <b>Heads-up:</b> this only works when no other app holds the media button — if music is playing, Android
+              sends the button to that app, not here, so it may do nothing. The volume-button option above is the
+              reliable one. Needs a current APK.
             </p>
           </div>
         )}
@@ -339,6 +372,17 @@ export function Settings({
             </p>
           </div>
         )}
+
+        <div className="setting">
+          <label>Keep screen on</label>
+          <button className={`mini ${keepScreenOn ? "active" : ""}`} onClick={() => setKeepScreenOn(!keepScreenOn)}>
+            {keepScreenOn ? "On — tap to disable" : "Enable"}
+          </button>
+          <p className="muted tiny">
+            Stops the screen dimming/locking while the app is open or floating (PiP). Off by default — uses more
+            battery.
+          </p>
+        </div>
       </details>
 
       <details className="settings-group">

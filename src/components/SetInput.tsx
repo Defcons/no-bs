@@ -2,7 +2,7 @@
 // optional note. Weight is the primary input; reps is pre-filled from the scheme.
 // Units ("kg"/"reps") are static suffixes inside each field so they don't throw
 // off vertical alignment.
-import { type FocusEvent, type KeyboardEvent, useState } from "react";
+import { type KeyboardEvent, useRef, useState } from "react";
 import type { SetEntry } from "../types";
 
 type Props = {
@@ -21,12 +21,12 @@ function parseWeight(s: string): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-// Select existing text on focus so typing replaces it (no manual backspacing).
-const selectAll = (e: FocusEvent<HTMLInputElement>) => e.target.select();
 // Enter (the keyboard's ✓/done key on phones) dismisses the keyboard.
 const blurOnEnter = (e: KeyboardEvent<HTMLInputElement>) => {
   if (e.key === "Enter") e.currentTarget.blur();
 };
+
+type NumField = "weight" | "reps" | "assist";
 
 export function SetInput({ index, set, step, active, prevWeight, onChange }: Props) {
   const [showNote, setShowNote] = useState(!!set.note);
@@ -35,6 +35,18 @@ export function SetInput({ index, set, step, active, prevWeight, onChange }: Pro
   // (user decision 2026-07-12): prefilled weights would otherwise green-flag
   // sets you never performed.
   const bump = (d: number) => onChange({ weight: Math.max(0, (set.weight ?? prevWeight ?? 0) + d) });
+
+  // Tap-to-edit: clear the field on focus (so there's no highlighted text and thus
+  // no Android copy/paste toolbar — just start typing the new value). If the user
+  // taps away without typing, the previous value is restored. (user decision 2026-07-12)
+  const stash = useRef<Partial<Record<NumField, number | null>>>({});
+  const clearOnFocus = (f: NumField) => () => {
+    stash.current[f] = set[f] as number | null;
+    if (set[f] != null) onChange({ [f]: null });
+  };
+  const restoreOnBlur = (f: NumField) => () => {
+    if (set[f] == null && stash.current[f] != null) onChange({ [f]: stash.current[f] });
+  };
 
   return (
     <div className={`setrow ${done ? "done" : ""} ${active && !done ? "active" : ""}`}>
@@ -52,7 +64,8 @@ export function SetInput({ index, set, step, active, prevWeight, onChange }: Pro
             inputMode="decimal"
             value={set.weight ?? ""}
             placeholder={prevWeight != null ? String(prevWeight) : "—"}
-            onFocus={selectAll}
+            onFocus={clearOnFocus("weight")}
+            onBlur={restoreOnBlur("weight")}
             onKeyDown={blurOnEnter}
             onChange={(e) => onChange({ weight: parseWeight(e.target.value) })}
           />
@@ -69,7 +82,8 @@ export function SetInput({ index, set, step, active, prevWeight, onChange }: Pro
           inputMode="numeric"
           value={set.reps ?? ""}
           placeholder="—"
-          onFocus={selectAll}
+          onFocus={clearOnFocus("reps")}
+          onBlur={restoreOnBlur("reps")}
           onKeyDown={blurOnEnter}
           onChange={(e) => {
             const n = parseInt(e.target.value, 10);
@@ -86,7 +100,8 @@ export function SetInput({ index, set, step, active, prevWeight, onChange }: Pro
           inputMode="numeric"
           value={set.assist ?? ""}
           placeholder="–"
-          onFocus={selectAll}
+          onFocus={clearOnFocus("assist")}
+          onBlur={restoreOnBlur("assist")}
           onKeyDown={blurOnEnter}
           onChange={(e) => {
             const n = parseInt(e.target.value, 10);

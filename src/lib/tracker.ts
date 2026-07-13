@@ -50,7 +50,7 @@ export async function startTracking(getBpm: () => number | null): Promise<boolea
   try {
     const id = await BackgroundGeolocation.addWatcher(
       {
-        backgroundTitle: "Gym Tracker",
+        backgroundTitle: "NoBS – Workout Log",
         backgroundMessage: "Recording your route.",
         requestPermissions: true,
         stale: false,

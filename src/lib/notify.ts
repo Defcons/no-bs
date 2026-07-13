@@ -10,6 +10,7 @@ const native = () => Capacitor.isNativePlatform();
 // a sound + heads-up while the app is backgrounded (the in-app Web Audio beep is
 // throttled/silent in the background).
 const REST_CHANNEL = "rest-timer";
+const REMINDER_CHANNEL = "reminders";
 let channelReady = false;
 async function ensureRestChannel(): Promise<void> {
   if (!native() || channelReady) return;
@@ -19,6 +20,17 @@ async function ensureRestChannel(): Promise<void> {
       name: "Rest timer",
       description: "Alerts when your rest is over",
       importance: 5, // HIGH → sound + heads-up
+      visibility: 1,
+      vibration: true,
+    });
+    // Training reminders (incl. the pre-scheduled closed-app ones). Without an
+    // explicit channel Android may drop a scheduled notification onto a silent
+    // default channel — that's why background reminders weren't showing.
+    await LocalNotifications.createChannel({
+      id: REMINDER_CHANNEL,
+      name: "Training reminders",
+      description: "Nudges you to train when you're behind your goal",
+      importance: 4, // HIGH → shows + sound
       visibility: 1,
       vibration: true,
     });
@@ -61,7 +73,10 @@ let idc = 8000;
 export async function showReminder(title: string, body: string): Promise<void> {
   if (native()) {
     try {
-      await LocalNotifications.schedule({ notifications: [{ id: idc++ % 100000, title, body }] });
+      await ensureRestChannel(); // creates the reminder channel too
+      await LocalNotifications.schedule({
+        notifications: [{ id: idc++ % 100000, title, body, channelId: REMINDER_CHANNEL }],
+      });
     } catch {
       /* permission not granted */
     }
@@ -122,6 +137,7 @@ const REMINDER_HOUR = 17; // late afternoon — gym time for most people
 export async function scheduleTrainingReminders(daysPerWeek: number, lastWorkoutISO: string | null): Promise<void> {
   if (!native()) return;
   try {
+    await ensureRestChannel(); // ensure the reminder channel exists first
     await LocalNotifications.cancel({ notifications: TRAIN_NOTIF_IDS.map((id) => ({ id })) });
     const gapDays = Math.ceil(7 / Math.max(1, daysPerWeek));
     // Parse the date as LOCAL calendar parts — new Date("yyyy-mm-dd") is UTC
@@ -152,6 +168,7 @@ export async function scheduleTrainingReminders(daysPerWeek: number, lastWorkout
         id: n.id,
         title: "Time to train 💪",
         body: `Keep your ${daysPerWeek}×/week streak going — log a workout today.`,
+        channelId: REMINDER_CHANNEL,
         schedule: { at: n.at, allowWhileIdle: true },
       })),
     });

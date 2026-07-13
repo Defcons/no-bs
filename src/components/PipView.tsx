@@ -24,17 +24,20 @@ export function PipView({ restEndsAt, timer, bpm, avg }: Props) {
   const restLeft = restEndsAt ? Math.max(0, Math.round((restEndsAt - Date.now()) / 1000)) : 0;
   const resting = restEndsAt != null && restLeft > 0;
   const workSecs = Math.max(0, Math.floor(wElapsedMs(timer) / 1000));
+  const timeStr = resting ? mmss(restLeft) : hhmmss(workSecs);
+  // "1:02:03" (hours) is wider than "12:34" — shrink so it fits the PiP width.
+  const long = timeStr.length > 5;
 
   return (
     <div className={`pip-view ${resting ? "resting" : ""}`}>
       <span className="pip-row1">
-        <span className="pip-label">{resting ? "BREAK" : "WORK"}</span>
-        <span className="pip-time">{resting ? mmss(restLeft) : hhmmss(workSecs)}</span>
+        <span className="pip-label">{resting ? "BREAK" : <>WORK&#8209;<br />OUT</>}</span>
+        <span className={`pip-time ${long ? "long" : ""}`}>{timeStr}</span>
       </span>
       {bpm != null && (
         <span className="pip-hr">
           ♥ {bpm}
-          {avg != null ? ` (${avg})` : ""}
+          {avg != null && <span className="pip-hr-avg"> (avg {avg})</span>}
         </span>
       )}
     </div>

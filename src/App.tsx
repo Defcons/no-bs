@@ -1,4 +1,4 @@
-import { Suspense, lazy, useEffect, useRef, useState } from "react";
+import { Suspense, lazy, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import "./App.css";
 import { db, ensureBootstrapped, getSetting, setSetting, type StoredWorkout } from "./db";
@@ -7,6 +7,7 @@ import { type HrMonitor, createHrMonitor, hrAvailable } from "./lib/hr";
 import { Capacitor } from "@capacitor/core";
 import { notificationsAllowed, requestNotifications, scheduleTrainingReminders, showReminder } from "./lib/notify";
 import { markAppReady } from "./lib/update";
+import { setKeepAwake } from "./lib/pip";
 import { saveFile } from "./lib/download";
 import { syncBodyweight } from "./lib/sheetSync";
 import type { BwEntry } from "./lib/standards";
@@ -53,6 +54,21 @@ export default function App() {
   const [routeHash, setRouteHash] = useState<string | null>(() => readRouteHash());
   const [pendingEdit, setPendingEdit] = useState<StoredWorkout | null>(null); // History → edit in Today
 
+  // All four tab panels stay mounted (Today MUST, so its workout/PiP/HR logic keeps
+  // running when you're on another tab); we just toggle visibility. That also lets
+  // us remember each panel's scroll position across tab + app switches.
+  const panelRefs = useRef<Record<Tab, HTMLDivElement | null>>({ today: null, history: null, records: null, settings: null });
+  const scrollPos = useRef<Record<Tab, number>>({ today: 0, history: 0, records: 0, settings: 0 });
+  const go = (next: Tab) => {
+    const cur = panelRefs.current[tab];
+    if (cur) scrollPos.current[tab] = cur.scrollTop; // save while still visible
+    setTab(next);
+  };
+  useLayoutEffect(() => {
+    const el = panelRefs.current[tab];
+    if (el) el.scrollTop = scrollPos.current[tab] ?? 0; // restore on show
+  }, [tab]);
+
   // Settings (loaded from IndexedDB, persisted on change).
   const [restDefaultSec, setRest] = useState(120);
   const [weightStep, setStep] = useState(2.5);
@@ -60,8 +76,9 @@ export default function App() {
   const [bodyweightKg, setBw] = useState(0); // 0 = not set
   const [age, setAge] = useState(0); // 0 = not set
   const [bwHistory, setBwH] = useState<BwEntry[]>([]);
-  const [hrLowThreshold, setHrLow] = useState(90);
+  const [hrLowThreshold, setHrLow] = useState(80);
   const [floatMode, setFloatMode] = useState<"pip" | "off">("pip");
+  const [keepScreenOn, setKeepScreenOn] = useState(false);
 
   // Heart rate.
   const [bpm, setBpm] = useState<number | null>(null);
@@ -127,9 +144,10 @@ export default function App() {
       setBw(await getSetting("bodyweightKg", 0));
       setAge(await getSetting("age", 0));
       setBwH(await getSetting<BwEntry[]>("bwHistory", []));
-      setHrLow(await getSetting("hrLowThreshold", 90));
+      setHrLow(await getSetting("hrLowThreshold", 80));
       // Coerce the removed "overlay" mode back to PiP for anyone who tried it.
       setFloatMode((await getSetting<string>("floatMode", "pip")) === "off" ? "off" : "pip");
+      setKeepScreenOn(await getSetting("keepScreenOn", false));
       setReady(true);
       if (Capacitor.isNativePlatform()) requestNotifications(); // ask once so break alarms work
       await maybeRemind(dpw);
@@ -156,8 +174,14 @@ export default function App() {
     };
   }, []);
 
-  // Keep the screen awake while the app is open (re-acquire when tab returns).
+  // Keep the screen awake — opt-in (default off). Native window flag holds while the
+  // app is foreground OR in PiP; web Wake Lock is a foreground-only fallback.
   useEffect(() => {
+    if (!keepScreenOn) {
+      setKeepAwake(false);
+      return;
+    }
+    setKeepAwake(true);
     let lock: WakeLockSentinel | null = null;
     const nav = navigator as Navigator & { wakeLock?: { request: (t: "screen") => Promise<WakeLockSentinel> } };
     const request = async () => {
@@ -173,8 +197,9 @@ export default function App() {
     return () => {
       document.removeEventListener("visibilitychange", onVis);
       lock?.release().catch(() => {});
+      setKeepAwake(false);
     };
-  }, []);
+  }, [keepScreenOn]);
 
   const connect = async () => {
     try {
@@ -222,6 +247,10 @@ export default function App() {
   const persistFloatMode = (v: "pip" | "off") => {
     setFloatMode(v);
     setSetting("floatMode", v);
+  };
+  const persistKeepScreenOn = (v: boolean) => {
+    setKeepScreenOn(v);
+    setSetting("keepScreenOn", v);
   };
   const persistBwHistory = (v: BwEntry[]) => {
     setBwH(v);
@@ -280,91 +309,97 @@ export default function App() {
 
   return (
     <div className="app">
-      <main className="content">
-        {showUpdated && (
-          <div className="update-banner" role="status">
-            <span>✓ Updated to v{updatedVersion?.split("+")[0]} — you're on the latest.</span>
-            <button className="update-banner-x" onClick={() => setShowUpdated(false)} aria-label="Dismiss">
-              ×
-            </button>
-          </div>
-        )}
-        {tab === "today" && (
-          <Today
-            templates={templates}
-            restDefaultSec={restDefaultSec}
-            weightStep={weightStep}
-            daysPerWeek={daysPerWeek}
-            hrLowThreshold={hrLowThreshold}
-            hr={hr}
-            onWorkoutStart={() => {
-              hrAgg.current = { sum: 0, count: 0, max: 0 };
-              setHrAvg(null);
-            }}
-            getHrStats={getHrStats}
-            onFinished={() => {
-              setTab("history");
-              // Finishing a workout moves the next "due" date — reschedule.
-              maybeRemind(daysPerWeek);
-            }}
-            editWorkout={pendingEdit}
-            onEditConsumed={() => setPendingEdit(null)}
-            floatMode={floatMode}
-          />
-        )}
-        {tab === "history" && (
-          <History
-            onEdit={async (w) => {
-              // Only one session lives in the editor at a time. Don't let editing a
-              // past workout clobber a live in-progress one.
-              const active = await getSetting<{ editId?: number } | null>("activeDraft", null);
-              if (active && active.editId == null) {
-                alert("Finish or reset your current workout first, then edit a past one.");
-                return;
-              }
-              setPendingEdit(w);
-              setTab("today");
-            }}
-          />
-        )}
-        {tab === "records" && <Records bodyweightKg={bodyweightKg} age={age} bwHistory={bwHistory} />}
-        {tab === "settings" && (
-          <Settings
-            restDefaultSec={restDefaultSec}
-            setRestDefaultSec={persistRest}
-            weightStep={weightStep}
-            setWeightStep={persistStep}
-            daysPerWeek={daysPerWeek}
-            setDaysPerWeek={persistDpw}
-            bodyweightKg={bodyweightKg}
-            setBodyweightKg={persistBw}
-            age={age}
-            setAge={persistAge}
-            bwHistory={bwHistory}
-            setBwHistory={persistBwHistory}
-            hrLowThreshold={hrLowThreshold}
-            setHrLowThreshold={persistHrLow}
-            hr={hr}
-            onImported={reloadBodyweight}
-            onExport={onExport}
-            onReset={onReset}
-            floatMode={floatMode}
-            setFloatMode={persistFloatMode}
-          />
-        )}
-      </main>
+      {showUpdated && (
+        <div className="update-banner" role="status">
+          <span>✓ Updated to v{updatedVersion?.split("+")[0]} — you're on the latest.</span>
+          <button className="update-banner-x" onClick={() => setShowUpdated(false)} aria-label="Dismiss">
+            ×
+          </button>
+        </div>
+      )}
+
+      <div className="tabpanel" hidden={tab !== "today"} ref={(el) => { panelRefs.current.today = el; }}>
+        <Today
+          templates={templates}
+          restDefaultSec={restDefaultSec}
+          weightStep={weightStep}
+          daysPerWeek={daysPerWeek}
+          hrLowThreshold={hrLowThreshold}
+          hr={hr}
+          onWorkoutStart={() => {
+            hrAgg.current = { sum: 0, count: 0, max: 0 };
+            setHrAvg(null);
+          }}
+          getHrStats={getHrStats}
+          onFinished={() => {
+            go("history");
+            // Finishing a workout moves the next "due" date — reschedule.
+            maybeRemind(daysPerWeek);
+          }}
+          editWorkout={pendingEdit}
+          onEditConsumed={() => setPendingEdit(null)}
+          floatMode={floatMode}
+        />
+      </div>
+
+      <div className="tabpanel" hidden={tab !== "history"} ref={(el) => { panelRefs.current.history = el; }}>
+        <History
+          onEdit={async (w) => {
+            // Only one session lives in the editor at a time. Don't let editing a
+            // past workout clobber a live in-progress one.
+            const active = await getSetting<{ editId?: number } | null>("activeDraft", null);
+            if (active && active.editId == null) {
+              alert("Finish or reset your current workout first, then edit a past one.");
+              return;
+            }
+            setPendingEdit(w);
+            go("today");
+          }}
+        />
+      </div>
+
+      <div className="tabpanel" hidden={tab !== "records"} ref={(el) => { panelRefs.current.records = el; }}>
+        <Records bodyweightKg={bodyweightKg} age={age} bwHistory={bwHistory} />
+      </div>
+
+      <div className="tabpanel" hidden={tab !== "settings"} ref={(el) => { panelRefs.current.settings = el; }}>
+        <Settings
+          restDefaultSec={restDefaultSec}
+          setRestDefaultSec={persistRest}
+          weightStep={weightStep}
+          setWeightStep={persistStep}
+          daysPerWeek={daysPerWeek}
+          setDaysPerWeek={persistDpw}
+          bodyweightKg={bodyweightKg}
+          setBodyweightKg={persistBw}
+          age={age}
+          setAge={persistAge}
+          bwHistory={bwHistory}
+          setBwHistory={persistBwHistory}
+          hrLowThreshold={hrLowThreshold}
+          setHrLowThreshold={persistHrLow}
+          hr={hr}
+          onImported={reloadBodyweight}
+          onExport={onExport}
+          onReset={onReset}
+          floatMode={floatMode}
+          setFloatMode={persistFloatMode}
+          keepScreenOn={keepScreenOn}
+          setKeepScreenOn={persistKeepScreenOn}
+        />
+      </div>
 
       <nav className="tabbar">
-        <button className={tab === "today" ? "active" : ""} onClick={() => setTab("today")}>
+        <button className={tab === "today" ? "active" : ""} onClick={() => go("today")}>
           <span className="ico">🏋️</span>Today
         </button>
-        <button className={tab === "history" ? "active" : ""} onClick={() => setTab("history")}>
+        <button className={tab === "history" ? "active" : ""} onClick={() => go("history")}>
           <span className="ico">📅</span>History
         </button>
-        <button className={tab === "records" ? "active" : ""} onClick={() => setTab("records")}>
+        <button className={tab === "records" ? "active" : ""} onClick={() => go("records")}>
           <span className="ico">🏆</span>Records
         </button>
-        <button className={tab === "settings" ? "active" : ""} onClick={() => setTab("settings")}>
+        <button className={tab === "settings" ? "active" : ""} onClick={() => go("settings")}>
           <span className="ico">⚙️</span>Settings
         </button>
       </nav>

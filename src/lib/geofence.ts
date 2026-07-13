@@ -66,7 +66,7 @@ export async function startGeofence(onLeave: () => void): Promise<boolean> {
 
     const id = await BackgroundGeolocation.addWatcher(
       {
-        backgroundTitle: "Gym Tracker",
+        backgroundTitle: "NoBS – Workout Log",
         backgroundMessage: "Auto-saves your workout when you leave the area.",
         requestPermissions: true,
         stale: false,

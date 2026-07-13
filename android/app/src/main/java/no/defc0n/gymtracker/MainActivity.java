@@ -19,18 +19,32 @@ public class MainActivity extends BridgeActivity {
         super.onCreate(savedInstanceState);
     }
 
-    // Volume-up → start break (Settings toggle; armed only during an active
-    // workout). Consumed so the media volume doesn't change while armed.
+    // Volume up OR down → start/skip break (Settings toggle; armed only during an
+    // active workout). Consumed so the media volume doesn't change while armed.
+    // NOTE: onKeyDown only fires while the app has window focus (foreground) — Android
+    // does not deliver volume keys to a backgrounded or PiP app; that's a platform limit.
     @Override
     public boolean onKeyDown(int keyCode, KeyEvent event) {
-        if (keyCode == KeyEvent.KEYCODE_VOLUME_UP && HwButtonsPlugin.captureVolumeUp) {
+        if ((keyCode == KeyEvent.KEYCODE_VOLUME_UP || keyCode == KeyEvent.KEYCODE_VOLUME_DOWN)
+                && HwButtonsPlugin.captureVolume) {
             PluginHandle handle = getBridge() != null ? getBridge().getPlugin("HwButtons") : null;
             if (handle != null && handle.getInstance() instanceof HwButtonsPlugin) {
-                ((HwButtonsPlugin) handle.getInstance()).notifyVolumeUp();
+                ((HwButtonsPlugin) handle.getInstance()).notifyVolumeKey();
                 return true;
             }
         }
         return super.onKeyDown(keyCode, event);
+    }
+
+    // Also swallow the matching key-up while armed, or the system still shows the
+    // volume slider (volume is often applied on ACTION_UP).
+    @Override
+    public boolean onKeyUp(int keyCode, KeyEvent event) {
+        if ((keyCode == KeyEvent.KEYCODE_VOLUME_UP || keyCode == KeyEvent.KEYCODE_VOLUME_DOWN)
+                && HwButtonsPlugin.captureVolume) {
+            return true;
+        }
+        return super.onKeyUp(keyCode, event);
     }
 
     // Leaving the app during a workout with the timer armed → float it as PiP.
