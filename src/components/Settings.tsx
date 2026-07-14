@@ -393,12 +393,13 @@ export function Settings({
               </button>
             ))}
           </div>
+          <p className="muted tiny">Default for all exercises — override per exercise when creating/editing a workout.</p>
         </div>
 
         <div className="setting">
           <label>Weekly goal (workouts / week)</label>
           <div className="seg">
-            {[3, 4, 5, 6].map((s) => (
+            {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((s) => (
               <button key={s} className={daysPerWeek === s ? "active" : ""} onClick={() => setDaysPerWeek(s)}>
                 {s}×
               </button>

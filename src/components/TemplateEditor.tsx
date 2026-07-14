@@ -6,16 +6,23 @@ import { db } from "../db";
 import type { DayTemplate, Scheme } from "../types";
 import { uid } from "../lib/uid";
 
-type ExRow = { id: string; name: string; sets: string; reps: string };
+type ExRow = { id: string; name: string; sets: string; reps: string; step: string };
 
 function toRows(t: DayTemplate): ExRow[] {
-  if (!t.exercises.length) return [{ id: uid(), name: "", sets: "3", reps: "8" }];
+  if (!t.exercises.length) return [{ id: uid(), name: "", sets: "3", reps: "8", step: "" }];
   return t.exercises.map((e) => ({
     id: uid(),
     name: e.name,
     sets: e.scheme.sets == null ? "" : String(e.scheme.sets),
     reps: e.scheme.reps == null ? "" : String(e.scheme.reps),
+    step: e.step == null ? "" : String(e.step).replace(".", ","),
   }));
+}
+
+// "2,5" / "2.5" → 2.5; blank/invalid → undefined (use the Settings default).
+function parseStep(s: string): number | undefined {
+  const n = parseFloat(s.replace(",", ".").trim());
+  return Number.isFinite(n) && n > 0 ? n : undefined;
 }
 
 function parseScheme(sets: string, reps: string): Scheme {
@@ -31,7 +38,7 @@ export function TemplateEditor({ template, onClose }: { template: DayTemplate; o
 
   const setRow = (id: string, patch: Partial<ExRow>) =>
     setRows((rs) => rs.map((r) => (r.id === id ? { ...r, ...patch } : r)));
-  const addRow = () => setRows((rs) => [...rs, { id: uid(), name: "", sets: "3", reps: "8" }]);
+  const addRow = () => setRows((rs) => [...rs, { id: uid(), name: "", sets: "3", reps: "8", step: "" }]);
   const removeRow = (id: string) => setRows((rs) => rs.filter((r) => r.id !== id));
   const move = (id: string, dir: -1 | 1) =>
     setRows((rs) => {
@@ -46,7 +53,7 @@ export function TemplateEditor({ template, onClose }: { template: DayTemplate; o
   const save = async () => {
     const exercises = rows
       .filter((r) => r.name.trim())
-      .map((r) => ({ name: r.name.trim(), scheme: parseScheme(r.sets, r.reps) }));
+      .map((r) => ({ name: r.name.trim(), scheme: parseScheme(r.sets, r.reps), step: parseStep(r.step) }));
     const cleanName = name.trim() || "Workout";
     if (isNew) {
       const last = await db.templates.orderBy("order").last();
@@ -83,7 +90,7 @@ export function TemplateEditor({ template, onClose }: { template: DayTemplate; o
         <div className="edit-body">
           <div className="tmpl-cols tiny muted">
             <span>Exercise</span>
-            <span>Sets × Reps</span>
+            <span>Sets × Reps · ±kg</span>
           </div>
           {rows.map((r, i) => (
             <div key={r.id} className="tmpl-row">
@@ -110,6 +117,15 @@ export function TemplateEditor({ template, onClose }: { template: DayTemplate; o
                 placeholder="reps"
                 onChange={(e) => setRow(r.id, { reps: e.target.value })}
               />
+              <input
+                className="tmpl-num tmpl-step"
+                type="text"
+                inputMode="decimal"
+                value={r.step}
+                placeholder="±kg"
+                title="Weight step for this exercise (blank = Settings default)"
+                onChange={(e) => setRow(r.id, { step: e.target.value })}
+              />
               <button className="hbtn" aria-label="move up" disabled={i === 0} onClick={() => move(r.id, -1)}>
                 ↑
               </button>
@@ -125,7 +141,8 @@ export function TemplateEditor({ template, onClose }: { template: DayTemplate; o
             ＋ Add exercise
           </button>
           <p className="muted tiny" style={{ marginTop: 10 }}>
-            Reps can be a number or “Max”. New sets start from last time's weight.
+            Reps can be a number or “Max”. <b>±kg</b> sets this exercise's +/- button step — leave blank to use the
+            default from Settings. New sets start from last time's weight.
           </p>
         </div>
 

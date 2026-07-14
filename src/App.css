@@ -134,10 +134,13 @@
 }
 .tmpl-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 40px 10px 40px 30px 30px 30px;
+  grid-template-columns: minmax(0, 1fr) 34px 8px 34px 44px 26px 26px 26px;
   align-items: center;
   gap: 4px;
   margin-bottom: 6px;
+}
+.tmpl-step {
+  border-color: color-mix(in srgb, var(--accent) 35%, var(--line));
 }
 .tmpl-name {
   min-width: 0;

@@ -70,7 +70,7 @@ export default function App() {
   }, [tab]);
 
   // Settings (loaded from IndexedDB, persisted on change).
-  const [restDefaultSec, setRest] = useState(120);
+  const [restDefaultSec, setRest] = useState(90);
   const [weightStep, setStep] = useState(2.5);
   const [daysPerWeek, setDpw] = useState(4);
   const [bodyweightKg, setBw] = useState(0); // 0 = not set
@@ -137,7 +137,7 @@ export default function App() {
       const theme = await getSetting<string>("theme", "dark");
       if (theme === "light") document.documentElement.dataset.theme = "light";
       await ensureBootstrapped();
-      setRest(await getSetting("restDefaultSec", 120));
+      setRest(await getSetting("restDefaultSec", 90));
       setStep(await getSetting("weightStep", 2.5));
       const dpw = await getSetting("daysPerWeek", 4);
       setDpw(dpw);

@@ -21,6 +21,7 @@ export type ExercisePerf = {
   id?: string; // stable key for React lists (see lib/uid)
   name: string;
   scheme: Scheme;
+  step?: number; // per-exercise ± weight increment (overrides the Settings default)
   sets: SetEntry[];
   note?: string;
   skipped?: boolean; // cell was "x"
@@ -51,5 +52,5 @@ export type DayTemplate = {
   id?: number;
   name: string;
   order: number;
-  exercises: { name: string; scheme: Scheme }[];
+  exercises: { name: string; scheme: Scheme; step?: number }[];
 };

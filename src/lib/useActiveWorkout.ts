@@ -78,7 +78,7 @@ function buildExercises(tpl: DayTemplate, history: StoredWorkout[]): ExercisePer
         ? [...weighted].sort((a, b) => b - a).slice(0, nSets)
         : Array.from({ length: nSets }, (_, i) => prevSets?.[i]?.weight ?? lastKnown);
     const sets: SetEntry[] = seed.map((w) => ({ id: uid(), weight: w ?? lastKnown, reps: defReps }));
-    return { id: uid(), name: e.name, scheme: e.scheme, sets };
+    return { id: uid(), name: e.name, scheme: e.scheme, step: e.step, sets };
   });
 }
 

@@ -81,6 +81,20 @@ export function playBuffer(buffer: AudioBuffer): void {
   }
 }
 
+// A short, subtle rising blip confirming a break just STARTED — feedback for
+// hardware-button (volume/headset) starts where there's nothing on screen to see.
+export function playBreakStart(): void {
+  try {
+    const c = ctx();
+    if (c.state === "suspended") void c.resume();
+    const t = c.currentTime;
+    tone(c, "sine", 660, t, 0.08, 0.25);
+    tone(c, "sine", 990, t + 0.07, 0.1, 0.25);
+  } catch {
+    /* audio blocked */
+  }
+}
+
 export function playBreakSound(id: BreakSoundId): void {
   try {
     const c = ctx();

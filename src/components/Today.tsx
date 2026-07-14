@@ -10,6 +10,7 @@ import { exitPip, isInPip, onPipChange, setPipAutoEnter } from "../lib/pip";
 import { onMediaButton, onVolumeKey, setMediaButtonCapture, setVolumeCapture } from "../lib/hwButtons";
 import { startTracking, stopTracking } from "../lib/tracker";
 import { stepForExercise } from "../lib/steps";
+import { playBreakStart } from "../lib/sounds";
 import { uid } from "../lib/uid";
 import { Capacitor } from "@capacitor/core";
 import { syncWorkout } from "../lib/sheetSync";
@@ -392,6 +393,7 @@ export function Today({
   const startRest = () => {
     const at = Date.now() + restDefaultSec * 1000;
     scheduleBreakNotification(at); // native: fires even if app is backgrounded
+    playBreakStart(); // audible confirmation (matters for volume/headset-button starts)
     update((d) => ({ ...d, restEndsAt: at, lastActivityAt: Date.now() }));
   };
   const setRest = (endsAt: number | null) => {
@@ -505,7 +507,7 @@ export function Today({
           <ExerciseCard
             key={ex.id ?? i}
             exercise={ex}
-            step={stepForExercise(ex.name, weightStep)}
+            step={stepForExercise(ex.name, weightStep, ex.step)}
             prev={prev?.exercises.find((p) => p.name === ex.name)}
             onChange={(e) => setExercise(i, e)}
             onSetDone={autoBreakOnDone ? startRest : undefined}
