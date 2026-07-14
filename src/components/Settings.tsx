@@ -1,14 +1,32 @@
 // Settings: rest-timer default, weight increment, HR connection, Google Sheets
 // write-back sync, and data backup/reset.
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Capacitor } from "@capacitor/core";
-import { db, getSetting, setSetting } from "../db";
+import {
+  addCustomSound,
+  type CustomSound,
+  db,
+  deleteCustomSound,
+  getCustomSound,
+  getSetting,
+  listCustomSounds,
+  setSetting,
+} from "../db";
 import { saveFile } from "../lib/download";
 import { hrAvailable } from "../lib/hr";
 import { cancelTrainingReminders, notificationsSupported, requestNotifications, scheduleTrainingReminders } from "../lib/notify";
 import { importFromSheet, pendingCount, syncEnabled, syncPending, testSync } from "../lib/sheetSync";
 import type { BwEntry } from "../lib/standards";
-import { BREAK_SOUNDS, type BreakSoundId, playBreakSound } from "../lib/sounds";
+import {
+  BREAK_SOUNDS,
+  type BreakSoundId,
+  CUSTOM_PREFIX,
+  customIdOf,
+  decodeSound,
+  isCustom,
+  playBreakSound,
+  playBuffer,
+} from "../lib/sounds";
 import { checkAndApplyUpdate, currentVersion, updatesSupported } from "../lib/update";
 import { applyBackup, exportXlsx, importXlsx, type ImportedBackup } from "../lib/workbook";
 
@@ -77,8 +95,48 @@ export function Settings({
   const [autoBreak, setAutoBreak] = useState(false);
   const [volUpBreak, setVolUpBreak] = useState(false);
   const [mediaBtnBreak, setMediaBtnBreak] = useState(false);
-  const [breakSound, setBreakSound] = useState<BreakSoundId>("beep");
+  // Break sound is a built-in id ("beep"…) OR "custom:<dbId>" (a user's file).
+  const [breakSound, setBreakSound] = useState<string>("beep");
+  const [customSounds, setCustomSounds] = useState<CustomSound[]>([]);
+  const soundFileRef = useRef<HTMLInputElement>(null);
   const native = Capacitor.isNativePlatform();
+
+  const refreshCustomSounds = () => listCustomSounds().then(setCustomSounds);
+  const previewSound = async (v: string) => {
+    if (isCustom(v)) {
+      const rec = await getCustomSound(customIdOf(v));
+      if (rec) playBuffer(await decodeSound(rec.blob));
+    } else {
+      playBreakSound(v as BreakSoundId);
+    }
+  };
+  const chooseSound = (v: string) => {
+    setBreakSound(v);
+    setSetting("breakSound", v);
+    previewSound(v); // immediate feedback
+  };
+  const onPickSoundFile = async (file: File) => {
+    if (file.size > 5_000_000) {
+      alert("Please choose an audio file under 5 MB.");
+      return;
+    }
+    try {
+      await decodeSound(file); // validate it's playable before storing
+    } catch {
+      alert("Couldn't read that audio file. Try an MP3, WAV, or OGG.");
+      return;
+    }
+    const name = file.name.replace(/\.[^.]+$/, "").slice(0, 40) || "My sound";
+    const id = await addCustomSound(name, file);
+    await refreshCustomSounds();
+    chooseSound(`${CUSTOM_PREFIX}${id}`);
+  };
+  const deleteCurrentSound = async () => {
+    if (!isCustom(breakSound)) return;
+    await deleteCustomSound(customIdOf(breakSound));
+    await refreshCustomSounds();
+    chooseSound("beep");
+  };
 
   useEffect(() => {
     getSetting<boolean>("remindersEnabled", false).then(setReminders);
@@ -91,7 +149,8 @@ export function Settings({
     getSetting("autoBreakOnDone", false).then(setAutoBreak);
     getSetting("volumeUpBreak", false).then(setVolUpBreak);
     getSetting("mediaBtnBreak", false).then(setMediaBtnBreak);
-    getSetting<BreakSoundId>("breakSound", "beep").then(setBreakSound);
+    getSetting<string>("breakSound", "beep").then(setBreakSound);
+    refreshCustomSounds();
     pendingCount().then(setPending);
     currentVersion().then(setAppVersion);
   }, []);
@@ -277,22 +336,52 @@ export function Settings({
             <select
               value={breakSound}
               onChange={(e) => {
-                const v = e.target.value as BreakSoundId;
-                setBreakSound(v);
-                setSetting("breakSound", v);
-                playBreakSound(v); // preview on change
+                if (e.target.value === "__add__") {
+                  soundFileRef.current?.click(); // open the file picker
+                  return;
+                }
+                chooseSound(e.target.value);
               }}
             >
-              {BREAK_SOUNDS.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.label}
-                </option>
-              ))}
+              <optgroup label="Built-in">
+                {BREAK_SOUNDS.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.label}
+                  </option>
+                ))}
+              </optgroup>
+              {customSounds.length > 0 && (
+                <optgroup label="Your sounds">
+                  {customSounds.map((s) => (
+                    <option key={s.id} value={`${CUSTOM_PREFIX}${s.id}`}>
+                      {s.name}
+                    </option>
+                  ))}
+                </optgroup>
+              )}
+              <option value="__add__">＋ Add audio file…</option>
             </select>
-            <button className="mini" onClick={() => playBreakSound(breakSound)}>
+            <button className="mini" onClick={() => previewSound(breakSound)}>
               ▶ Preview
             </button>
+            {isCustom(breakSound) && (
+              <button className="mini danger" onClick={deleteCurrentSound} aria-label="Delete this sound">
+                🗑
+              </button>
+            )}
           </div>
+          <input
+            ref={soundFileRef}
+            type="file"
+            accept="audio/*"
+            hidden
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) onPickSoundFile(f);
+              e.target.value = ""; // allow re-picking the same file
+            }}
+          />
+          <p className="muted tiny">Use a built-in sound or add your own short clip (MP3/WAV/OGG, under 5 MB).</p>
         </div>
 
         <div className="setting">

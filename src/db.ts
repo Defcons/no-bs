@@ -25,10 +25,18 @@ export interface Setting {
   value: unknown;
 }
 
+// A user-supplied break-over sound (their own audio file, stored on-device).
+export interface CustomSound {
+  id?: number;
+  name: string;
+  blob: Blob;
+}
+
 class GymDB extends Dexie {
   workouts!: Table<StoredWorkout, number>;
   templates!: Table<DayTemplate, number>;
   settings!: Table<Setting, string>;
+  customSounds!: Table<CustomSound, number>;
 
   constructor() {
     super("gym-tracker");
@@ -38,6 +46,8 @@ class GymDB extends Dexie {
       templates: "++id, order, name",
       settings: "key",
     });
+    // v2: user-uploaded break sounds. Additive — Dexie carries the v1 tables over.
+    this.version(2).stores({ customSounds: "++id" });
   }
 }
 
@@ -50,6 +60,20 @@ export async function getSetting<T>(key: string, fallback: T): Promise<T> {
 }
 export async function setSetting(key: string, value: unknown): Promise<void> {
   await db.settings.put({ key, value });
+}
+
+// --- Custom break sounds (user's own audio files) ---------------------------
+export async function addCustomSound(name: string, blob: Blob): Promise<number> {
+  return db.customSounds.add({ name, blob });
+}
+export function listCustomSounds(): Promise<CustomSound[]> {
+  return db.customSounds.toArray();
+}
+export function getCustomSound(id: number): Promise<CustomSound | undefined> {
+  return db.customSounds.get(id);
+}
+export async function deleteCustomSound(id: number): Promise<void> {
+  await db.customSounds.delete(id);
 }
 
 // --- The current split (seeded once, editable later) ------------------------

@@ -53,6 +53,34 @@ function strike(c: AudioContext, base: number, start: number, dur: number, gain 
   });
 }
 
+// --- Custom (user-uploaded) sounds ------------------------------------------
+// The break value is either a built-in BreakSoundId or "custom:<dbId>".
+export const CUSTOM_PREFIX = "custom:";
+export const isCustom = (v: string): boolean => v.startsWith(CUSTOM_PREFIX);
+export const customIdOf = (v: string): number => Number(v.slice(CUSTOM_PREFIX.length));
+
+// Decode an uploaded audio blob into a ready-to-play buffer (mp3/wav/ogg/m4a).
+// Pre-decode when the sound is selected so playback at break-end is instant.
+export async function decodeSound(blob: Blob): Promise<AudioBuffer> {
+  const buf = await blob.arrayBuffer();
+  return ctx().decodeAudioData(buf);
+}
+
+export function playBuffer(buffer: AudioBuffer): void {
+  try {
+    const c = ctx();
+    if (c.state === "suspended") void c.resume();
+    const src = c.createBufferSource();
+    const g = c.createGain();
+    src.buffer = buffer;
+    src.connect(g);
+    g.connect(c.destination);
+    src.start();
+  } catch {
+    /* audio blocked */
+  }
+}
+
 export function playBreakSound(id: BreakSoundId): void {
   try {
     const c = ctx();

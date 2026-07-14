@@ -5,8 +5,8 @@ import { Capacitor } from "@capacitor/core";
 import { useEffect, useRef, useState } from "react";
 import { mmss } from "../lib/format";
 import { showReminder } from "../lib/notify";
-import { getSetting } from "../db";
-import { type BreakSoundId, playBreakSound } from "../lib/sounds";
+import { getCustomSound, getSetting } from "../db";
+import { type BreakSoundId, customIdOf, decodeSound, isCustom, playBreakSound, playBuffer } from "../lib/sounds";
 
 type Props = {
   endsAt: number | null; // epoch ms, or null when idle
@@ -16,10 +16,25 @@ type Props = {
 export function RestTimer({ endsAt, onChange }: Props) {
   const [remaining, setRemaining] = useState(0);
   const firedRef = useRef(false);
-  // Pre-load the chosen alarm sound so it's ready synchronously when rest ends.
+  // Pre-load the chosen alarm sound so it plays instantly when rest ends. The
+  // setting is either a built-in id ("beep"…) or "custom:<id>" (a user's file,
+  // pre-decoded into an AudioBuffer here).
   const soundRef = useRef<BreakSoundId>("beep");
+  const customBufRef = useRef<AudioBuffer | null>(null);
   useEffect(() => {
-    getSetting<BreakSoundId>("breakSound", "beep").then((s) => (soundRef.current = s));
+    getSetting<string>("breakSound", "beep").then(async (s) => {
+      if (isCustom(s)) {
+        try {
+          const rec = await getCustomSound(customIdOf(s));
+          customBufRef.current = rec ? await decodeSound(rec.blob) : null;
+        } catch {
+          customBufRef.current = null; // fall back to the default beep on decode failure
+        }
+      } else {
+        soundRef.current = s as BreakSoundId;
+        customBufRef.current = null;
+      }
+    });
   }, []);
 
   useEffect(() => {
@@ -38,7 +53,8 @@ export function RestTimer({ endsAt, onChange }: Props) {
       setRemaining(rem);
       if (rem <= 0 && !firedRef.current) {
         firedRef.current = true;
-        playBreakSound(soundRef.current);
+        if (customBufRef.current) playBuffer(customBufRef.current);
+        else playBreakSound(soundRef.current);
         navigator.vibrate?.([300, 120, 300, 120, 300]);
         // Native pre-schedules a notification for this moment (fires in background),
         // so only fire the web SW notification here to avoid a duplicate.
