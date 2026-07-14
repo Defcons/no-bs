@@ -18,7 +18,9 @@ export function hhmmss(totalSec: number): string {
 
 // "2024-03-15" / ISO -> "15 Mar 2024"
 export function niceDate(iso: string): string {
+  if (!iso) return "";
   const d = new Date(iso.slice(0, 10) + "T00:00:00");
+  if (Number.isNaN(d.getTime())) return "";
   return d.toLocaleDateString(undefined, { day: "2-digit", month: "short", year: "numeric" });
 }
 

@@ -5,6 +5,7 @@ import type { ExercisePerf, SetEntry } from "../types";
 import { uid } from "../lib/uid";
 import { SetInput } from "./SetInput";
 import { ExerciseNameField } from "./ExerciseNameField";
+import { resolveExercise } from "../lib/exercises";
 
 type Props = {
   exercise: ExercisePerf;
@@ -21,6 +22,7 @@ type Props = {
 
 export function ExerciseCard({ exercise, step, prev, onChange, onSetDone, editableName, nameHistory, onRemove, onMoveUp, onMoveDown }: Props) {
   const [showNote, setShowNote] = useState(!!exercise.note);
+  const unit = resolveExercise(exercise.name, exercise.exerciseId).unit;
 
   const patchSet = (i: number, patch: Partial<SetEntry>) => {
     const sets = exercise.sets.map((s, idx) => (idx === i ? { ...s, ...patch } : s));
@@ -107,6 +109,7 @@ export function ExerciseCard({ exercise, step, prev, onChange, onSetDone, editab
             index={i}
             set={s}
             step={step}
+            unit={unit}
             active={i === exercise.sets.findIndex((x) => !x.done)}
             prevWeight={prev?.sets[i]?.weight ?? prev?.sets.at(-1)?.weight ?? null}
             onChange={(p) => patchSet(i, p)}

@@ -1033,6 +1033,16 @@
   flex: none;
   padding: 0 6px;
 }
+.time-field {
+  flex: 1;
+  min-width: 0;
+}
+.time-field input {
+  font-family: var(--display);
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
 .reps-field input {
   font-family: var(--display);
   font-size: 17px;

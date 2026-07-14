@@ -3,9 +3,9 @@
 import { useMemo, useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db, type StoredWorkout } from "../db";
-import { niceDate } from "../lib/format";
+import { mmss, niceDate } from "../lib/format";
 import { type BwEntry, KEY_LIFTS, REF_BW, type Sex, adjustThresholds, bodyweightForYear, levelClass, rateLift } from "../lib/standards";
-import { type LiftRecord, liftRecords, progression, sessionsPerWeek, summarize, weekNumbersForLast } from "../lib/stats";
+import { type LiftRecord, hasRecord, liftRecords, progression, sessionsPerWeek, summarize, weekNumbersForLast } from "../lib/stats";
 import { MUSCLE_ORDER } from "../lib/exercises";
 import { ProgressChart } from "./ProgressChart";
 
@@ -27,10 +27,10 @@ export function Records({
   const derived = useMemo(() => {
     if (!workouts || workouts.length === 0) return null;
     const summary = summarize(workouts)!;
-    const records = liftRecords(workouts).filter((r) => r.maxWeight.weight > 0);
+    const records = liftRecords(workouts).filter(hasRecord);
     const byCat: Record<string, LiftRecord[]> = {};
     for (const r of records) (byCat[r.muscle] ??= []).push(r);
-    for (const c of Object.keys(byCat)) byCat[c].sort((a, b) => b.maxWeight.weight - a.maxWeight.weight);
+    for (const c of Object.keys(byCat)) byCat[c].sort((a, b) => b.count - a.count);
     return { summary, records, byCat, perWeek: sessionsPerWeek(workouts, 12) };
   }, [workouts]);
   if (!workouts) return <div className="pad">Loading…</div>;
@@ -153,7 +153,8 @@ export function Records({
 
 function RecordRow({ r, workouts }: { r: LiftRecord; workouts: StoredWorkout[] }) {
   const [open, setOpen] = useState(false);
-  const pts = useMemo(() => (open ? progression(workouts, r.key) : []), [open, workouts, r.key]);
+  const isWeight = r.unit === "weight";
+  const pts = useMemo(() => (open && isWeight ? progression(workouts, r.key) : []), [open, isWeight, workouts, r.key]);
   return (
     <div className={`record ${open ? "open" : ""}`}>
       <button className="record-head" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
@@ -162,20 +163,51 @@ function RecordRow({ r, workouts }: { r: LiftRecord; workouts: StoredWorkout[] }
           <span className="record-chev">{open ? "▴" : "▾"}</span>
         </div>
         <div className="record-nums">
-          <div className="rec-metric">
-            <div className="rec-lbl">Max</div>
-            <span className="big">{r.maxWeight.weight}<span className="rec-u"> kg</span></span>
-            <span className="muted"> ×{r.maxWeight.reps}</span>
-            <div className="tiny muted">{niceDate(r.maxWeight.date)}</div>
-          </div>
-          <div className="rec-metric">
-            <div className="rec-lbl">Est 1RM</div>
-            <span className="big">{r.bestE1rm.est.toFixed(0)}<span className="rec-u"> kg</span></span>
-            <div className="tiny muted">{niceDate(r.bestE1rm.date)}</div>
-          </div>
+          {r.unit === "time" ? (
+            <div className="rec-metric">
+              <div className="rec-lbl">Best hold</div>
+              <span className="big">{mmss(r.maxDuration.seconds)}</span>
+              <div className="tiny muted">{niceDate(r.maxDuration.date)}</div>
+            </div>
+          ) : r.unit === "bodyweight" ? (
+            <>
+              {r.maxReps.reps > 0 && (
+                <div className="rec-metric">
+                  <div className="rec-lbl">Max reps</div>
+                  <span className="big">{r.maxReps.reps}</span>
+                  {r.maxReps.weight > 0 && <span className="muted"> +{r.maxReps.weight}kg</span>}
+                  <div className="tiny muted">{niceDate(r.maxReps.date)}</div>
+                </div>
+              )}
+              {r.maxWeight.weight > 0 && (
+                <div className="rec-metric">
+                  <div className="rec-lbl">Max +kg</div>
+                  <span className="big">{r.maxWeight.weight}<span className="rec-u"> kg</span></span>
+                  <span className="muted"> ×{r.maxWeight.reps}</span>
+                  <div className="tiny muted">{niceDate(r.maxWeight.date)}</div>
+                </div>
+              )}
+            </>
+          ) : (
+            <>
+              <div className="rec-metric">
+                <div className="rec-lbl">Max</div>
+                <span className="big">{r.maxWeight.weight}<span className="rec-u"> kg</span></span>
+                <span className="muted"> ×{r.maxWeight.reps}</span>
+                <div className="tiny muted">{niceDate(r.maxWeight.date)}</div>
+              </div>
+              {r.bestE1rm.est > 0 && (
+                <div className="rec-metric">
+                  <div className="rec-lbl">Est 1RM</div>
+                  <span className="big">{r.bestE1rm.est.toFixed(0)}<span className="rec-u"> kg</span></span>
+                  <div className="tiny muted">{niceDate(r.bestE1rm.date)}</div>
+                </div>
+              )}
+            </>
+          )}
         </div>
       </button>
-      {open && <ProgressChart points={pts} />}
+      {open && isWeight && <ProgressChart points={pts} />}
     </div>
   );
 }

@@ -1,6 +1,6 @@
 // History analytics: PRs, records and summary stats over stored workouts.
 import type { StoredWorkout } from "../db";
-import { type MuscleGroup, resolveExercise } from "./exercises";
+import { type ExerciseUnit, type MuscleGroup, resolveExercise } from "./exercises";
 
 export const epley = (weight: number, reps: number): number => weight * (1 + reps / 30);
 
@@ -35,43 +35,66 @@ export type LiftRecord = {
   name: string;
   key: string; // resolveExercise(...).id — used to pull this lift's progression
   muscle: MuscleGroup; // resolved muscle group (Records "by muscle")
+  unit: ExerciseUnit; // decides which "best" metric matters
   standardKey?: string; // links to a strength standard, if any
   count: number; // sets logged
-  maxWeight: { weight: number; reps: number; date: string };
-  bestE1rm: { est: number; weight: number; reps: number; date: string };
+  maxWeight: { weight: number; reps: number; date: string }; // weight (added weight for bodyweight)
+  bestE1rm: { est: number; weight: number; reps: number; date: string }; // weight only
+  maxReps: { reps: number; weight: number; date: string }; // bodyweight
+  maxDuration: { seconds: number; date: string }; // time
 };
+
+// A record has meaningful data for its unit (used to filter out empty rows).
+export function hasRecord(r: LiftRecord): boolean {
+  return r.maxWeight.weight > 0 || r.maxReps.reps > 0 || r.maxDuration.seconds > 0;
+}
 
 export function liftRecords(workouts: StoredWorkout[]): LiftRecord[] {
   const map = new Map<string, LiftRecord>();
   for (const w of workouts) {
     for (const ex of w.exercises) {
       const resolved = resolveExercise(ex.name, ex.exerciseId); // catalog match → shared id; else regex fallback
-      const name = resolved.name;
       const key = resolved.id;
       const schemeReps = typeof ex.scheme.reps === "number" ? ex.scheme.reps : 0;
+      let rec = map.get(key);
+      if (!rec) {
+        rec = {
+          name: resolved.name,
+          key,
+          muscle: resolved.muscle,
+          unit: resolved.unit,
+          standardKey: resolved.standardKey,
+          count: 0,
+          maxWeight: { weight: 0, reps: 0, date: "" },
+          bestE1rm: { est: 0, weight: 0, reps: 0, date: "" },
+          maxReps: { reps: 0, weight: 0, date: "" },
+          maxDuration: { seconds: 0, date: "" },
+        };
+        map.set(key, rec);
+      }
       for (const set of ex.sets) {
-        if (!plausible(set.weight)) continue;
-        const reps = set.reps ?? schemeReps;
-        let rec = map.get(key);
-        if (!rec) {
-          rec = {
-            name,
-            key,
-            muscle: resolved.muscle,
-            standardKey: resolved.standardKey,
-            count: 0,
-            maxWeight: { weight: 0, reps: 0, date: "" },
-            bestE1rm: { est: 0, weight: 0, reps: 0, date: "" },
-          };
-          map.set(key, rec);
+        if (resolved.unit === "time") {
+          const s = set.seconds ?? 0;
+          if (s > 0) {
+            rec.count++;
+            if (s > rec.maxDuration.seconds) rec.maxDuration = { seconds: s, date: w.date };
+          }
+          continue;
         }
+        const reps = set.reps ?? schemeReps;
+        if (resolved.unit === "bodyweight") {
+          if (reps > 0 || plausible(set.weight)) rec.count++;
+          if (reps > 0 && reps > rec.maxReps.reps) rec.maxReps = { reps, weight: set.weight ?? 0, date: w.date };
+          if (plausible(set.weight) && set.weight > rec.maxWeight.weight) rec.maxWeight = { weight: set.weight, reps, date: w.date };
+          continue;
+        }
+        // weight (default)
+        if (!plausible(set.weight)) continue;
         rec.count++;
-        if (set.weight > rec.maxWeight.weight)
-          rec.maxWeight = { weight: set.weight, reps, date: w.date };
+        if (set.weight > rec.maxWeight.weight) rec.maxWeight = { weight: set.weight, reps, date: w.date };
         if (reps > 0) {
           const e = epley(set.weight, reps);
-          if (e > rec.bestE1rm.est)
-            rec.bestE1rm = { est: e, weight: set.weight, reps, date: w.date };
+          if (e > rec.bestE1rm.est) rec.bestE1rm = { est: e, weight: set.weight, reps, date: w.date };
         }
       }
     }

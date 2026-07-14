@@ -91,7 +91,7 @@ export const LIBRARY: Exercise[] = [
   { id: "pec-deck", name: "Pec Deck", aliases: ["pec deck fly", "machine fly", "butterfly", "chest fly machine"], muscle: "Chest", equipment: "machine", unit: W, builtin: true },
   { id: "cable-crossover", name: "Cable Crossover", aliases: ["cable fly", "crossover", "cable chest fly"], muscle: "Chest", equipment: "cable", unit: W, builtin: true },
   { id: "dumbbell-fly", name: "Dumbbell Fly", aliases: ["db fly", "chest fly", "dumbbell flyes", "flyes", "fly"], muscle: "Chest", equipment: "dumbbell", unit: W, builtin: true },
-  { id: "push-up", name: "Push-up", aliases: ["pushup", "push ups", "press up"], muscle: "Chest", secondary: ["Arms", "Core"], equipment: "bodyweight", unit: "bodyweight", compound: true, builtin: true },
+  { id: "push-up", name: "Push-up", aliases: ["pushup", "pushups", "push ups", "press up"], muscle: "Chest", secondary: ["Arms", "Core"], equipment: "bodyweight", unit: "bodyweight", compound: true, builtin: true },
   { id: "chest-dip", name: "Chest Dip", aliases: ["dips", "dip", "chest dips"], muscle: "Chest", secondary: ["Arms"], equipment: "bodyweight", unit: "bodyweight", compound: true, builtin: true },
 
   // ── Back ──
@@ -103,8 +103,8 @@ export const LIBRARY: Exercise[] = [
   { id: "t-bar-row", name: "T-Bar Row", aliases: ["t bar row", "tbar row"], muscle: "Back", secondary: ["Arms"], equipment: "barbell", unit: W, compound: true, builtin: true },
   { id: "chest-supported-row", name: "Chest-Supported Row", aliases: ["chest supported row", "machine row", "seal row"], muscle: "Back", secondary: ["Arms"], equipment: "machine", unit: W, builtin: true },
   { id: "lat-pulldown", name: "Lat Pulldown", aliases: ["pulldown", "nedtrekk", "cable pulldown", "lat pull down", "wide grip pulldown"], muscle: "Back", secondary: ["Arms"], equipment: "cable", unit: W, compound: true, standardKey: "pulldown", builtin: true },
-  { id: "pull-up", name: "Pull-up", aliases: ["pullup", "pull ups", "pull-ups"], muscle: "Back", secondary: ["Arms"], equipment: "bodyweight", unit: "bodyweight", compound: true, builtin: true },
-  { id: "chin-up", name: "Chin-up", aliases: ["chinup", "chin ups", "chin-ups"], muscle: "Back", secondary: ["Arms"], equipment: "bodyweight", unit: "bodyweight", compound: true, builtin: true },
+  { id: "pull-up", name: "Pull-up", aliases: ["pullup", "pullups", "pull ups", "pull-ups"], muscle: "Back", secondary: ["Arms"], equipment: "bodyweight", unit: "bodyweight", compound: true, builtin: true },
+  { id: "chin-up", name: "Chin-up", aliases: ["chinup", "chinups", "chin ups", "chin-ups"], muscle: "Back", secondary: ["Arms"], equipment: "bodyweight", unit: "bodyweight", compound: true, builtin: true },
   { id: "face-pull", name: "Face Pull", aliases: ["face pulls", "cable face pull"], muscle: "Shoulder", secondary: ["Back"], equipment: "cable", unit: W, builtin: true },
   { id: "back-extension", name: "Back Extension", aliases: ["hyperextension", "hyper extension", "korsrygg", "45 degree back extension"], muscle: "Back", secondary: ["Legs"], equipment: "bodyweight", unit: "bodyweight", builtin: true },
   { id: "good-morning", name: "Good Morning", aliases: ["good mornings"], muscle: "Legs", secondary: ["Back"], equipment: "barbell", unit: W, compound: true, builtin: true },
