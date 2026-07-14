@@ -1,18 +1,38 @@
+/* ── Design tokens (Phase 1) ──────────────────────────────────────────────
+   Identity: "Molten" — steel near-black ground, molten-orange primary, gold
+   VOLT reserved for celebratory moments (PR / GO), green/amber/red kept purely
+   semantic. Components read these vars, so both themes stay in sync. */
 :root {
-  --bg: #0e1116;
-  --surface: #171c24;
-  --surface-2: #1f2732;
-  --line: #2a3340;
-  --text: #e7ecf3;
-  --muted: #8b97a7;
-  --accent: #4f8cff;
-  --accent-2: #34d399;
-  --danger: #ef4444;
-  --warn: #f59e0b;
+  /* dark is the default gym context */
+  --bg: #0b0d12;
+  --surface: #14171f;
+  --surface-2: #1b1f29;
+  --line: #262b36;
+  --text: #e9ecf4;
+  --muted: #8b93a6;
+  --faint: #6b7385;
+  --accent: #ff5a2c; /* molten orange — primary/interactive */
+  --accent-2: #2fbf71; /* success green (semantic) */
+  --volt: #ffd23f; /* gold — celebratory only (PR/GO) */
+  --danger: #f0555c;
+  --warn: #f5a623;
+
+  /* spacing scale (4px base) */
+  --s1: 4px;
+  --s2: 8px;
+  --s3: 12px;
+  --s4: 16px;
+  --s5: 24px;
+  --s6: 32px;
+  /* radii + control height */
   --radius: 14px;
+  --radius-sm: 10px;
+  --ctl-h: 44px;
 
   color-scheme: dark;
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  /* heavy grotesk for headings + hero numbers (bundled via @fontsource) */
+  --display: "Archivo Variable", "Archivo", "Helvetica Neue", system-ui, sans-serif;
   color: var(--text);
   background: var(--bg);
 }
@@ -20,16 +40,18 @@
 /* Light theme — toggled via Settings → Appearance (App boot applies the stored
    choice to <html data-theme>). Same var names, so components need no changes. */
 :root[data-theme="light"] {
-  --bg: #f2f4f8;
+  --bg: #f3f4f7;
   --surface: #ffffff;
-  --surface-2: #e9edf3;
-  --line: #d4dbe4;
-  --text: #1b2431;
-  --muted: #5d6b7d;
-  --accent: #3574e8;
-  --accent-2: #0f9d6e;
-  --danger: #dc2626;
-  --warn: #d97706;
+  --surface-2: #eef0f5;
+  --line: #e1e4ec;
+  --text: #171a22;
+  --muted: #5c6475;
+  --faint: #8b93a6;
+  --accent: #ef4f16; /* slightly deeper molten for contrast on light */
+  --accent-2: #17976a;
+  --volt: #e0a400;
+  --danger: #d63a44;
+  --warn: #b6791a;
 
   color-scheme: light;
 }
@@ -89,9 +111,22 @@ textarea:focus {
 
 h2 {
   margin: 4px 0 12px;
+  font-family: var(--display);
+  font-weight: 800;
+  letter-spacing: -0.02em;
 }
 h3 {
   margin: 0;
+  font-family: var(--display);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+/* Numbers are the content of a gym log — celebrate them with the display face. */
+.num {
+  font-family: var(--display);
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
 }
 
 .muted {

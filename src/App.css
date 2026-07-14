@@ -401,9 +401,11 @@
   text-overflow: ellipsis;
 }
 .wb-timer {
+  font-family: var(--display);
+  font-weight: 800;
   font-variant-numeric: tabular-nums;
-  font-size: 22px;
-  letter-spacing: 0.5px;
+  font-size: 30px;
+  letter-spacing: -0.01em;
 }
 .wb-right {
   display: flex;
@@ -877,8 +879,10 @@
   pointer-events: none;
 }
 .weight-field input {
-  font-size: 17px;
-  font-weight: 600;
+  font-family: var(--display);
+  font-size: 19px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
 }
 .reps-field {
   width: 36px;
@@ -993,11 +997,17 @@ input[type="range"] {
 }
 .stat-label {
   color: var(--muted);
-  font-size: 12px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 .stat-value {
-  font-size: 20px;
-  font-weight: 700;
+  font-family: var(--display);
+  font-size: 26px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
   margin-top: 2px;
 }
 .stat-sub {
@@ -1058,8 +1068,11 @@ input[type="range"] {
   gap: 12px;
 }
 .record-nums .big {
-  font-size: 18px;
-  font-weight: 700;
+  font-family: var(--display);
+  font-size: 19px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
   font-variant-numeric: tabular-nums;
 }
 .record-head {

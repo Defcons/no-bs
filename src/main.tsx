@@ -1,6 +1,7 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { Capacitor } from "@capacitor/core";
+import "@fontsource-variable/archivo"; // self-hosted display face (bundled, no CDN)
 import "./index.css";
 import App from "./App.tsx";
 
