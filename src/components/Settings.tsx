@@ -433,7 +433,7 @@ export function Settings({
       </details>
 
       <details className="settings-group">
-        <summary>Workout defaults</summary>
+        <summary>Workout</summary>
 
         <div className="setting">
           <label>Weight step (± buttons)</label>
@@ -458,10 +458,6 @@ export function Settings({
           </div>
           <p className="muted tiny">Colors the “days since last workout” (green/orange/red) and drives reminders.</p>
         </div>
-      </details>
-
-      <details className="settings-group">
-        <summary>During a workout</summary>
 
         {native && (
           <ToggleRow label="Volume buttons control the break" checked={volUpBreak} onChange={toggleVolUpBreak}>
@@ -687,10 +683,6 @@ export function Settings({
             </button>
           </div>
         </div>
-      </details>
-
-      <details className="settings-group">
-        <summary>Google Sheets sync (optional)</summary>
 
         <ToggleRow label="Sync finished workouts to a Google Sheet" checked={syncOn} onChange={toggleSync}>
           <p className="muted tiny">
