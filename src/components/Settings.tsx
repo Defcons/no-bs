@@ -446,6 +446,12 @@ export function Settings({
               to skip/dismiss a running one. The volume itself won't change while a workout is active. Works only while
               the app is on screen (Android doesn't send volume keys to a backgrounded app). Needs a current APK.
             </p>
+            <p className="muted tiny">
+              <b>Headphones + music?</b> This is the trick: only the <b>volume</b> buttons are safe to grab while music
+              plays (play/pause is owned by your music app). Many earbuds — Galaxy Buds, Pixel Buds, Sony, some Beats —
+              let you remap a tap/long-press to <b>Volume up/down</b> in their companion app. Do that and this catches
+              it, with no music interference.
+            </p>
           </div>
         )}
 
