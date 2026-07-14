@@ -333,10 +333,10 @@ export function Settings({
       <h2>Settings</h2>
 
       <details className="settings-group" open>
-        <summary>Workout</summary>
+        <summary>Appearance</summary>
 
         <div className="setting">
-          <label>Appearance</label>
+          <label>Theme</label>
           <div className="seg">
             {(["dark", "light"] as const).map((t) => (
               <button key={t} className={theme === t ? "active" : ""} onClick={() => setThemeChoice(t)}>
@@ -345,6 +345,10 @@ export function Settings({
             ))}
           </div>
         </div>
+      </details>
+
+      <details className="settings-group">
+        <summary>Rest timer</summary>
 
         <div className="setting">
           <label>Default rest timer</label>
@@ -423,6 +427,14 @@ export function Settings({
           <p className="muted tiny">Faint 3-2-1 ticks in the last seconds so the end sound doesn't startle you. Off by default.</p>
         </ToggleRow>
 
+        <ToggleRow label="Auto-start break when a set is marked done" checked={autoBreak} onChange={toggleAutoBreak}>
+          <p className="muted tiny">Tap a set's number badge (✓) and the break timer starts by itself.</p>
+        </ToggleRow>
+      </details>
+
+      <details className="settings-group">
+        <summary>Workout defaults</summary>
+
         <div className="setting">
           <label>Weight step (± buttons)</label>
           <div className="seg">
@@ -446,10 +458,10 @@ export function Settings({
           </div>
           <p className="muted tiny">Colors the “days since last workout” (green/orange/red) and drives reminders.</p>
         </div>
+      </details>
 
-        <ToggleRow label="Auto-start break when a set is marked done" checked={autoBreak} onChange={toggleAutoBreak}>
-          <p className="muted tiny">Tap a set's number badge (✓) and the break timer starts by itself.</p>
-        </ToggleRow>
+      <details className="settings-group">
+        <summary>During a workout</summary>
 
         {native && (
           <ToggleRow label="Volume buttons control the break" checked={volUpBreak} onChange={toggleVolUpBreak}>
