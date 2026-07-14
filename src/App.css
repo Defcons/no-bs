@@ -1064,14 +1064,33 @@ input[type="range"] {
 }
 .record-nums {
   display: flex;
-  justify-content: space-between;
-  gap: 12px;
+  gap: 10px;
+  margin-top: 8px;
+}
+.rec-metric {
+  flex: 1;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 8px 10px;
+}
+.rec-lbl {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 1px;
+}
+.rec-u {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--faint);
 }
 .record-nums .big {
   font-family: var(--display);
-  font-size: 19px;
+  font-size: 20px;
   font-weight: 800;
-  font-variant-numeric: tabular-nums;
   letter-spacing: -0.01em;
   font-variant-numeric: tabular-nums;
 }
@@ -1132,17 +1151,29 @@ input[type="range"] {
   display: flex;
   align-items: flex-end;
   gap: 4px;
-  height: 56px;
   padding: 6px 2px;
 }
-.weekbar {
+.weekcol {
   flex: 1;
-  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+  min-width: 0;
+}
+.weekbar {
+  height: 56px;
   display: flex;
   align-items: flex-end;
   background: var(--surface-2);
   border-radius: 4px;
   overflow: hidden;
+}
+.weeklabel {
+  text-align: center;
+  font-size: 10px;
+  color: var(--faint);
+  font-variant-numeric: tabular-nums;
 }
 .weekbar-fill {
   width: 100%;
@@ -1171,9 +1202,30 @@ input[type="range"] {
 .cat > summary::-webkit-details-marker {
   display: none;
 }
+.cat-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  flex: none;
+}
 .cat-name {
+  font-family: var(--display);
+  font-weight: 700;
+  letter-spacing: -0.01em;
   font-size: 16px;
   margin-right: auto;
+}
+.cat-count {
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  min-width: 22px;
+  text-align: center;
+  padding: 1px 7px;
 }
 .cat > summary::after {
   content: "▸";
@@ -1306,12 +1358,27 @@ input[type="range"] {
 }
 .heatmap-row {
   display: grid;
-  grid-template-columns: 34px repeat(12, 1fr);
+  grid-template-columns: 30px repeat(12, 1fr) 34px;
   gap: 3px;
   align-items: center;
 }
 .heatmap-m {
   text-align: center;
+}
+/* Year total — separated from the month cells by a hairline divider. */
+.heatmap-total,
+.heatmap-total-h {
+  text-align: center;
+  border-left: 1px solid var(--line);
+  padding-left: 6px;
+  margin-left: 3px;
+}
+.heatmap-total {
+  font-size: 13px;
+  color: var(--text);
+}
+.heatmap-total-h {
+  font-size: 10px;
 }
 .heatmap-year {
   text-align: right;

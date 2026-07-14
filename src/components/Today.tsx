@@ -550,10 +550,10 @@ export function Today({
         <button
           className="ghost"
           onClick={() => {
-            if (confirm("Reset this workout? Nothing will be saved and you'll go back to day selection.")) cancel();
+            if (confirm("Delete this workout? Nothing will be saved and you'll go back to day selection.")) cancel();
           }}
         >
-          Reset
+          Delete
         </button>
         <button className="primary" onClick={finishWorkout}>
           Finish workout

@@ -5,7 +5,7 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { db, type StoredWorkout } from "../db";
 import { niceDate } from "../lib/format";
 import { type BwEntry, KEY_LIFTS, adjustThresholds, bodyweightForYear, levelClass, rateLift } from "../lib/standards";
-import { type LiftRecord, MUSCLE_ORDER, liftRecords, muscleGroup, progression, sessionsPerWeek, summarize } from "../lib/stats";
+import { type LiftRecord, MUSCLE_ORDER, liftRecords, muscleGroup, progression, sessionsPerWeek, summarize, weekNumbersForLast } from "../lib/stats";
 import { ProgressChart } from "./ProgressChart";
 
 export function Records({
@@ -35,6 +35,7 @@ export function Records({
 
   const { summary, records, byCat, perWeek } = derived!;
   const maxWeek = Math.max(1, ...perWeek);
+  const weekNums = weekNumbersForLast(perWeek.length);
 
   return (
     <div className="pad history">
@@ -55,12 +56,15 @@ export function Records({
       <h3 className="section">Consistency</h3>
       <div className="weekbars">
         {perWeek.map((c, i) => (
-          <div key={i} className="weekbar" title={`${c} workout${c === 1 ? "" : "s"}`}>
-            <div className="weekbar-fill" style={{ height: `${(c / maxWeek) * 100}%` }} />
+          <div key={i} className="weekcol" title={`Week ${weekNums[i]}: ${c} workout${c === 1 ? "" : "s"}`}>
+            <div className="weekbar">
+              <div className="weekbar-fill" style={{ height: `${(c / maxWeek) * 100}%` }} />
+            </div>
+            <span className="weeklabel">{weekNums[i]}</span>
           </div>
         ))}
       </div>
-      <p className="muted tiny">Workouts per week — last 12 weeks (right = this week).</p>
+      <p className="muted tiny">Workouts per week — last 12 weeks (week number below · right = this week).</p>
 
       <h3 className="section">Activity by year</h3>
       <ActivityHeatmap workouts={workouts} />
@@ -117,8 +121,9 @@ export function Records({
       {MUSCLE_ORDER.filter((cat) => byCat[cat]?.length).map((cat) => (
         <details key={cat} className="cat">
           <summary>
+            <span className="cat-dot" style={{ background: MUSCLE_COLOR[cat] ?? "var(--muted)" }} />
             <span className="cat-name">{cat}</span>
-            <span className="tiny muted">{byCat[cat].length} exercises</span>
+            <span className="cat-count">{byCat[cat].length}</span>
           </summary>
           <div className="records">
             {byCat[cat].map((r) => (
@@ -142,14 +147,16 @@ function RecordRow({ r, workouts }: { r: LiftRecord; workouts: StoredWorkout[] }
           <span className="record-chev">{open ? "▴" : "▾"}</span>
         </div>
         <div className="record-nums">
-          <div>
-            <span className="big">{r.maxWeight.weight} kg</span>
+          <div className="rec-metric">
+            <div className="rec-lbl">Max</div>
+            <span className="big">{r.maxWeight.weight}<span className="rec-u"> kg</span></span>
             <span className="muted"> ×{r.maxWeight.reps}</span>
-            <div className="tiny muted">max · {niceDate(r.maxWeight.date)}</div>
+            <div className="tiny muted">{niceDate(r.maxWeight.date)}</div>
           </div>
-          <div>
-            <span className="big">{r.bestE1rm.est.toFixed(0)} kg</span>
-            <div className="tiny muted">est 1RM · {niceDate(r.bestE1rm.date)}</div>
+          <div className="rec-metric">
+            <div className="rec-lbl">Est 1RM</div>
+            <span className="big">{r.bestE1rm.est.toFixed(0)}<span className="rec-u"> kg</span></span>
+            <div className="tiny muted">{niceDate(r.bestE1rm.date)}</div>
           </div>
         </div>
       </button>
@@ -157,6 +164,16 @@ function RecordRow({ r, workouts }: { r: LiftRecord; workouts: StoredWorkout[] }
     </div>
   );
 }
+
+// Muted per-muscle hues for quick scanning (dots only — the accent stays molten).
+const MUSCLE_COLOR: Record<string, string> = {
+  Chest: "#e8695b",
+  Back: "#5b8def",
+  Shoulder: "#e0a83b",
+  Legs: "#46b98a",
+  Arms: "#b57be0",
+  Core: "#e06a9e",
+};
 
 // Year × month heatmap: rows = years (newest first), cells shaded by session count
 // relative to the busiest month IN VIEW — active periods pop out at a glance.
@@ -196,28 +213,33 @@ function ActivityHeatmap({ workouts }: { workouts: StoredWorkout[] }) {
               {m}
             </span>
           ))}
+          <span className="heatmap-total-h tiny muted">Year</span>
         </div>
-        {shown.map((y) => (
-          <div key={y} className="heatmap-row">
-            <span className="heatmap-year tiny muted">{y}</span>
-            {Array.from({ length: 12 }, (_, m) => {
-              const c = counts.get(`${y}-${String(m + 1).padStart(2, "0")}`) ?? 0;
-              const pct = Math.round((c / max) * 88);
-              return (
-                <span
-                  key={m}
-                  className="heatmap-cell"
-                  title={`${y}-${String(m + 1).padStart(2, "0")}: ${c} workout${c === 1 ? "" : "s"}`}
-                  style={c ? { background: `color-mix(in srgb, var(--accent) ${pct}%, var(--surface))` } : undefined}
-                >
-                  {c > 0 && <span className={`heatmap-n ${pct > 50 ? "hi" : ""}`}>{c}</span>}
-                </span>
-              );
-            })}
-          </div>
-        ))}
+        {shown.map((y) => {
+          const total = Array.from({ length: 12 }, (_, m) => counts.get(`${y}-${String(m + 1).padStart(2, "0")}`) ?? 0).reduce((a, b) => a + b, 0);
+          return (
+            <div key={y} className="heatmap-row">
+              <span className="heatmap-year tiny muted">{y}</span>
+              {Array.from({ length: 12 }, (_, m) => {
+                const c = counts.get(`${y}-${String(m + 1).padStart(2, "0")}`) ?? 0;
+                const pct = Math.round((c / max) * 88);
+                return (
+                  <span
+                    key={m}
+                    className="heatmap-cell"
+                    title={`${y}-${String(m + 1).padStart(2, "0")}: ${c} workout${c === 1 ? "" : "s"}`}
+                    style={c ? { background: `color-mix(in srgb, var(--accent) ${pct}%, var(--surface))` } : undefined}
+                  >
+                    {c > 0 && <span className={`heatmap-n ${pct > 50 ? "hi" : ""}`}>{c}</span>}
+                  </span>
+                );
+              })}
+              <span className="heatmap-total num" title={`${total} workouts in ${y}`}>{total}</span>
+            </div>
+          );
+        })}
       </div>
-      <p className="muted tiny">Sessions per month — darker blue = more active.</p>
+      <p className="muted tiny">Sessions per month — more orange = more active. Right column is the year's total.</p>
     </div>
   );
 }

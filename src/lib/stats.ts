@@ -139,6 +139,19 @@ export function sessionsPerWeek(workouts: StoredWorkout[], weeks = 12): number[]
   return counts;
 }
 
+// Bare ISO week number (1–53) for each of the last `weeks` weeks, oldest→newest —
+// aligned 1:1 with sessionsPerWeek's buckets so they label the same bars.
+export function weekNumbersForLast(weeks = 12): number[] {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const out: number[] = [];
+  for (let i = weeks - 1; i >= 0; i--) {
+    const d = new Date(today.getTime() - i * 7 * 86400000);
+    out.push(isoWeekNum(d.toISOString()) % 100);
+  }
+  return out;
+}
+
 export type ProgressPoint = { date: string; e1rm: number; topWeight: number };
 
 // Per-session best (est-1RM + top weight) for one lift, oldest→newest — for the chart.
