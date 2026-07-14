@@ -7,14 +7,15 @@ export const LEVELS: Level[] = ["Beginner", "Novice", "Intermediate", "Advanced"
 
 type Thresholds = { beginner: number; novice: number; intermediate: number; advanced: number; elite: number };
 
-// Only the "important" lifts, in display order. `canon` matches canonName().
-export const KEY_LIFTS: { canon: string; std: Thresholds; note?: string }[] = [
-  { canon: "Squat", std: { beginner: 0.75, novice: 1.25, intermediate: 1.5, advanced: 2.25, elite: 2.75 } },
-  { canon: "Bench", std: { beginner: 0.5, novice: 0.75, intermediate: 1.25, advanced: 1.75, elite: 2.0 } },
-  { canon: "Deadlift", std: { beginner: 1.0, novice: 1.5, intermediate: 2.0, advanced: 2.5, elite: 3.0 } },
-  { canon: "Military press", std: { beginner: 0.35, novice: 0.55, intermediate: 0.8, advanced: 1.1, elite: 1.4 } },
-  { canon: "Pulldown", std: { beginner: 0.5, novice: 0.75, intermediate: 1.0, advanced: 1.5, elite: 1.75 }, note: "machine — rough" },
-  { canon: "Legpress", std: { beginner: 1.0, novice: 1.75, intermediate: 2.75, advanced: 4.0, elite: 5.25 }, note: "sled machine — very rough" },
+// Only the "important" lifts, in display order. `key` matches an exercise's
+// standardKey (see lib/exercises.ts); `name` is the display label.
+export const KEY_LIFTS: { key: string; name: string; std: Thresholds; note?: string }[] = [
+  { key: "squat", name: "Squat", std: { beginner: 0.75, novice: 1.25, intermediate: 1.5, advanced: 2.25, elite: 2.75 } },
+  { key: "bench", name: "Bench Press", std: { beginner: 0.5, novice: 0.75, intermediate: 1.25, advanced: 1.75, elite: 2.0 } },
+  { key: "deadlift", name: "Deadlift", std: { beginner: 1.0, novice: 1.5, intermediate: 2.0, advanced: 2.5, elite: 3.0 } },
+  { key: "ohp", name: "Overhead Press", std: { beginner: 0.35, novice: 0.55, intermediate: 0.8, advanced: 1.1, elite: 1.4 } },
+  { key: "pulldown", name: "Lat Pulldown", std: { beginner: 0.5, novice: 0.75, intermediate: 1.0, advanced: 1.5, elite: 1.75 }, note: "machine — rough" },
+  { key: "legpress", name: "Leg Press", std: { beginner: 1.0, novice: 1.75, intermediate: 2.75, advanced: 4.0, elite: 5.25 }, note: "sled machine — very rough" },
 ];
 
 // Adjust the 90 kg / open-age base thresholds for this lifter.

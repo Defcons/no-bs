@@ -1,5 +1,6 @@
 // History analytics: PRs, records and summary stats over stored workouts.
 import type { StoredWorkout } from "../db";
+import { type MuscleGroup, resolveExercise } from "./exercises";
 
 export const epley = (weight: number, reps: number): number => weight * (1 + reps / 30);
 
@@ -7,58 +8,9 @@ export const epley = (weight: number, reps: number): number => weight * (1 + rep
 const MAX_PLAUSIBLE_KG = 500;
 const plausible = (w: number | null): w is number => w != null && w > 0 && w <= MAX_PLAUSIBLE_KG;
 
-// Group exercise variants under a canonical name so PRs aggregate across years
-// (e.g. "Benkpress"/"Bench press" -> "Bench"). Falls back to the raw name.
-// Order matters — first match wins. More specific patterns go first.
-const CANON: [RegExp, string][] = [
-  [/rear.?delt|rear.?fl|back.?fl/i, "Rear delt flyes"], // NOT chest — before flyes/back rules
-  [/decline.?press|decline.?bench/i, "Decline press"],
-  [/decline.?fl/i, "Decline flyes"], // "Decline flyes" / "Decline-Flyes" / "Decline-flyes"
-  [/bench|benkpress/i, "Bench"],
-  [/squat|knebøy/i, "Squat"],
-  [/deadlift|\bmark/i, "Deadlift"],
-  [/military|militarypress/i, "Military press"],
-  [/shoulderpress|shoulder press/i, "Shoulder press"],
-  [/incline|skråbenk|skråpress/i, "Incline"], // incline bench == skråbenk
-  [/legpress|leg press/i, "Legpress"],
-  [/pulldown|nedtrekk/i, "Pulldown"],
-  [/\bcurl stang|barbell curl/i, "Barbell curl"],
-  [/side.?hev|side.?lift|lateral/i, "Lateral raise"],
-  [/calves|calf/i, "Calves"],
-  [/quad/i, "Quad"],
-  [/hamstring/i, "Hamstring"],
-  [/shrug/i, "Shrugs"],
-];
-
-// Loose key: canonical name, then separator/case-insensitive, so any remaining
-// "Decline-Flyes" vs "Decline flyes" variants still merge into one record.
-export function canonKey(name: string): string {
-  return canonName(name)
-    .toLowerCase()
-    .replace(/[\s\-_/]+/g, " ")
-    .trim();
-}
-
-export function canonName(name: string): string {
-  for (const [re, c] of CANON) if (re.test(name)) return c;
-  return name.trim();
-}
-
-// Muscle-group buckets for the Records tab. Heuristic, tuned to the owner's exercises;
-// "Other" catches anything unmatched. Arms is checked first so curls/extensions
-// don't fall into leg/press buckets.
-export const MUSCLE_ORDER = ["Chest", "Back", "Shoulder", "Legs", "Arms", "Core", "Other"];
-export function muscleGroup(name: string): string {
-  const n = name.toLowerCase();
-  if (/extension|curl|tricep|bicep|skull|pushdown|pressdown/.test(n)) return "Arms";
-  // Shoulder BEFORE chest so rear-delt/lateral "flyes" don't land in Chest.
-  if (/shoulder|military|shrug|delt|\bohp\b|sidehev|sidelift|lateral|face ?pull|rear|back ?fl/.test(n)) return "Shoulder";
-  if (/bench|incline|skråbenk|\bfly|decline|chest/.test(n)) return "Chest";
-  if (/deadlift|row|pulldown|pull-?up|chin|\blat|korsrygg|nedtrekk|\bback\b|\bmark/.test(n)) return "Back";
-  if (/squat|\bleg|calf|calves|quad|hamstring|lunge|utfall|glute|benhev/.test(n)) return "Legs";
-  if (/abs|crunch|core|plank|sit-?up|situp/.test(n)) return "Core";
-  return "Other";
-}
+// Exercise identity + classification (canonName / canonKey / muscleGroup /
+// MUSCLE_ORDER) moved to lib/exercises.ts and is now catalog-backed via
+// resolveExercise(). The old regex layer survives there as the fallback.
 
 // --- Training cadence (for color coding + reminders) ------------------------
 export type Cadence = "green" | "orange" | "red";
@@ -81,7 +33,9 @@ export function trainingDue(daysSinceLast: number, daysPerWeek: number): boolean
 
 export type LiftRecord = {
   name: string;
-  key: string; // canonKey — used to pull this lift's progression
+  key: string; // resolveExercise(...).id — used to pull this lift's progression
+  muscle: MuscleGroup; // resolved muscle group (Records "by muscle")
+  standardKey?: string; // links to a strength standard, if any
   count: number; // sets logged
   maxWeight: { weight: number; reps: number; date: string };
   bestE1rm: { est: number; weight: number; reps: number; date: string };
@@ -91,8 +45,9 @@ export function liftRecords(workouts: StoredWorkout[]): LiftRecord[] {
   const map = new Map<string, LiftRecord>();
   for (const w of workouts) {
     for (const ex of w.exercises) {
-      const name = canonName(ex.name);
-      const key = canonKey(ex.name); // loose key merges separator/case variants
+      const resolved = resolveExercise(ex.name); // catalog match → shared id; else regex fallback
+      const name = resolved.name;
+      const key = resolved.id;
       const schemeReps = typeof ex.scheme.reps === "number" ? ex.scheme.reps : 0;
       for (const set of ex.sets) {
         if (!plausible(set.weight)) continue;
@@ -102,6 +57,8 @@ export function liftRecords(workouts: StoredWorkout[]): LiftRecord[] {
           rec = {
             name,
             key,
+            muscle: resolved.muscle,
+            standardKey: resolved.standardKey,
             count: 0,
             maxWeight: { weight: 0, reps: 0, date: "" },
             bestE1rm: { est: 0, weight: 0, reps: 0, date: "" },
@@ -160,7 +117,7 @@ export function progression(workouts: StoredWorkout[], key: string): ProgressPoi
   for (const w of workouts) {
     const day = w.date.slice(0, 10);
     for (const ex of w.exercises) {
-      if (canonKey(ex.name) !== key) continue;
+      if (resolveExercise(ex.name).id !== key) continue;
       const schemeReps = typeof ex.scheme.reps === "number" ? ex.scheme.reps : 0;
       for (const set of ex.sets) {
         if (!plausible(set.weight)) continue;

@@ -2,6 +2,7 @@
 // The Google Sheet history is imported once on first run for the History/PR views.
 import Dexie, { type Table } from "dexie";
 import type { DayTemplate, ExercisePerf, Scheme, TrackPoint } from "./types";
+import type { Exercise } from "./lib/exercises";
 
 export interface StoredWorkout {
   id?: number;
@@ -37,6 +38,7 @@ class GymDB extends Dexie {
   templates!: Table<DayTemplate, number>;
   settings!: Table<Setting, string>;
   customSounds!: Table<CustomSound, number>;
+  exercises!: Table<Exercise, string>; // user-created catalog (id = slug)
 
   constructor() {
     super("gym-tracker");
@@ -48,6 +50,9 @@ class GymDB extends Dexie {
     });
     // v2: user-uploaded break sounds. Additive — Dexie carries the v1 tables over.
     this.version(2).stores({ customSounds: "++id" });
+    // v3: user exercise catalog (muscle group / equipment / unit for exercises the
+    // built-in library doesn't cover). Additive; id is a string slug.
+    this.version(3).stores({ exercises: "id, name, muscle" });
   }
 }
 
@@ -74,6 +79,17 @@ export function getCustomSound(id: number): Promise<CustomSound | undefined> {
 }
 export async function deleteCustomSound(id: number): Promise<void> {
   await db.customSounds.delete(id);
+}
+
+// --- User exercise catalog (custom exercises the built-in library lacks) -----
+export function listExercises(): Promise<Exercise[]> {
+  return db.exercises.toArray();
+}
+export async function upsertExercise(ex: Exercise): Promise<void> {
+  await db.exercises.put(ex);
+}
+export async function deleteExercise(id: string): Promise<void> {
+  await db.exercises.delete(id);
 }
 
 // --- The current split (seeded once, editable later) ------------------------

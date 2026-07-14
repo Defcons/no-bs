@@ -1,7 +1,8 @@
 import { Suspense, lazy, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import "./App.css";
-import { db, ensureBootstrapped, getSetting, setSetting, type StoredWorkout } from "./db";
+import { db, ensureBootstrapped, getSetting, listExercises, setSetting, type StoredWorkout } from "./db";
+import { registerCustomExercises } from "./lib/exercises";
 import { daysAgo } from "./lib/format";
 import { type HrMonitor, createHrMonitor, hrAvailable } from "./lib/hr";
 import { Capacitor } from "@capacitor/core";
@@ -56,6 +57,13 @@ export default function App() {
   const [routeHash, setRouteHash] = useState<string | null>(() => readRouteHash());
   const [pendingEdit, setPendingEdit] = useState<StoredWorkout | null>(null); // History → edit in Today
   const [moodLogId, setMoodLogId] = useState<number | null>(null); // auto-end notification tap → log mood
+
+  // Feed the user's custom exercise catalog into the resolver (muscle/standard
+  // lookups). Empty until the create-exercise UI (P1) writes entries.
+  const customExercises = useLiveQuery(() => listExercises(), []);
+  useEffect(() => {
+    if (customExercises) registerCustomExercises(customExercises);
+  }, [customExercises]);
 
   // All four tab panels stay mounted (Today MUST, so its workout/PiP/HR logic keeps
   // running when you're on another tab); we just toggle visibility. That also lets

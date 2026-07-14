@@ -5,7 +5,8 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { db, type StoredWorkout } from "../db";
 import { niceDate } from "../lib/format";
 import { type BwEntry, KEY_LIFTS, adjustThresholds, bodyweightForYear, levelClass, rateLift } from "../lib/standards";
-import { type LiftRecord, MUSCLE_ORDER, liftRecords, muscleGroup, progression, sessionsPerWeek, summarize, weekNumbersForLast } from "../lib/stats";
+import { type LiftRecord, liftRecords, progression, sessionsPerWeek, summarize, weekNumbersForLast } from "../lib/stats";
+import { MUSCLE_ORDER } from "../lib/exercises";
 import { ProgressChart } from "./ProgressChart";
 
 export function Records({
@@ -26,7 +27,7 @@ export function Records({
     const summary = summarize(workouts)!;
     const records = liftRecords(workouts).filter((r) => r.maxWeight.weight > 0);
     const byCat: Record<string, LiftRecord[]> = {};
-    for (const r of records) (byCat[muscleGroup(r.name)] ??= []).push(r);
+    for (const r of records) (byCat[r.muscle] ??= []).push(r);
     for (const c of Object.keys(byCat)) byCat[c].sort((a, b) => b.maxWeight.weight - a.maxWeight.weight);
     return { summary, records, byCat, perWeek: sessionsPerWeek(workouts, 12) };
   }, [workouts]);
@@ -82,16 +83,16 @@ export function Records({
           ) : (
             <div className="standards">
               {KEY_LIFTS.map((kl) => {
-                const rec = records.find((r) => r.name === kl.canon);
+                const rec = records.find((r) => r.standardKey === kl.key);
                 if (!rec) return null;
                 const e1rm = rec.bestE1rm.est;
                 const year = parseInt(rec.bestE1rm.date.slice(0, 4), 10);
                 const bw = bodyweightForYear(year, bwHistory, bodyweightKg, currentYear);
                 const r = rateLift(adjustThresholds(kl.std, bw, age), e1rm, bw);
                 return (
-                  <div key={kl.canon} className="std-row">
+                  <div key={kl.key} className="std-row">
                     <div className="std-top">
-                      <span className="std-name">{kl.canon}</span>
+                      <span className="std-name">{kl.name}</span>
                       <span className={`lvl-badge ${levelClass(r.level)}`}>{r.level ?? "Below beginner"}</span>
                     </div>
                     <div className="std-bar">
