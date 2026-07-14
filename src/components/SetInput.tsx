@@ -128,7 +128,7 @@ export function SetInput({ index, set, step, active, prevWeight, onChange }: Pro
             type="text"
             value={set.note ?? ""}
             onKeyDown={blurOnEnter}
-            placeholder="note for this set…"
+            placeholder="Note for this set…"
             onChange={(e) => onChange({ note: e.target.value || undefined })}
           />
         </div>

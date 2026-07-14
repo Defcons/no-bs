@@ -93,7 +93,7 @@ export function ExerciseCard({ exercise, step, prev, onChange, onSetDone, editab
           className="exercise-note"
           type="text"
           value={exercise.note ?? ""}
-          placeholder="note for this exercise…"
+          placeholder="Note for this exercise…"
           onChange={(e) => onChange({ ...exercise, note: e.target.value || undefined })}
         />
       )}

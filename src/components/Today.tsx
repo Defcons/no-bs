@@ -541,7 +541,7 @@ export function Today({
         <textarea
           className="day-note"
           value={draft.note ?? ""}
-          placeholder="how did the session feel?"
+          placeholder="How did the session feel?"
           onChange={(e) => update((d) => ({ ...d, note: e.target.value || undefined }))}
         />
       </div>
