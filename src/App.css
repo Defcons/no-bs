@@ -95,25 +95,38 @@
 }
 .day-btn {
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 2px;
-  padding: 18px;
+  flex-direction: row;
+  align-items: center;
+  gap: 14px;
+  padding: 15px 16px;
   text-align: left;
   background: var(--surface);
   width: 100%;
+  border-radius: var(--radius);
+}
+.day-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
 }
 .day-cell {
   position: relative;
 }
+/* Editable day cards leave room on the right for the pencil (edit template). */
+.day-cell .day-btn {
+  padding-right: 56px;
+}
 .day-edit {
   position: absolute;
-  top: 8px;
-  right: 8px;
-  width: 34px;
-  height: 34px;
+  top: 50%;
+  right: 10px;
+  transform: translateY(-50%);
+  width: 40px;
+  height: 40px;
   padding: 0;
-  font-size: 15px;
+  font-size: 16px;
   color: var(--muted);
   background: var(--surface-2);
   border-color: var(--line);
@@ -154,17 +167,36 @@
   color: var(--muted);
 }
 .day-name {
+  font-family: var(--display);
   font-size: 19px;
-  font-weight: 600;
+  font-weight: 800;
+  letter-spacing: -0.01em;
 }
 .day-sub {
   color: var(--muted);
   font-size: 13px;
 }
-.day-last {
+.day-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
   color: var(--muted);
-  font-size: 12px;
-  margin-top: 4px;
+  font-size: 13.5px;
+}
+/* Cadence status as a coloured dot + label (green on track, amber slipping, red behind). */
+.day-cad {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-weight: 600;
+}
+.day-cad::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: currentColor;
 }
 .last-banner {
   background: var(--surface);
@@ -582,7 +614,7 @@
 .exercise-head h3 {
   font-size: 16px;
   font-weight: 700;
-  color: var(--accent);
+  color: var(--text);
   flex: 1;
   min-width: 0;
   white-space: nowrap;
@@ -784,49 +816,48 @@
   font-weight: 600;
 }
 
-/* ---- Set rows ---- */
+/* ---- Set rows (Phase 2: clean line, 44px targets, extras behind ⋯) ---- */
 .sets {
   display: grid;
-  gap: 6px;
-  margin-top: 8px;
+  gap: 8px;
+  margin-top: 10px;
 }
 .setrow {
-  display: grid;
-  grid-template-columns: 18px minmax(0, 1fr) auto auto 28px;
+  display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 3px;
-  /* Inner padding gives the done tint / active frame room around the fields so the
-     ring never sits on top of the buttons. */
-  padding: 4px 7px;
+  gap: 8px;
+  padding: 7px 8px;
+  border: 1px solid var(--line);
   border-radius: 12px;
-  transition: background-color 0.25s ease;
+  background: var(--surface-2);
+  transition: border-color 0.2s ease, background-color 0.25s ease, box-shadow 0.2s ease;
 }
 .setrow.done {
-  background: color-mix(in srgb, var(--accent-2) 14%, transparent);
+  background: color-mix(in srgb, var(--accent-2) 12%, var(--surface-2));
+  border-color: color-mix(in srgb, var(--accent-2) 30%, var(--line));
 }
 .setrow.active {
-  background: color-mix(in srgb, var(--accent) 13%, transparent);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 60%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent);
 }
 .setrow.active .set-badge {
-  background: color-mix(in srgb, var(--accent) 32%, var(--surface-2));
+  background: color-mix(in srgb, var(--accent) 30%, var(--surface));
   color: var(--accent);
 }
-.setrow .set-note {
-  grid-column: 1 / -1;
-}
 .set-badge {
-  width: 18px;
-  height: 18px;
+  width: 30px;
+  height: 30px;
   border: none;
   padding: 0;
   border-radius: 50%;
   display: grid;
   place-items: center;
-  background: var(--surface-2);
+  background: var(--surface);
   color: var(--muted);
-  font-size: 12px;
-  font-weight: 600;
+  font-size: 14px;
+  font-weight: 700;
+  flex: none;
   cursor: pointer;
   transition: background-color 0.2s ease;
 }
@@ -835,24 +866,31 @@
   color: #04120c;
 }
 .weight-group {
-  display: grid;
-  grid-template-columns: 28px minmax(0, 1fr) 28px;
-  gap: 3px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
 }
 .stepper {
-  font-size: 18px;
-  font-weight: 700;
-  padding: 0;
+  width: 38px;
   height: 40px;
-  color: var(--muted);
+  padding: 0;
+  flex: none;
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 9px;
 }
 .field {
   display: flex;
   align-items: center;
   height: 40px;
   border: 1px solid var(--line);
-  border-radius: 10px;
-  background: var(--surface);
+  border-radius: 9px;
+  background: var(--bg);
   padding: 0 6px;
 }
 .field:focus-within {
@@ -873,44 +911,77 @@
   outline: none;
 }
 .field .unit {
-  color: var(--muted);
+  color: var(--faint);
   font-size: 11px;
   padding: 0 2px;
   pointer-events: none;
 }
+.weight-field {
+  flex: 1;
+  min-width: 0;
+}
 .weight-field input {
   font-family: var(--display);
-  font-size: 19px;
+  font-size: 20px;
   font-weight: 800;
   letter-spacing: -0.01em;
 }
 .reps-field {
-  width: 36px;
-  padding: 0 3px;
+  width: 66px;
+  flex: none;
+  padding: 0 6px;
 }
 .reps-field input {
-  font-size: 16px;
+  font-family: var(--display);
+  font-size: 17px;
+  font-weight: 700;
+}
+.more-toggle {
+  width: 38px;
+  height: 40px;
+  padding: 0;
+  flex: none;
+  font-size: 18px;
+  line-height: 1;
+  color: var(--muted);
+  background: var(--surface);
+}
+.more-toggle.has-extra {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+}
+.more-toggle.open {
+  background: var(--surface-2);
+}
+/* Extras reveal: assist/extra reps + a per-set note, full-width under the row. */
+.set-extra {
+  flex-basis: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-top: 2px;
+}
+.extra-field {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex: none;
+}
+.extra-lbl {
+  font-size: 12px;
+  color: var(--muted);
 }
 .assist-field {
-  width: 38px;
-  padding: 0 2px;
+  width: 56px;
+  flex: none;
 }
 .assist-field input {
   font-size: 15px;
 }
-.assist-field .unit {
-  color: var(--muted);
-  font-size: 13px;
-}
-.note-toggle {
-  width: 28px;
-  height: 40px;
-  padding: 0;
-  color: var(--muted);
-}
-.note-toggle.has-note {
-  color: var(--accent);
-  border-color: var(--accent);
+.set-extra .set-note {
+  flex: 1;
+  min-width: 0;
+  margin-top: 0;
 }
 .set-actions {
   display: flex;

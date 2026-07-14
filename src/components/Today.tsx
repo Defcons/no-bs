@@ -348,11 +348,13 @@ export function Today({
                     onWorkoutStart();
                   }}
                 >
-                  <span className="day-name">{t.name}</span>
-                  <span className="day-sub">{t.exercises.length} exercises</span>
-                  <span className={`day-last cad-${cad}`}>
-                    {last ? `Last: ${niceDate(last.date)} (${daysAgoLabel(last.date)})` : "Never done"}
-                  </span>
+                  <div className="day-body">
+                    <span className="day-name">{t.name}</span>
+                    <span className="day-meta">
+                      <span>{t.exercises.length} exercises</span>
+                      <span className={`day-cad cad-${cad}`}>{last ? daysAgoLabel(last.date) : "Never done"}</span>
+                    </span>
+                  </div>
                 </button>
                 <button className="day-edit" aria-label={`edit ${t.name}`} onClick={() => setEditTpl(t)}>
                   ✎
@@ -367,15 +369,19 @@ export function Today({
               onWorkoutStart();
             }}
           >
-            <span className="day-name">＋ Alternative</span>
-            <span className="day-sub">Running, crossfit, or your own exercises</span>
+            <div className="day-body">
+              <span className="day-name">＋ Alternative</span>
+              <span className="day-sub">Running, crossfit, or your own exercises</span>
+            </div>
           </button>
           <button
             className="day-btn new-btn"
             onClick={() => setEditTpl({ name: "", order: 0, exercises: [] })}
           >
-            <span className="day-name">＋ New workout</span>
-            <span className="day-sub">Build your own reusable day</span>
+            <div className="day-body">
+              <span className="day-name">＋ New workout</span>
+              <span className="day-sub">Build your own reusable day</span>
+            </div>
           </button>
         </div>
         {editTpl && <TemplateEditor template={editTpl} onClose={() => setEditTpl(null)} />}

@@ -1,7 +1,7 @@
-// One set row: big thumb-friendly weight entry with +/- steppers, reps, and an
-// optional note. Weight is the primary input; reps is pre-filled from the scheme.
-// Units ("kg"/"reps") are static suffixes inside each field so they don't throw
-// off vertical alignment.
+// One set row: big thumb-friendly weight entry with +/- steppers and reps. Weight
+// is the primary input; reps is pre-filled from the scheme. The rare extras —
+// assist/extra reps and a per-set note — live behind a ⋯ reveal so the row you
+// touch every set stays clean with 44px targets. (Phase 2 redesign.)
 import { type KeyboardEvent, useRef, useState } from "react";
 import type { SetEntry } from "../types";
 
@@ -29,7 +29,8 @@ const blurOnEnter = (e: KeyboardEvent<HTMLInputElement>) => {
 type NumField = "weight" | "reps" | "assist";
 
 export function SetInput({ index, set, step, active, prevWeight, onChange }: Props) {
-  const [showNote, setShowNote] = useState(!!set.note);
+  const hasExtra = !!set.note || set.assist != null;
+  const [showMore, setShowMore] = useState(hasExtra);
   const done = !!set.done;
   // Only the number badge marks a set done — value edits deliberately do NOT
   // (user decision 2026-07-12): prefilled weights would otherwise green-flag
@@ -90,44 +91,47 @@ export function SetInput({ index, set, step, active, prevWeight, onChange }: Pro
             onChange({ reps: Number.isFinite(n) ? n : null });
           }}
         />
-        <span className="unit">×</span>
-      </div>
-
-      <div className="field assist-field" title="assisted / extra reps → shown as (n) in the sheet">
-        <span className="unit">(</span>
-        <input
-          type="text"
-          inputMode="numeric"
-          value={set.assist ?? ""}
-          placeholder="–"
-          onFocus={clearOnFocus("assist")}
-          onBlur={restoreOnBlur("assist")}
-          onKeyDown={blurOnEnter}
-          onChange={(e) => {
-            const n = parseInt(e.target.value, 10);
-            onChange({ assist: Number.isFinite(n) ? n : null });
-          }}
-        />
-        <span className="unit">)</span>
+        <span className="unit">reps</span>
       </div>
 
       <button
-        className={`note-toggle ${set.note ? "has-note" : ""}`}
-        aria-label="set note"
-        onClick={() => setShowNote((v) => !v)}
+        className={`more-toggle ${hasExtra ? "has-extra" : ""} ${showMore ? "open" : ""}`}
+        aria-label="assist reps & note"
+        aria-expanded={showMore}
+        onClick={() => setShowMore((v) => !v)}
       >
-        ✎
+        ⋯
       </button>
 
-      {showNote && (
-        <input
-          className="set-note"
-          type="text"
-          value={set.note ?? ""}
-          onKeyDown={blurOnEnter}
-          placeholder="note for this set…"
-          onChange={(e) => onChange({ note: e.target.value || undefined })}
-        />
+      {showMore && (
+        <div className="set-extra">
+          <label className="extra-field" title="assisted or extra reps — shown as (n) in the sheet">
+            <span className="extra-lbl">Assist / extra reps</span>
+            <div className="field assist-field">
+              <input
+                type="text"
+                inputMode="numeric"
+                value={set.assist ?? ""}
+                placeholder="—"
+                onFocus={clearOnFocus("assist")}
+                onBlur={restoreOnBlur("assist")}
+                onKeyDown={blurOnEnter}
+                onChange={(e) => {
+                  const n = parseInt(e.target.value, 10);
+                  onChange({ assist: Number.isFinite(n) ? n : null });
+                }}
+              />
+            </div>
+          </label>
+          <input
+            className="set-note"
+            type="text"
+            value={set.note ?? ""}
+            onKeyDown={blurOnEnter}
+            placeholder="note for this set…"
+            onChange={(e) => onChange({ note: e.target.value || undefined })}
+          />
+        </div>
       )}
     </div>
   );
