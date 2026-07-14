@@ -1,6 +1,6 @@
 // Settings: rest-timer default, weight increment, HR connection, Google Sheets
 // write-back sync, and data backup/reset.
-import { useEffect, useRef, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import { Capacitor } from "@capacitor/core";
 import {
   addCustomSound,
@@ -30,6 +30,30 @@ import {
 } from "../lib/sounds";
 import { checkAndApplyUpdate, currentVersion, updatesSupported } from "../lib/update";
 import { applyBackup, exportXlsx, importXlsx, type ImportedBackup } from "../lib/workbook";
+import { Switch } from "./Switch";
+
+// A boolean setting: label + switch inline, description below.
+function ToggleRow({
+  label,
+  checked,
+  onChange,
+  children,
+}: {
+  label: string;
+  checked: boolean;
+  onChange: (v: boolean) => void;
+  children?: ReactNode;
+}) {
+  return (
+    <div className="setting toggle">
+      <div className="toggle-head">
+        <label>{label}</label>
+        <Switch checked={checked} onChange={onChange} label={label} />
+      </div>
+      {children}
+    </div>
+  );
+}
 
 type Props = {
   restDefaultSec: number;
@@ -387,21 +411,17 @@ export function Settings({
           <p className="muted tiny">Use a built-in sound or add your own short clip (MP3/WAV/OGG, under 5 MB).</p>
         </div>
 
-        <div className="setting">
-          <label>Countdown before break ends</label>
-          <button
-            className={`mini ${breakCountdown ? "active" : ""}`}
-            onClick={() => {
-              const v = !breakCountdown;
-              setBreakCountdown(v);
-              setSetting("breakCountdown", v);
-              if (v) playCountdownTick(false); // preview a tick
-            }}
-          >
-            {breakCountdown ? "On — tap to disable" : "Enable"}
-          </button>
+        <ToggleRow
+          label="Countdown before break ends"
+          checked={breakCountdown}
+          onChange={(v) => {
+            setBreakCountdown(v);
+            setSetting("breakCountdown", v);
+            if (v) playCountdownTick(false); // preview a tick
+          }}
+        >
           <p className="muted tiny">Faint 3-2-1 ticks in the last seconds so the end sound doesn't startle you. Off by default.</p>
-        </div>
+        </ToggleRow>
 
         <div className="setting">
           <label>Weight step (± buttons)</label>
@@ -427,20 +447,12 @@ export function Settings({
           <p className="muted tiny">Colors the “days since last workout” (green/orange/red) and drives reminders.</p>
         </div>
 
-        <div className="setting">
-          <label>Auto-start break when a set is marked done</label>
-          <button className={`mini ${autoBreak ? "active" : ""}`} onClick={toggleAutoBreak}>
-            {autoBreak ? "On — tap to disable" : "Enable"}
-          </button>
+        <ToggleRow label="Auto-start break when a set is marked done" checked={autoBreak} onChange={toggleAutoBreak}>
           <p className="muted tiny">Tap a set's number badge (✓) and the break timer starts by itself.</p>
-        </div>
+        </ToggleRow>
 
         {native && (
-          <div className="setting">
-            <label>Volume buttons control the break</label>
-            <button className={`mini ${volUpBreak ? "active" : ""}`} onClick={toggleVolUpBreak}>
-              {volUpBreak ? "On — tap to disable" : "Enable"}
-            </button>
+          <ToggleRow label="Volume buttons control the break" checked={volUpBreak} onChange={toggleVolUpBreak}>
             <p className="muted tiny">
               During a workout, press <b>either</b> volume button (phone or headphone) to start the break — press again
               to skip/dismiss a running one. The volume itself won't change while a workout is active. Works only while
@@ -452,52 +464,40 @@ export function Settings({
               let you remap a tap/long-press to <b>Volume up/down</b> in their companion app. Do that and this catches
               it, with no music interference.
             </p>
-          </div>
+          </ToggleRow>
         )}
 
         {native && (
-          <div className="setting">
-            <label>Headphone button controls the break</label>
-            <button className={`mini ${mediaBtnBreak ? "active" : ""}`} onClick={toggleMediaBtnBreak}>
-              {mediaBtnBreak ? "On — tap to disable" : "Enable"}
-            </button>
+          <ToggleRow label="Headphone button controls the break" checked={mediaBtnBreak} onChange={toggleMediaBtnBreak}>
             <p className="muted tiny">
               During a workout, your headphone's play/pause button starts the break (press again to skip it).{" "}
               <b>Heads-up:</b> this only works when no other app holds the media button — if music is playing, Android
               sends the button to that app, not here, so it may do nothing. The volume-button option above is the
               reliable one. Needs a current APK.
             </p>
-          </div>
+          </ToggleRow>
         )}
 
         {native && (
-          <div className="setting">
-            <label>Floating timer (when you leave the app mid-workout)</label>
-            <div className="seg">
-              {(["pip", "off"] as const).map((m) => (
-                <button key={m} className={floatMode === m ? "active" : ""} onClick={() => setFloatMode(m)}>
-                  {m === "pip" ? "On (PiP)" : "Off"}
-                </button>
-              ))}
-            </div>
+          <ToggleRow
+            label="Floating timer (PiP) when you leave the app mid-workout"
+            checked={floatMode === "pip"}
+            onChange={(v) => setFloatMode(v ? "pip" : "off")}
+          >
             <p className="muted tiny">
               {floatMode === "pip"
                 ? "Android Picture-in-Picture floats a live timer + heart rate over other apps. Its size is fixed by the OS."
                 : "No floating timer; the rest-over notification (with sound) still fires in the background."}
             </p>
-          </div>
+          </ToggleRow>
         )}
 
-        <div className="setting">
-          <label>Keep screen on</label>
-          <button className={`mini ${keepScreenOn ? "active" : ""}`} onClick={() => setKeepScreenOn(!keepScreenOn)}>
-            {keepScreenOn ? "On — tap to disable" : "Enable"}
-          </button>
+        <ToggleRow label="Keep screen on" checked={keepScreenOn} onChange={setKeepScreenOn}>
           <p className="muted tiny">
             Stops the screen dimming/locking while the app is open or floating (PiP). Off by default — uses more
             battery.
           </p>
-        </div>
+        </ToggleRow>
       </details>
 
       <details className="settings-group">
@@ -544,18 +544,14 @@ export function Settings({
         </div>
 
         {native && (
-          <div className="setting">
-            <label>Auto-end when I leave</label>
-            <button className={`mini ${autoEndLeave ? "active" : ""}`} onClick={toggleAutoEndLeave}>
-              {autoEndLeave ? "On — tap to disable" : "Enable"}
-            </button>
+          <ToggleRow label="Auto-end when I leave" checked={autoEndLeave} onChange={toggleAutoEndLeave}>
             <p className="muted tiny">
               Off by default. When on, the app remembers where you are when a workout starts; if you move ~100 m away
               for 5 min while it's running, the session auto-saves. Alternative sessions (e.g. a run) are excluded.
               Location is used only while a workout is running (a notification shows while active) and never leaves
               your device. Grant location “While using the app” when asked.
             </p>
-          </div>
+          </ToggleRow>
         )}
       </details>
 
@@ -684,11 +680,7 @@ export function Settings({
       <details className="settings-group">
         <summary>Google Sheets sync (optional)</summary>
 
-        <div className="setting">
-          <label>Sync finished workouts to a Google Sheet</label>
-          <button className={`mini ${syncOn ? "active" : ""}`} onClick={toggleSync}>
-            {syncOn ? "On — tap to disable" : "Enable"}
-          </button>
+        <ToggleRow label="Sync finished workouts to a Google Sheet" checked={syncOn} onChange={toggleSync}>
           <p className="muted tiny">
             Optional. When on, finished workouts (sets, note, mood, time, avg HR, run stats) are written back to a Google
             Sheet via a small Apps Script. Off by default — the app is fully usable with local + file backup.{" "}
@@ -742,25 +734,22 @@ export function Settings({
               {status && <p className="muted tiny">{status}</p>}
             </>
           )}
-        </div>
+        </ToggleRow>
       </details>
 
       <details className="settings-group">
         <summary>Reminders &amp; updates</summary>
 
-        <div className="setting">
-          <label>Workout reminders</label>
-          {!notificationsSupported() ? (
+        {!notificationsSupported() ? (
+          <div className="setting">
+            <label>Workout reminders</label>
             <p className="muted tiny">Notifications aren't supported in this browser.</p>
-          ) : (
-            <button className={`mini ${reminders ? "active" : ""}`} onClick={toggleReminders}>
-              {reminders ? "On — tap to disable" : "Enable reminders"}
-            </button>
-          )}
-          <p className="muted tiny">
-            Nudges you to train when you're behind your goal. Fires when you open the app.
-          </p>
-        </div>
+          </div>
+        ) : (
+          <ToggleRow label="Workout reminders" checked={reminders} onChange={toggleReminders}>
+            <p className="muted tiny">Nudges you to train when you're behind your goal. Fires when you open the app.</p>
+          </ToggleRow>
+        )}
 
         <div className="setting">
           <label>App update</label>
