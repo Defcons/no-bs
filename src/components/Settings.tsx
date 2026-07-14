@@ -33,6 +33,7 @@ import { checkAndApplyUpdate, currentVersion, updatesSupported } from "../lib/up
 import { applyBackup, exportXlsx, importXlsx, type ImportedBackup } from "../lib/workbook";
 import { Switch } from "./Switch";
 import { MoonIcon, SunIcon } from "./icons";
+import { SheetsGuide } from "./SheetsGuide";
 
 // A boolean setting: label + switch inline, description below.
 function ToggleRow({
@@ -122,6 +123,7 @@ export function Settings({
   const [updating, setUpdating] = useState(false);
   const [autoEndLeave, setAutoEndLeave] = useState(false);
   const [backupMsg, setBackupMsg] = useState("");
+  const [showSheetsGuide, setShowSheetsGuide] = useState(false);
   const [syncOn, setSyncOn] = useState(false);
   const [syncUrl, setSyncUrl] = useState("");
   const [syncSecret, setSyncSecret] = useState("");
@@ -136,6 +138,7 @@ export function Settings({
   const [customSounds, setCustomSounds] = useState<CustomSound[]>([]);
   const soundFileRef = useRef<HTMLInputElement>(null);
   const native = Capacitor.isNativePlatform();
+  const thisYear = new Date().getFullYear();
 
   const refreshCustomSounds = () => listCustomSounds().then(setCustomSounds);
   const previewSound = async (v: string) => {
@@ -608,8 +611,32 @@ export function Settings({
         </div>
 
         <div className="setting">
-          <label>Body profile (for strength ratings)</label>
+          <label>Age</label>
           <div className="row">
+            <input
+              type="text"
+              inputMode="numeric"
+              className="bw-input"
+              value={age || ""}
+              placeholder="age"
+              onChange={(e) => {
+                const n = parseInt(e.target.value, 10);
+                setAge(Number.isFinite(n) ? n : 0);
+              }}
+            />
+            <span className="muted">yrs · optional, age-adjusts the standards</span>
+          </div>
+        </div>
+
+        <div className="setting">
+          <label>Bodyweight</label>
+          <p className="muted tiny">
+            Rates your lifts against strength standards (adjusted for your bodyweight). Add earlier years so old PRs are
+            judged against what you weighed back then.
+          </p>
+          <div className="row" style={{ marginTop: 8 }}>
+            <span className="bw-input bw-year muted">{thisYear}</span>
+            <span className="muted">→</span>
             <input
               type="text"
               inputMode="decimal"
@@ -622,36 +649,14 @@ export function Settings({
               }}
             />
             <span className="muted">{units}</span>
-            <input
-              type="text"
-              inputMode="numeric"
-              className="bw-input"
-              value={age || ""}
-              placeholder="age"
-              onChange={(e) => {
-                const n = parseInt(e.target.value, 10);
-                setAge(Number.isFinite(n) ? n : 0);
-              }}
-            />
-            <span className="muted">yrs</span>
+            <span className="tiny muted">now</span>
           </div>
-          <p className="muted tiny">
-            Rates your key lifts against strength standards, adjusted for your bodyweight (allometric) and age.
-          </p>
-        </div>
-
-        <div className="setting">
-          <label>Bodyweight by year</label>
-          <p className="muted tiny">
-            Old records are rated against what you weighed back then. Add past bodyweights; your current weight above
-            covers this year onward. Synced to the sheet's “Bodyweight” tab.
-          </p>
           {bwHistory.map((e, i) => (
             <div className="row" key={i} style={{ marginTop: 8 }}>
               <input
                 type="text"
                 inputMode="numeric"
-                className="bw-input"
+                className="bw-input bw-year"
                 value={e.year || ""}
                 placeholder="year"
                 onChange={(ev) => {
@@ -678,12 +683,8 @@ export function Settings({
               </button>
             </div>
           ))}
-          <button
-            className="mini"
-            style={{ marginTop: 8 }}
-            onClick={() => setBwHistory([...bwHistory, { year: new Date().getFullYear() - 1, kg: 0 }])}
-          >
-            ＋ Add year
+          <button className="mini" style={{ marginTop: 8 }} onClick={() => setBwHistory([...bwHistory, { year: thisYear - 1, kg: 0 }])}>
+            ＋ Add earlier year
           </button>
         </div>
       </details>
@@ -730,9 +731,9 @@ export function Settings({
           <p className="muted tiny">
             Optional. When on, finished workouts (sets, note, mood, time, avg HR, run stats) are written back to a Google
             Sheet via a small Apps Script. Off by default — the app is fully usable with local + file backup.{" "}
-            <a href="https://nobs.codecrafts.cc/sheets-setup/" target="_blank" rel="noopener noreferrer">
-              Setup guide ↗
-            </a>{" "}
+            <button className="link-inline" onClick={() => setShowSheetsGuide(true)}>
+              Setup guide
+            </button>{" "}
             (one-time, ~5 min).
           </p>
 
@@ -820,6 +821,8 @@ export function Settings({
           )}
         </div>
       </details>
+
+      {showSheetsGuide && <SheetsGuide onClose={() => setShowSheetsGuide(false)} />}
     </div>
   );
 }
