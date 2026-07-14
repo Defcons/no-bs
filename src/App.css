@@ -818,6 +818,9 @@
 /* ---- Set rows (Phase 2: clean line, 44px targets, extras behind ⋯) ---- */
 .sets {
   display: grid;
+  /* minmax(0,1fr): pin the single column to the card width so the flex row shrinks
+     to fit instead of overflowing the exercise card on narrow phones. */
+  grid-template-columns: minmax(0, 1fr);
   gap: 8px;
   margin-top: 10px;
 }
@@ -825,7 +828,8 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
+  min-width: 0;
   padding: 7px 8px;
   border: 1px solid var(--line);
   border-radius: 12px;
@@ -867,12 +871,12 @@
 .weight-group {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
   flex: 1;
   min-width: 0;
 }
 .stepper {
-  width: 38px;
+  width: 36px;
   height: 40px;
   padding: 0;
   flex: none;
@@ -918,6 +922,7 @@
 .weight-field {
   flex: 1;
   min-width: 0;
+  padding: 0 3px; /* tighter than the shared .field so the number gets the room */
 }
 .weight-field input {
   font-family: var(--display);
@@ -925,8 +930,11 @@
   font-weight: 800;
   letter-spacing: -0.01em;
 }
+.weight-field .unit {
+  padding: 0 1px;
+}
 .reps-field {
-  width: 66px;
+  width: 48px;
   flex: none;
   padding: 0 6px;
 }
@@ -936,7 +944,7 @@
   font-weight: 700;
 }
 .more-toggle {
-  width: 38px;
+  width: 30px;
   height: 40px;
   padding: 0;
   flex: none;
