@@ -10,15 +10,71 @@ function ctx(): AudioContext {
   return sharedCtx;
 }
 
-export type BreakSoundId = "beep" | "bell" | "airhorn" | "powerup" | "alarm" | "chime";
+export type BreakSoundId =
+  | "beep"
+  | "bell"
+  | "airhorn"
+  | "powerup"
+  | "alarm"
+  | "chime"
+  | "wardrums"
+  | "powerkick"
+  | "drumroll";
 export const BREAK_SOUNDS: { id: BreakSoundId; label: string }[] = [
   { id: "beep", label: "Triple beep" },
+  { id: "wardrums", label: "War drums" },
+  { id: "powerkick", label: "Power kick" },
+  { id: "drumroll", label: "Drum roll" },
   { id: "bell", label: "Boxing bell" },
   { id: "airhorn", label: "Air horn" },
   { id: "powerup", label: "Power-up" },
   { id: "alarm", label: "Urgent alarm" },
   { id: "chime", label: "Chime" },
 ];
+
+// --- Drum synthesis ---------------------------------------------------------
+// Reused white-noise buffer for the "skin slap" transient on each hit.
+let noiseBuf: AudioBuffer | null = null;
+function noiseSource(c: AudioContext): AudioBufferSourceNode {
+  if (!noiseBuf) {
+    noiseBuf = c.createBuffer(1, Math.floor(c.sampleRate * 0.25), c.sampleRate);
+    const d = noiseBuf.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+  }
+  const s = c.createBufferSource();
+  s.buffer = noiseBuf;
+  return s;
+}
+
+// One membrane drum hit: a pitch-dropping body (f0→f1) + a short filtered
+// noise burst for the attack. Higher f0/shorter dur = tight kick; lower/longer = taiko.
+function drum(c: AudioContext, t: number, f0: number, f1: number, dur: number, gain: number, noise = 0.25): void {
+  const o = c.createOscillator();
+  const g = c.createGain();
+  o.type = "sine";
+  o.connect(g);
+  g.connect(c.destination);
+  o.frequency.setValueAtTime(f0, t);
+  o.frequency.exponentialRampToValueAtTime(Math.max(20, f1), t + dur * 0.5);
+  g.gain.setValueAtTime(gain, t);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  o.start(t);
+  o.stop(t + dur + 0.02);
+  if (noise > 0) {
+    const n = noiseSource(c);
+    const ng = c.createGain();
+    const hp = c.createBiquadFilter();
+    hp.type = "highpass";
+    hp.frequency.value = 1400;
+    n.connect(hp);
+    hp.connect(ng);
+    ng.connect(c.destination);
+    ng.gain.setValueAtTime(noise, t);
+    ng.gain.exponentialRampToValueAtTime(0.0001, t + 0.05);
+    n.start(t);
+    n.stop(t + 0.07);
+  }
+}
 
 // A single enveloped tone.
 function tone(c: AudioContext, type: OscillatorType, freq: number, start: number, dur: number, gain = 0.4): void {
@@ -120,6 +176,27 @@ export function playBreakSound(id: BreakSoundId): void {
       case "chime": // pleasant descending triad
         [988, 784, 659].forEach((f, i) => tone(c, "sine", f, t + i * 0.14, 0.5, 0.32));
         break;
+      case "wardrums": // deep taiko pattern building to a final boom
+        drum(c, t + 0.0, 150, 50, 0.45, 0.5);
+        drum(c, t + 0.28, 150, 50, 0.45, 0.55);
+        drum(c, t + 0.56, 165, 55, 0.4, 0.6);
+        drum(c, t + 0.78, 190, 60, 0.9, 0.85, 0.4); // the big hit
+        break;
+      case "powerkick": // four hard electronic kicks
+        [0, 0.22, 0.44, 0.66].forEach((d, i) => drum(c, t + d, 170, 42, 0.2, i === 3 ? 0.9 : 0.7, 0.35));
+        break;
+      case "drumroll": {
+        // accelerating roll of taps into one big boom
+        let d = 0;
+        let gap = 0.11;
+        for (let i = 0; i < 12; i++) {
+          drum(c, t + d, 220, 90, 0.12, 0.35, 0.3);
+          d += gap;
+          gap *= 0.86; // speed up
+        }
+        drum(c, t + d + 0.04, 190, 55, 0.9, 0.9, 0.45); // final boom
+        break;
+      }
       case "beep":
       default: // three ascending square beeps
         [700, 900, 1100].forEach((f, i) => tone(c, "square", f, t + i * 0.28, 0.22, 0.4));
