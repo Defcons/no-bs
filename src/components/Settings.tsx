@@ -398,7 +398,7 @@ export function Settings({
 
         <div className="setting">
           <label>Weekly goal (workouts / week)</label>
-          <div className="seg">
+          <div className="seg seg-wk">
             {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((s) => (
               <button key={s} className={daysPerWeek === s ? "active" : ""} onClick={() => setDaysPerWeek(s)}>
                 {s}×

@@ -1459,6 +1459,17 @@ input[type="range"] {
   background: var(--accent);
   border-color: var(--accent);
 }
+/* Weekly goal: 10 options forced onto one equal-width row (no wrap). */
+.seg-wk {
+  flex-wrap: nowrap;
+  gap: 4px;
+}
+.seg-wk button {
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 8px 2px;
+  font-size: 13px;
+}
 .setting input.full {
   width: 100%;
   margin-bottom: 8px;
