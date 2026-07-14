@@ -167,10 +167,8 @@
   color: var(--muted);
 }
 .day-name {
-  font-family: var(--display);
-  font-size: 19px;
-  font-weight: 800;
-  letter-spacing: -0.01em;
+  font-size: 18px;
+  font-weight: 700;
 }
 .day-sub {
   color: var(--muted);
@@ -1281,9 +1279,7 @@ input[type="range"] {
   flex: none;
 }
 .cat-name {
-  font-family: var(--display);
   font-weight: 700;
-  letter-spacing: -0.01em;
   font-size: 16px;
   margin-right: auto;
 }
