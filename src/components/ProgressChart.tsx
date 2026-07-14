@@ -1,8 +1,9 @@
 // A small, dependency-free est-1RM progression chart for one lift. Line + faint
 // area fill, endpoint dot, and a one-line caption with the total change.
 import type { ProgressPoint } from "../lib/stats";
+import { type WeightUnit, fmtWeight } from "../lib/units";
 
-export function ProgressChart({ points }: { points: ProgressPoint[] }) {
+export function ProgressChart({ points, units = "kg" }: { points: ProgressPoint[]; units?: WeightUnit }) {
   if (points.length < 2) {
     return <p className="muted tiny pc-empty">Log this lift a couple more times to see your progress.</p>;
   }
@@ -30,7 +31,7 @@ export function ProgressChart({ points }: { points: ProgressPoint[] }) {
         <circle cx={x(points.length - 1)} cy={y(last)} r="3.5" className="pc-dot" />
       </svg>
       <div className="tiny muted pc-cap">
-        est-1RM · peak <b>{max.toFixed(0)} kg</b> · latest {last.toFixed(0)} kg · {points.length} sessions
+        est-1RM · peak <b>{fmtWeight(max, units)}</b> · latest {fmtWeight(last, units)} · {points.length} sessions
       </div>
     </div>
   );

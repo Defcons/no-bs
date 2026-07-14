@@ -6,6 +6,7 @@
 // The rare extras (assist reps + note) live behind a ⋯ reveal. (Phase 2 + P2 units.)
 import { type KeyboardEvent, useRef, useState } from "react";
 import type { ExerciseUnit } from "../lib/exercises";
+import { type WeightUnit, displayStep, fromDisplayWeight, toDisplayWeight, weightStr } from "../lib/units";
 import type { SetEntry } from "../types";
 
 type Props = {
@@ -13,8 +14,9 @@ type Props = {
   set: SetEntry;
   step: number; // +/- increment in kg
   unit?: ExerciseUnit; // exercise unit (default weight)
+  units?: WeightUnit; // weight display/entry unit (kg default)
   active?: boolean; // the next set to log (first not-done) — subtle outline
-  prevWeight?: number | null; // last session's weight, shown as ghost hint
+  prevWeight?: number | null; // last session's weight (kg), shown as ghost hint
   onChange: (patch: Partial<SetEntry>) => void;
 };
 
@@ -36,16 +38,21 @@ const blurOnEnter = (e: KeyboardEvent<HTMLInputElement>) => {
 
 type NumField = "weight" | "reps" | "assist" | "seconds";
 
-export function SetInput({ index, set, step, unit = "weight", active, prevWeight, onChange }: Props) {
+export function SetInput({ index, set, step, unit = "weight", units = "kg", active, prevWeight, onChange }: Props) {
   const hasExtra = !!set.note || set.assist != null;
   const [showMore, setShowMore] = useState(hasExtra);
   const done = !!set.done;
   const bodyweight = unit === "bodyweight";
   const timed = unit === "time";
+  // Weight is stored in kg; display + entry happen in the user's unit.
+  const dispStep = displayStep(step, units);
   // Only the number badge marks a set done — value edits deliberately do NOT
   // (user decision 2026-07-12): prefilled weights would otherwise green-flag
   // sets you never performed.
-  const bump = (d: number) => onChange({ weight: Math.max(0, (set.weight ?? prevWeight ?? 0) + d) });
+  const bump = (dir: number) => {
+    const curDisp = toDisplayWeight(set.weight ?? prevWeight ?? 0, units);
+    onChange({ weight: fromDisplayWeight(Math.max(0, curDisp + dir * dispStep), units) });
+  };
 
   // Tap-to-edit: clear the field on focus (so there's no highlighted text and thus
   // no Android copy/paste toolbar — just start typing the new value). If the user
@@ -82,23 +89,26 @@ export function SetInput({ index, set, step, unit = "weight", active, prevWeight
       ) : (
         <>
           <div className="weight-group">
-            <button className="stepper" aria-label="decrease" onClick={() => bump(-step)}>
+            <button className="stepper" aria-label="decrease" onClick={() => bump(-1)}>
               −
             </button>
             <div className="field weight-field">
               <input
                 type="text"
                 inputMode="decimal"
-                value={set.weight ?? ""}
-                placeholder={bodyweight ? "BW" : prevWeight != null ? String(prevWeight) : "—"}
+                value={set.weight == null ? "" : weightStr(set.weight, units)}
+                placeholder={bodyweight ? "BW" : prevWeight != null ? weightStr(prevWeight, units) : "—"}
                 onFocus={clearOnFocus("weight")}
                 onBlur={restoreOnBlur("weight")}
                 onKeyDown={blurOnEnter}
-                onChange={(e) => onChange({ weight: parseWeight(e.target.value) })}
+                onChange={(e) => {
+                  const d = parseWeight(e.target.value);
+                  onChange({ weight: d == null ? null : fromDisplayWeight(d, units) });
+                }}
               />
-              <span className="unit">{bodyweight ? "+kg" : "kg"}</span>
+              <span className="unit">{bodyweight ? `+${units}` : units}</span>
             </div>
-            <button className="stepper" aria-label="increase" onClick={() => bump(step)}>
+            <button className="stepper" aria-label="increase" onClick={() => bump(1)}>
               +
             </button>
           </div>

@@ -6,6 +6,7 @@ import { uid } from "../lib/uid";
 import { SetInput } from "./SetInput";
 import { ExerciseNameField } from "./ExerciseNameField";
 import { resolveExercise } from "../lib/exercises";
+import type { WeightUnit } from "../lib/units";
 
 type Props = {
   exercise: ExercisePerf;
@@ -14,13 +15,14 @@ type Props = {
   onChange: (ex: ExercisePerf) => void;
   onSetDone?: () => void; // set explicitly marked done via its badge (not weight edits)
   editableName?: boolean; // custom sessions: let the user name the exercise
+  units?: WeightUnit; // weight display/entry unit
   nameHistory?: string[]; // distinct past exercise names (autocomplete)
   onRemove?: () => void; // custom sessions: remove this exercise
   onMoveUp?: () => void; // reorder within this session only
   onMoveDown?: () => void;
 };
 
-export function ExerciseCard({ exercise, step, prev, onChange, onSetDone, editableName, nameHistory, onRemove, onMoveUp, onMoveDown }: Props) {
+export function ExerciseCard({ exercise, step, prev, onChange, onSetDone, editableName, units, nameHistory, onRemove, onMoveUp, onMoveDown }: Props) {
   const [showNote, setShowNote] = useState(!!exercise.note);
   const unit = resolveExercise(exercise.name, exercise.exerciseId).unit;
 
@@ -110,6 +112,7 @@ export function ExerciseCard({ exercise, step, prev, onChange, onSetDone, editab
             set={s}
             step={step}
             unit={unit}
+            units={units}
             active={i === exercise.sets.findIndex((x) => !x.done)}
             prevWeight={prev?.sets[i]?.weight ?? prev?.sets.at(-1)?.weight ?? null}
             onChange={(p) => patchSet(i, p)}

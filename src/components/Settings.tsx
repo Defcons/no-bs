@@ -17,6 +17,7 @@ import { hrAvailable } from "../lib/hr";
 import { cancelTrainingReminders, notificationsSupported, requestNotifications, scheduleTrainingReminders } from "../lib/notify";
 import { importFromSheet, pendingCount, syncEnabled, syncPending, testSync } from "../lib/sheetSync";
 import type { BwEntry, Sex } from "../lib/standards";
+import { type WeightUnit, displayStep, fromDisplayWeight, weightStr } from "../lib/units";
 import {
   BREAK_SOUNDS,
   type BreakSoundId,
@@ -69,6 +70,8 @@ type Props = {
   setAge: (v: number) => void;
   sex: Sex;
   setSex: (v: Sex) => void;
+  units: WeightUnit;
+  setUnits: (v: WeightUnit) => void;
   bwHistory: BwEntry[];
   setBwHistory: (v: BwEntry[]) => void;
   hrLowThreshold: number;
@@ -96,6 +99,8 @@ export function Settings({
   setAge,
   sex,
   setSex,
+  units,
+  setUnits,
   bwHistory,
   setBwHistory,
   hrLowThreshold,
@@ -449,11 +454,23 @@ export function Settings({
         <summary>Workout</summary>
 
         <div className="setting">
+          <label>Weight unit</label>
+          <div className="seg">
+            {(["kg", "lb"] as const).map((u) => (
+              <button key={u} className={units === u ? "active" : ""} onClick={() => setUnits(u)}>
+                {u === "kg" ? "Kilograms (kg)" : "Pounds (lb)"}
+              </button>
+            ))}
+          </div>
+          <p className="muted tiny">Weights are stored in kg and shown/entered in your unit — switching never changes your data.</p>
+        </div>
+
+        <div className="setting">
           <label>Weight step (± buttons)</label>
           <div className="seg">
             {[1.25, 2.5, 5].map((s) => (
               <button key={s} className={weightStep === s ? "active" : ""} onClick={() => setWeightStep(s)}>
-                {String(s).replace(".", ",")} kg
+                {String(displayStep(s, units)).replace(".", ",")} {units}
               </button>
             ))}
           </div>
@@ -597,14 +614,14 @@ export function Settings({
               type="text"
               inputMode="decimal"
               className="bw-input"
-              value={bodyweightKg || ""}
-              placeholder="kg"
+              value={bodyweightKg ? weightStr(bodyweightKg, units) : ""}
+              placeholder={units}
               onChange={(e) => {
                 const n = parseFloat(e.target.value.replace(",", "."));
-                setBodyweightKg(Number.isFinite(n) ? n : 0);
+                setBodyweightKg(Number.isFinite(n) ? fromDisplayWeight(n, units) : 0);
               }}
             />
-            <span className="muted">kg</span>
+            <span className="muted">{units}</span>
             <input
               type="text"
               inputMode="numeric"
@@ -647,14 +664,15 @@ export function Settings({
                 type="text"
                 inputMode="decimal"
                 className="bw-input"
-                value={e.kg || ""}
-                placeholder="kg"
+                value={e.kg ? weightStr(e.kg, units) : ""}
+                placeholder={units}
                 onChange={(ev) => {
                   const k = parseFloat(ev.target.value.replace(",", "."));
-                  setBwHistory(bwHistory.map((x, idx) => (idx === i ? { ...x, kg: Number.isFinite(k) ? k : 0 } : x)));
+                  const kg = Number.isFinite(k) ? fromDisplayWeight(k, units) : 0;
+                  setBwHistory(bwHistory.map((x, idx) => (idx === i ? { ...x, kg } : x)));
                 }}
               />
-              <span className="muted">kg</span>
+              <span className="muted">{units}</span>
               <button className="mini danger" onClick={() => setBwHistory(bwHistory.filter((_, idx) => idx !== i))}>
                 ✕
               </button>

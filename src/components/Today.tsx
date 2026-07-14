@@ -24,11 +24,13 @@ import { PipView } from "./PipView";
 import { RestTimer } from "./RestTimer";
 import { TemplateEditor } from "./TemplateEditor";
 import { FlameIcon } from "./icons";
+import type { WeightUnit } from "../lib/units";
 
 type Props = {
   templates: DayTemplate[];
   restDefaultSec: number;
   weightStep: number;
+  units: WeightUnit;
   daysPerWeek: number;
   hrLowThreshold: number;
   hr: { bpm: number | null; avg: number | null; connected: boolean; connect: () => void; supported: boolean };
@@ -44,6 +46,7 @@ export function Today({
   templates,
   restDefaultSec,
   weightStep,
+  units,
   daysPerWeek,
   hrLowThreshold,
   hr,
@@ -530,6 +533,7 @@ export function Today({
             onChange={(e) => setExercise(i, e)}
             onSetDone={autoBreakOnDone ? startRest : undefined}
             editableName={draft.custom}
+            units={units}
             nameHistory={nameHistory}
             onRemove={draft.custom ? () => removeExercise(i) : undefined}
             onMoveUp={i > 0 ? () => moveExercise(i, -1) : undefined}

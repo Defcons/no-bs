@@ -7,17 +7,20 @@ import { mmss, niceDate } from "../lib/format";
 import { type BwEntry, KEY_LIFTS, REF_BW, type Sex, adjustThresholds, bodyweightForYear, levelClass, rateLift } from "../lib/standards";
 import { type LiftRecord, hasRecord, liftRecords, progression, sessionsPerWeek, summarize, weekNumbersForLast } from "../lib/stats";
 import { MUSCLE_ORDER } from "../lib/exercises";
+import { type WeightUnit, fmtWeight, toDisplayWeight, weightStr } from "../lib/units";
 import { ProgressChart } from "./ProgressChart";
 
 export function Records({
   bodyweightKg,
   age,
   sex,
+  units,
   bwHistory,
 }: {
   bodyweightKg: number;
   age: number;
   sex: Sex;
+  units: WeightUnit;
   bwHistory: BwEntry[];
 }) {
   const currentYear = new Date().getFullYear();
@@ -53,7 +56,7 @@ export function Records({
         <Stat label="Current streak" value={`${summary.currentStreakWeeks} wk`} />
         <Stat label="Longest break" value={`${summary.longestBreakDays} d`} sub={`${niceDate(summary.longestBreakBetween[0])} → ${niceDate(summary.longestBreakBetween[1])}`} />
         <Stat label="Busiest month" value={summary.busiestMonth.month} sub={`${summary.busiestMonth.count} sessions`} />
-        <Stat label="Best est. 1RM" value={`${summary.bestE1rm.est.toFixed(0)} kg`} sub={summary.bestE1rm.name} />
+        <Stat label="Best est. 1RM" value={fmtWeight(summary.bestE1rm.est, units)} sub={summary.bestE1rm.name} />
       </div>
 
       <h3 className="section">Consistency</h3>
@@ -104,8 +107,8 @@ export function Records({
                       ))}
                     </div>
                     <div className="std-meta tiny muted">
-                      {e1rm.toFixed(0)} kg est-1RM · {r.ratio.toFixed(2)}× BW @ {bw}kg ({year})
-                      {r.next ? ` · ${Math.max(0, r.next.kg - Math.round(e1rm))} kg to ${r.next.level}` : " · Elite 🏆"}
+                      {fmtWeight(e1rm, units)} est-1RM · {r.ratio.toFixed(2)}× BW @ {fmtWeight(bw, units)} ({year})
+                      {r.next ? ` · ${fmtWeight(Math.max(0, r.next.kg - Math.round(e1rm)), units)} to ${r.next.level}` : " · Elite 🏆"}
                       {kl.note ? ` · ${kl.note}` : ""}
                     </div>
                   </div>
@@ -142,7 +145,7 @@ export function Records({
           </summary>
           <div className="records">
             {byCat[cat].map((r) => (
-              <RecordRow key={r.name} r={r} workouts={workouts} />
+              <RecordRow key={r.name} r={r} workouts={workouts} units={units} />
             ))}
           </div>
         </details>
@@ -151,7 +154,7 @@ export function Records({
   );
 }
 
-function RecordRow({ r, workouts }: { r: LiftRecord; workouts: StoredWorkout[] }) {
+function RecordRow({ r, workouts, units }: { r: LiftRecord; workouts: StoredWorkout[]; units: WeightUnit }) {
   const [open, setOpen] = useState(false);
   const isWeight = r.unit === "weight";
   const pts = useMemo(() => (open && isWeight ? progression(workouts, r.key) : []), [open, isWeight, workouts, r.key]);
@@ -181,8 +184,8 @@ function RecordRow({ r, workouts }: { r: LiftRecord; workouts: StoredWorkout[] }
               )}
               {r.maxWeight.weight > 0 && (
                 <div className="rec-metric">
-                  <div className="rec-lbl">Max +kg</div>
-                  <span className="big">{r.maxWeight.weight}<span className="rec-u"> kg</span></span>
+                  <div className="rec-lbl">Max +{units}</div>
+                  <span className="big">{weightStr(r.maxWeight.weight, units)}<span className="rec-u"> {units}</span></span>
                   <span className="muted"> ×{r.maxWeight.reps}</span>
                   <div className="tiny muted">{niceDate(r.maxWeight.date)}</div>
                 </div>
@@ -192,14 +195,14 @@ function RecordRow({ r, workouts }: { r: LiftRecord; workouts: StoredWorkout[] }
             <>
               <div className="rec-metric">
                 <div className="rec-lbl">Max</div>
-                <span className="big">{r.maxWeight.weight}<span className="rec-u"> kg</span></span>
+                <span className="big">{weightStr(r.maxWeight.weight, units)}<span className="rec-u"> {units}</span></span>
                 <span className="muted"> ×{r.maxWeight.reps}</span>
                 <div className="tiny muted">{niceDate(r.maxWeight.date)}</div>
               </div>
               {r.bestE1rm.est > 0 && (
                 <div className="rec-metric">
                   <div className="rec-lbl">Est 1RM</div>
-                  <span className="big">{r.bestE1rm.est.toFixed(0)}<span className="rec-u"> kg</span></span>
+                  <span className="big">{Math.round(toDisplayWeight(r.bestE1rm.est, units))}<span className="rec-u"> {units}</span></span>
                   <div className="tiny muted">{niceDate(r.bestE1rm.date)}</div>
                 </div>
               )}
@@ -207,7 +210,7 @@ function RecordRow({ r, workouts }: { r: LiftRecord; workouts: StoredWorkout[] }
           )}
         </div>
       </button>
-      {open && isWeight && <ProgressChart points={pts} />}
+      {open && isWeight && <ProgressChart points={pts} units={units} />}
     </div>
   );
 }

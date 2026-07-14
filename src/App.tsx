@@ -3,6 +3,7 @@ import { useLiveQuery } from "dexie-react-hooks";
 import "./App.css";
 import { db, ensureBootstrapped, getSetting, listExercises, setSetting, type StoredWorkout } from "./db";
 import { registerCustomExercises } from "./lib/exercises";
+import type { WeightUnit } from "./lib/units";
 import { daysAgo } from "./lib/format";
 import { type HrMonitor, createHrMonitor, hrAvailable } from "./lib/hr";
 import { Capacitor } from "@capacitor/core";
@@ -87,6 +88,7 @@ export default function App() {
   const [bodyweightKg, setBw] = useState(0); // 0 = not set
   const [age, setAge] = useState(0); // 0 = not set
   const [sex, setSex] = useState<Sex>("male"); // strength-standard tables
+  const [units, setUnits] = useState<WeightUnit>("kg"); // weight display/entry unit
   const [bwHistory, setBwH] = useState<BwEntry[]>([]);
   const [hrLowThreshold, setHrLow] = useState(80);
   const [floatMode, setFloatMode] = useState<"pip" | "off">("pip");
@@ -160,6 +162,7 @@ export default function App() {
       setBw(await getSetting("bodyweightKg", 0));
       setAge(await getSetting("age", 0));
       setSex(await getSetting<Sex>("sex", "male"));
+      setUnits(await getSetting<WeightUnit>("units", "kg"));
       setBwH(await getSetting<BwEntry[]>("bwHistory", []));
       setHrLow(await getSetting("hrLowThreshold", 80));
       // Coerce the removed "overlay" mode back to PiP for anyone who tried it.
@@ -261,6 +264,10 @@ export default function App() {
     setSex(v);
     setSetting("sex", v);
   };
+  const persistUnits = (v: WeightUnit) => {
+    setUnits(v);
+    setSetting("units", v);
+  };
   const persistHrLow = (v: number) => {
     setHrLow(v);
     setSetting("hrLowThreshold", v);
@@ -344,6 +351,7 @@ export default function App() {
           templates={templates}
           restDefaultSec={restDefaultSec}
           weightStep={weightStep}
+          units={units}
           daysPerWeek={daysPerWeek}
           hrLowThreshold={hrLowThreshold}
           hr={hr}
@@ -376,11 +384,12 @@ export default function App() {
             setPendingEdit(w);
             go("today");
           }}
+          units={units}
         />
       </div>
 
       <div className="tabpanel" hidden={tab !== "records"} ref={(el) => { panelRefs.current.records = el; }}>
-        <Records bodyweightKg={bodyweightKg} age={age} sex={sex} bwHistory={bwHistory} />
+        <Records bodyweightKg={bodyweightKg} age={age} sex={sex} units={units} bwHistory={bwHistory} />
       </div>
 
       <div className="tabpanel" hidden={tab !== "settings"} ref={(el) => { panelRefs.current.settings = el; }}>
@@ -397,6 +406,8 @@ export default function App() {
           setAge={persistAge}
           sex={sex}
           setSex={persistSex}
+          units={units}
+          setUnits={persistUnits}
           bwHistory={bwHistory}
           setBwHistory={persistBwHistory}
           hrLowThreshold={hrLowThreshold}

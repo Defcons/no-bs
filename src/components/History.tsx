@@ -6,6 +6,7 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { db, type StoredWorkout } from "../db";
 import { daysAgoLabel, hhmmss, niceDate } from "../lib/format";
 import { computeRun, fmtDist, fmtPace } from "../lib/runStats";
+import { type WeightUnit, weightStr } from "../lib/units";
 // Lazy so Leaflet (+CSS) only loads when a run's map is actually shown.
 const RunMap = lazy(() => import("./RunMap").then((m) => ({ default: m.RunMap })));
 
@@ -41,7 +42,7 @@ function groupLabel(key: string, by: GroupBy): string {
   return `Week of ${niceDate(key)}`;
 }
 
-export function History({ onEdit }: { onEdit: (w: StoredWorkout) => void }) {
+export function History({ onEdit, units }: { onEdit: (w: StoredWorkout) => void; units: WeightUnit }) {
   const workouts = useLiveQuery(() => db.workouts.orderBy("date").reverse().toArray(), []);
   const [openId, setOpenId] = useState<number | null>(null);
   const [groupBy, setGroupBy] = useState<GroupBy>("month");
@@ -154,6 +155,7 @@ export function History({ onEdit }: { onEdit: (w: StoredWorkout) => void }) {
                   open={openId === w.id}
                   onToggle={() => setOpenId(openId === w.id ? null : w.id!)}
                   onEdit={onEdit}
+                  units={units}
                 />
               ))}
             </div>
@@ -169,11 +171,13 @@ function LogRow({
   open,
   onToggle,
   onEdit,
+  units,
 }: {
   w: StoredWorkout;
   open: boolean;
   onToggle: () => void;
   onEdit: (w: StoredWorkout) => void;
+  units: WeightUnit;
 }) {
   const nSets = setsOf(w);
   return (
@@ -202,7 +206,7 @@ function LogRow({
                 <span className="log-ex-sets">
                   {sets.length
                     ? sets
-                        .map((s) => `${s.weight}${s.reps ? `×${s.reps}` : ""}${s.assist != null ? `(${s.assist})` : ""}`)
+                        .map((s) => `${weightStr(s.weight as number, units)}${s.reps ? `×${s.reps}` : ""}${s.assist != null ? `(${s.assist})` : ""}`)
                         .join(" · ")
                     : e.skipped
                       ? "skipped"
