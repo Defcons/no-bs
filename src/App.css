@@ -1330,6 +1330,11 @@ input[type="range"] {
   -webkit-mask-image: url(/icons/bicep.png);
   mask-image: url(/icons/bicep.png);
 }
+/* Per-muscle icon in the "Records by muscle" summary (mask-image + colour set inline). */
+.cat-icon {
+  width: 26px;
+  height: 26px;
+}
 .cat-count {
   font-size: 12px;
   font-weight: 700;

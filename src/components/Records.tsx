@@ -121,7 +121,19 @@ export function Records({
       {MUSCLE_ORDER.filter((cat) => byCat[cat]?.length).map((cat) => (
         <details key={cat} className="cat">
           <summary>
-            <span className="cat-dot" style={{ background: MUSCLE_COLOR[cat] ?? "var(--muted)" }} />
+            {MUSCLE_ICON[cat] ? (
+              <span
+                className="mask-icon cat-icon"
+                aria-hidden="true"
+                style={{
+                  maskImage: `url(/icons/${MUSCLE_ICON[cat]}.png)`,
+                  WebkitMaskImage: `url(/icons/${MUSCLE_ICON[cat]}.png)`,
+                  backgroundColor: MUSCLE_COLOR[cat] ?? "var(--muted)",
+                }}
+              />
+            ) : (
+              <span className="cat-dot" style={{ background: MUSCLE_COLOR[cat] ?? "var(--muted)" }} />
+            )}
             <span className="cat-name">{cat}</span>
             <span className="cat-count">{byCat[cat].length}</span>
           </summary>
@@ -165,7 +177,7 @@ function RecordRow({ r, workouts }: { r: LiftRecord; workouts: StoredWorkout[] }
   );
 }
 
-// Muted per-muscle hues for quick scanning (dots only — the accent stays molten).
+// Per-muscle hues for quick scanning (also tints the muscle icon). Accent stays molten.
 const MUSCLE_COLOR: Record<string, string> = {
   Chest: "#e8695b",
   Back: "#5b8def",
@@ -173,6 +185,15 @@ const MUSCLE_COLOR: Record<string, string> = {
   Legs: "#46b98a",
   Arms: "#b57be0",
   Core: "#e06a9e",
+};
+// Muscle-group icons (public/icons/*.png, tinted via CSS mask). "Other" → dot fallback.
+const MUSCLE_ICON: Record<string, string> = {
+  Chest: "chest",
+  Back: "back",
+  Shoulder: "shoulder",
+  Legs: "legs",
+  Arms: "bicep",
+  Core: "core",
 };
 
 // Year × month heatmap: rows = years (newest first), cells shaded by session count
