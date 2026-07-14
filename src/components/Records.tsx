@@ -7,7 +7,6 @@ import { niceDate } from "../lib/format";
 import { type BwEntry, KEY_LIFTS, adjustThresholds, bodyweightForYear, levelClass, rateLift } from "../lib/standards";
 import { type LiftRecord, MUSCLE_ORDER, liftRecords, muscleGroup, progression, sessionsPerWeek, summarize, weekNumbersForLast } from "../lib/stats";
 import { ProgressChart } from "./ProgressChart";
-import { DumbbellIcon } from "./icons";
 
 export function Records({
   bodyweightKg,
@@ -72,7 +71,7 @@ export function Records({
 
       <details className="cat rec-standards">
         <summary>
-          <span className="cat-name"><DumbbellIcon /> Strength standards</span>
+          <span className="cat-name"><span className="mask-icon bicep" aria-hidden="true" /> Strength standards</span>
           <span className="tiny muted">key lifts vs standards</span>
         </summary>
         <div className="rec-standards-body">

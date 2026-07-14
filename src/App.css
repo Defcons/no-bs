@@ -1309,6 +1309,27 @@ input[type="range"] {
 .cat-name svg {
   font-size: 20px;
 }
+/* Tintable raster icon: a monochrome PNG masked to currentColor (works on both
+   themes; the black source PNG would otherwise be invisible in dark mode). */
+.mask-icon {
+  display: inline-block;
+  width: 1em;
+  height: 1em;
+  flex: none;
+  background-color: currentColor;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
+  -webkit-mask-size: contain;
+  mask-size: contain;
+}
+.mask-icon.bicep {
+  width: 24px;
+  height: 24px;
+  -webkit-mask-image: url(/icons/bicep.png);
+  mask-image: url(/icons/bicep.png);
+}
 .cat-count {
   font-size: 12px;
   font-weight: 700;
