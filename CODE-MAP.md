@@ -2,7 +2,12 @@
 
 **NoBS – Workout Log**: a No-BS gym app — installable PWA + native Android (Capacitor), local-first (IndexedDB via Dexie). Landing page at nobs.codecrafts.cc. See `project_gym_tracker` / `reference_gym_sheet` in memory. NOTE: internal Android appId (`no.defc0n.gymtracker`), the homelab deploy path (`/apps/gym-tracker`), container name, and OTA/app backend migrated to app.codecrafts.cc (2026-07-07, off gym.defc0n.no); the Android appId `no.defc0n.gymtracker` + deploy path `/apps/gym-tracker` stay old (invisible; changing them wipes installed-app data).
 
-_Last verified: 2026-07-13_
+_Last verified: 2026-07-14_
+
+## Design system — "Molten" (Phase 1, 2026-07-14)
+- **Tokens live in `src/index.css`** as CSS vars on `:root` (dark = default) + `:root[data-theme="light"]`; components read the vars so both themes stay in sync. Identity: **`--accent` = molten orange `#ff5a2c`** (primary/interactive — do NOT reuse blue), **`--accent-2` = success green (semantic only)**, **`--volt` = gold `#ffd23f` reserved for celebratory moments (PR/GO) — use sparingly**, `--danger`/`--warn` semantic. Also: spacing scale `--s1..--s6` (4px base), `--radius`/`--radius-sm`, `--ctl-h` (44px) — defined for Phases 2–3, not yet applied everywhere.
+- **`--display` = Archivo Variable**, bundled self-hosted via `@fontsource-variable/archivo` (imported in `main.tsx`; NO CDN — CSP/offline). The side-effect import needs `src/fontsource.d.ts` (`declare module …`) or `tsc -b` fails. Applied to headings + hero numbers (`.wb-timer`, `.stat-value`, `.record-nums .big`, `.weight-field input`, `.num`) with `font-variant-numeric: tabular-nums`.
+- Roadmap: Phase 1 done (tokens+type). Next: P2 set-row + day-card redesign (mocks in the UX-audit artifact), P3 unified buttons/switches, P4 Records polish + PR/GO volt moments + copy ("2021-03"→"March 2021"). All OTA. Open nit: exercise names currently render in `--accent` (a lot of orange) — plan to revert to `--text` in P2.
 
 ## App shell / tabs / PiP (2026-07-13)
 - **All four tab panels stay mounted** (App.tsx `.tabpanel` divs, `hidden` toggled) — Today MUST stay mounted so its workout/PiP/HR/geofence effects keep running when you're on another tab. Each panel is its own scroll container; `go(tab)` saves scrollTop, a `useLayoutEffect` restores it → per-tab scroll memory.
