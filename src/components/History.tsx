@@ -4,8 +4,9 @@
 import { Suspense, lazy, useMemo, useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db, type StoredWorkout } from "../db";
-import { daysAgoLabel, hhmmss, niceDate } from "../lib/format";
+import { daysAgoLabel, hhmmss, mmss, niceDate } from "../lib/format";
 import { computeRun, fmtDist, fmtPace } from "../lib/runStats";
+import { resolveExercise } from "../lib/exercises";
 import { type WeightUnit, weightStr } from "../lib/units";
 // Lazy so Leaflet (+CSS) only loads when a run's map is actually shown.
 const RunMap = lazy(() => import("./RunMap").then((m) => ({ default: m.RunMap })));
@@ -17,7 +18,8 @@ const MONTHS = [
   "July", "August", "September", "October", "November", "December",
 ];
 
-const setsOf = (w: StoredWorkout) => w.exercises.reduce((a, e) => a + e.sets.filter((s) => s.weight != null).length, 0);
+const setsOf = (w: StoredWorkout) =>
+  w.exercises.reduce((a, e) => a + e.sets.filter((s) => s.weight != null || s.reps != null || s.seconds != null).length, 0);
 
 // Monday-anchored key ("YYYY-MM-DD") for the week a date falls in — built from
 // local Y/M/D parts to avoid UTC-parse drift.
@@ -199,18 +201,22 @@ function LogRow({
           {w.track && w.track.length >= 2 && <RunDetail track={w.track} />}
           {w.note && <div className="log-note">📝 {w.note}</div>}
           {w.exercises.map((e, i) => {
-            const sets = e.sets.filter((s) => s.weight != null);
+            const unit = resolveExercise(e.name, e.exerciseId).unit;
+            const fmt = (s: (typeof e.sets)[number]) => {
+              if (unit === "time") return s.seconds != null ? mmss(s.seconds) : "";
+              const a = s.assist != null ? `(${s.assist})` : "";
+              if (unit === "bodyweight") {
+                if (s.reps != null) return `${s.weight != null ? `+${weightStr(s.weight, units)}×` : ""}${s.reps}${a}`;
+                return s.weight != null ? `+${weightStr(s.weight, units)}` : "";
+              }
+              return s.weight != null ? `${weightStr(s.weight, units)}${s.reps ? `×${s.reps}` : ""}${a}` : "";
+            };
+            const sets = e.sets.filter((s) => (unit === "time" ? s.seconds != null : s.weight != null || s.reps != null));
             return (
               <div key={i} className="log-ex">
                 <span className="log-ex-name">{e.name}</span>
                 <span className="log-ex-sets">
-                  {sets.length
-                    ? sets
-                        .map((s) => `${weightStr(s.weight as number, units)}${s.reps ? `×${s.reps}` : ""}${s.assist != null ? `(${s.assist})` : ""}`)
-                        .join(" · ")
-                    : e.skipped
-                      ? "skipped"
-                      : "—"}
+                  {sets.length ? sets.map(fmt).filter(Boolean).join(" · ") : e.skipped ? "skipped" : "—"}
                 </span>
               </div>
             );

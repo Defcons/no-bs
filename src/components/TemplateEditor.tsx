@@ -5,11 +5,12 @@ import { useEffect, useState } from "react";
 import { db, distinctExerciseNames } from "../db";
 import type { DayTemplate, Scheme } from "../types";
 import { uid } from "../lib/uid";
+import { type WeightUnit, fromDisplayWeight, toDisplayWeight } from "../lib/units";
 import { ExerciseNameField } from "./ExerciseNameField";
 
 type ExRow = { id: string; name: string; exerciseId?: string; sets: string; reps: string; step: string };
 
-function toRows(t: DayTemplate): ExRow[] {
+function toRows(t: DayTemplate, units: WeightUnit): ExRow[] {
   if (!t.exercises.length) return [{ id: uid(), name: "", sets: "3", reps: "8", step: "" }];
   return t.exercises.map((e) => ({
     id: uid(),
@@ -17,14 +18,14 @@ function toRows(t: DayTemplate): ExRow[] {
     exerciseId: e.exerciseId,
     sets: e.scheme.sets == null ? "" : String(e.scheme.sets),
     reps: e.scheme.reps == null ? "" : String(e.scheme.reps),
-    step: e.step == null ? "" : String(e.step).replace(".", ","),
+    step: e.step == null ? "" : String(toDisplayWeight(e.step, units)).replace(".", ","),
   }));
 }
 
-// "2,5" / "2.5" → 2.5; blank/invalid → undefined (use the Settings default).
-function parseStep(s: string): number | undefined {
+// A step entered in the user's unit → kg to store; blank/invalid → undefined.
+function parseStepKg(s: string, units: WeightUnit): number | undefined {
   const n = parseFloat(s.replace(",", ".").trim());
-  return Number.isFinite(n) && n > 0 ? n : undefined;
+  return Number.isFinite(n) && n > 0 ? fromDisplayWeight(n, units) : undefined;
 }
 
 function parseScheme(sets: string, reps: string): Scheme {
@@ -33,9 +34,9 @@ function parseScheme(sets: string, reps: string): Scheme {
   return { sets: Number.isFinite(s) ? s : null, reps: r };
 }
 
-export function TemplateEditor({ template, onClose }: { template: DayTemplate; onClose: () => void }) {
+export function TemplateEditor({ template, units, onClose }: { template: DayTemplate; units: WeightUnit; onClose: () => void }) {
   const [name, setName] = useState(template.name);
-  const [rows, setRows] = useState<ExRow[]>(toRows(template));
+  const [rows, setRows] = useState<ExRow[]>(toRows(template, units));
   const [history, setHistory] = useState<string[]>([]);
   const isNew = template.id == null;
 
@@ -60,7 +61,7 @@ export function TemplateEditor({ template, onClose }: { template: DayTemplate; o
   const save = async () => {
     const exercises = rows
       .filter((r) => r.name.trim())
-      .map((r) => ({ name: r.name.trim(), exerciseId: r.exerciseId, scheme: parseScheme(r.sets, r.reps), step: parseStep(r.step) }));
+      .map((r) => ({ name: r.name.trim(), exerciseId: r.exerciseId, scheme: parseScheme(r.sets, r.reps), step: parseStepKg(r.step, units) }));
     const cleanName = name.trim() || "Workout";
     if (isNew) {
       const last = await db.templates.orderBy("order").last();
@@ -97,7 +98,7 @@ export function TemplateEditor({ template, onClose }: { template: DayTemplate; o
         <div className="edit-body">
           <div className="tmpl-cols tiny muted">
             <span>Exercise</span>
-            <span>Sets × Reps · ±kg</span>
+            <span>Sets × Reps · ±{units}</span>
           </div>
           {rows.map((r, i) => (
             <div key={r.id} className="tmpl-row">
@@ -129,7 +130,7 @@ export function TemplateEditor({ template, onClose }: { template: DayTemplate; o
                 type="text"
                 inputMode="decimal"
                 value={r.step}
-                placeholder="±kg"
+                placeholder={`±${units}`}
                 title="Weight step for this exercise (blank = Settings default)"
                 onChange={(e) => setRow(r.id, { step: e.target.value })}
               />
@@ -148,7 +149,7 @@ export function TemplateEditor({ template, onClose }: { template: DayTemplate; o
             ＋ Add exercise
           </button>
           <p className="muted tiny" style={{ marginTop: 10 }}>
-            Reps can be a number or “Max”. <b>±kg</b> sets this exercise's +/- button step — leave blank to use the
+            Reps can be a number or “Max”. <b>±{units}</b> sets this exercise's +/- button step — leave blank to use the
             default from Settings. New sets start from last time's weight.
           </p>
         </div>

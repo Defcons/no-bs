@@ -403,7 +403,7 @@ export function Today({
             </div>
           </button>
         </div>
-        {editTpl && <TemplateEditor template={editTpl} onClose={() => setEditTpl(null)} />}
+        {editTpl && <TemplateEditor template={editTpl} units={units} onClose={() => setEditTpl(null)} />}
       </div>
     );
   }
