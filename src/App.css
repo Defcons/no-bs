@@ -514,38 +514,39 @@
   color: var(--muted);
   font-weight: 400;
 }
-.tools-toggle {
-  display: block;
-  margin: 8px 16px 0;
-  width: calc(100% - 32px);
-  background: none;
-  border: 1px dashed var(--line);
-  color: var(--muted);
-  font-size: 13px;
-  padding: 8px;
-}
-.sw-bar {
-  display: flex;
+/* Header tool buttons (stopwatch + mood) — neutral icons so the accent break
+   button stays the visual primary. */
+.tool-btn {
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  display: inline-flex;
   align-items: center;
-  gap: 8px;
-  margin: 10px 16px 0;
-  padding: 8px 12px;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: 12px;
-}
-.sw-label {
-  font-size: 13px;
+  justify-content: center;
   color: var(--muted);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
 }
-.sw-time {
-  font-variant-numeric: tabular-nums;
-  font-size: 20px;
-  font-weight: 700;
-  margin-right: auto;
+.tool-btn svg {
+  width: 21px;
+  height: 21px;
 }
-.sw-bar .mini {
-  padding: 8px 9px;
+.tool-btn.set {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--line));
+}
+/* Big stopwatch readout inside its sheet. */
+.sw-modal-time {
+  font-size: 46px;
+  line-height: 1.1;
+  text-align: center;
+  margin: 6px 0 14px;
+}
+/* Full-width close for the header tool sheets. */
+.sheet-done {
+  width: 100%;
+  margin-top: 14px;
+  background: var(--surface-2);
 }
 
 /* ---- Rest timer ---- */

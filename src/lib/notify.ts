@@ -95,6 +95,59 @@ export async function showReminder(title: string, body: string): Promise<void> {
   }
 }
 
+// Auto-ended workouts (left the gym / lost HR) save silently while the app is
+// backgrounded, so the user never got the chance to rate their mood. Fire a
+// notification; if mood is still missing, tag it with the saved workout id so a
+// tap can open the mood-logging modal for that session (see onNotificationTap).
+const AUTOEND_NOTIF_ID = 7201;
+export async function showAutoEndNotification(
+  reason: "left" | "hr",
+  workoutId: number | undefined,
+  moodIncomplete: boolean,
+): Promise<void> {
+  const why = reason === "left" ? "You left the gym" : "Your heart-rate signal dropped";
+  const body = moodIncomplete
+    ? `${why} — session saved. Tap to log how it felt.`
+    : `${why} — session saved.`;
+  if (native()) {
+    try {
+      await ensureRestChannel();
+      await LocalNotifications.schedule({
+        notifications: [
+          {
+            id: AUTOEND_NOTIF_ID,
+            title: "Workout auto-saved 💾",
+            body,
+            channelId: REMINDER_CHANNEL,
+            // extra rides along to localNotificationActionPerformed on tap.
+            extra: moodIncomplete && workoutId != null ? { logMood: workoutId } : undefined,
+          },
+        ],
+      });
+    } catch {
+      /* permission not granted */
+    }
+    return;
+  }
+  // Web fallback: informative only (SW notification taps don't route to the modal).
+  showReminder("Workout auto-saved 💾", body);
+}
+
+// Native only: wire a tap on the auto-end notification to a callback with the
+// saved workout id (from the notification's `extra.logMood`). Pure-JS listener on
+// the already-registered plugin — ships OTA, no native change. Best-effort on a
+// cold start (the event may fire before the listener attaches).
+export function onNotificationTap(cb: (workoutId: number) => void): () => void {
+  if (!native()) return () => {};
+  const handle = LocalNotifications.addListener("localNotificationActionPerformed", (action) => {
+    const id = action.notification?.extra?.logMood;
+    if (typeof id === "number") cb(id);
+  });
+  return () => {
+    handle.then((h) => h.remove()).catch(() => {});
+  };
+}
+
 // Native only: schedule the "rest over" notification for the exact end time so it
 // fires even if the app is in the background. (The web build relies on the in-app
 // timer + SW notification.)

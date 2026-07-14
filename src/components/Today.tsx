@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { getSetting, lastWorkoutForDay, type StoredWorkout } from "../db";
 import { daysAgo, daysAgoLabel, hhmmss, mmss, niceDate } from "../lib/format";
-import { cancelBreakNotification, scheduleBreakNotification, showReminder } from "../lib/notify";
+import { cancelBreakNotification, scheduleBreakNotification, showAutoEndNotification, showReminder } from "../lib/notify";
 import { startGeofence, stopGeofence } from "../lib/geofence";
 import { exitPip, isInPip, onPipChange, setPipAutoEnter } from "../lib/pip";
 import { onMediaButton, onVolumeKey, setMediaButtonCapture, setVolumeCapture } from "../lib/hwButtons";
@@ -18,6 +18,7 @@ import { cadenceStatus, trainingDue } from "../lib/stats";
 import { useActiveWorkout } from "../lib/useActiveWorkout";
 import type { DayTemplate, ExercisePerf } from "../types";
 import { ExerciseCard } from "./ExerciseCard";
+import { MoodSlider } from "./MoodSlider";
 import { PipView } from "./PipView";
 import { RestTimer } from "./RestTimer";
 import { TemplateEditor } from "./TemplateEditor";
@@ -69,7 +70,7 @@ export function Today({
   } = useActiveWorkout();
   const [hrPrompt, setHrPrompt] = useState(false);
   const [hrPromptLeft, setHrPromptLeft] = useState(0);
-  const [showTools, setShowTools] = useState(false);
+  const [sheet, setSheet] = useState<null | "stopwatch" | "mood">(null); // header tool sheets
   const [finishAsk, setFinishAsk] = useState(false);
   const [pipMode, setPipMode] = useState(false);
   const [editTpl, setEditTpl] = useState<DayTemplate | null>(null); // workout being created/edited
@@ -161,13 +162,15 @@ export function Today({
   // `auto` = ended by a watchdog (left the gym / HR strap off), not a manual tap.
   // An auto-end logs duration up to the last logged set (draft.lastActivityAt),
   // not "now", and closes any lingering PiP window.
-  const finishNow = async (auto = false) => {
+  const finishNow = async (auto = false, reason: "left" | "hr" = "hr") => {
     if (finishingRef.current) return;
     finishingRef.current = true;
     try {
       cancelBreakNotification(); // no "Rest over!" minutes after the workout ended
       const track = draft?.trackGps ? await stopTracking() : undefined;
       const endedAt = auto ? draft?.lastActivityAt : undefined;
+      // Capture whether mood still needs logging BEFORE finish() clears the draft.
+      const moodIncomplete = draft ? draft.moodBefore == null || draft.moodAfter == null : false;
       const row = await finish(getHrStats(), track && track.length >= 2 ? { track } : undefined, { endedAt });
       if (row && !row.edited) {
         // Edits update the local record only — re-syncing would append a new column.
@@ -175,6 +178,9 @@ export function Today({
         if (res && !res.ok && !auto) {
           alert(`Saved locally, but Google Sheet sync failed:\n${res.error}\n\nRetry from Settings → Sync now.`);
         }
+        // Auto-ended in the background → tell the user + offer to log the mood they
+        // couldn't rate (tapping the notification opens MoodLogModal for this row).
+        if (auto) showAutoEndNotification(reason, row.id, moodIncomplete);
       }
       setHrPrompt(false);
       setFinishAsk(false);
@@ -195,8 +201,8 @@ export function Today({
     else finishNow(false);
   };
   // Watchdogs call this (auto-end); manual paths call finishNow(false) directly.
-  const finishRef = useRef<() => void>(() => {});
-  finishRef.current = () => finishNow(true);
+  const finishRef = useRef<(reason?: "left" | "hr") => void>(() => {});
+  finishRef.current = (reason = "hr") => finishNow(true, reason);
 
   // Track HR availability for the drop-out auto-finish.
   useEffect(() => {
@@ -269,8 +275,9 @@ export function Today({
     let active = true;
     startGeofence(() => {
       if (!active) return;
-      showReminder("Workout saved 💾", "You left the workout area, so I finished and saved your session.");
-      finishRef.current();
+      // The auto-save notification (fired from finishNow) explains the reason and
+      // offers mood logging — no separate "saved" reminder needed here.
+      finishRef.current("left");
     });
     return () => {
       active = false;
@@ -457,6 +464,26 @@ export function Today({
               {hr.avg != null && <span className="hr-avg">avg {hr.avg}</span>}
             </span>
           </button>
+          <button className="tool-btn" onClick={() => setSheet("stopwatch")} aria-label="Stopwatch" title="Stopwatch">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M9.5 2.5h5" />
+              <path d="M12 2.5V5" />
+              <circle cx="12" cy="13.5" r="7.5" />
+              <path d="M12 13.5V9.5" />
+            </svg>
+          </button>
+          <button
+            className={`tool-btn ${draft.moodBefore != null && draft.moodAfter != null ? "set" : ""}`}
+            onClick={() => setSheet("mood")}
+            aria-label="Rate how you feel"
+            title="How you feel"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="9" />
+              <path d="M8.5 14.5s1.3 1.7 3.5 1.7 3.5-1.7 3.5-1.7" />
+              <path d="M9 9.5h.01M15 9.5h.01" />
+            </svg>
+          </button>
           <button className="break-btn" onClick={startRest} aria-label="Start rest timer" title="Rest timer">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
               <path d="M6 3.4h12M6 20.6h12" />
@@ -469,32 +496,6 @@ export function Today({
       </header>
 
       <RestTimer endsAt={draft.restEndsAt ?? null} onChange={setRest} />
-
-      <button className="tools-toggle" onClick={() => setShowTools((v) => !v)}>
-        {showTools ? "▴ Hide stopwatch & sliders" : "▾ Stopwatch & Sliders"}
-      </button>
-
-      {showTools && (
-        <>
-          <div className="sw-bar">
-            <span className="sw-label">⏱ Stopwatch</span>
-            <span className="sw-time">{mmss(swElapsed)}</span>
-            <button className="mini" onClick={toggleStopwatch}>
-              {draft.swRunning ? "⏸ Pause" : "▶ Start"}
-            </button>
-            <button className="mini" onClick={resetStopwatch}>
-              ↺ Reset
-            </button>
-          </div>
-          <div className="pad">
-            <MoodSlider
-              label="Feeling before"
-              value={draft.moodBefore}
-              onChange={(v) => update((d) => ({ ...d, moodBefore: v }))}
-            />
-          </div>
-        </>
-      )}
 
       {draft.custom && native && (
         <div className="pad gps-toggle-row">
@@ -536,14 +537,7 @@ export function Today({
       </div>
 
       <div className="pad">
-        <MoodSlider
-          label="Feeling after"
-          value={draft.moodAfter}
-          onChange={(v) => update((d) => ({ ...d, moodAfter: v }))}
-        />
-        <label className="field-label" style={{ marginTop: 12 }}>
-          Day note
-        </label>
+        <label className="field-label">Day note</label>
         <textarea
           className="day-note"
           value={draft.note ?? ""}
@@ -565,6 +559,41 @@ export function Today({
           Finish workout
         </button>
       </div>
+
+      {sheet === "stopwatch" && (
+        <div className="hr-modal-backdrop" onClick={() => setSheet(null)}>
+          <div className="hr-modal" onClick={(e) => e.stopPropagation()}>
+            <h3>Stopwatch</h3>
+            <p className="muted tiny">Keeps running in the background — for timed holds, planks, or cardio.</p>
+            <div className="sw-modal-time num">{mmss(swElapsed)}</div>
+            <div className="row">
+              <button className="primary" onClick={toggleStopwatch}>
+                {draft.swRunning ? "⏸ Pause" : "▶ Start"}
+              </button>
+              <button className="ghost" onClick={resetStopwatch}>
+                ↺ Reset
+              </button>
+            </div>
+            <button className="sheet-done" onClick={() => setSheet(null)}>
+              Done
+            </button>
+          </div>
+        </div>
+      )}
+
+      {sheet === "mood" && (
+        <div className="hr-modal-backdrop" onClick={() => setSheet(null)}>
+          <div className="hr-modal" onClick={(e) => e.stopPropagation()}>
+            <h3>How's the session?</h3>
+            <p className="muted tiny">Rate how you feel before you start and after you finish.</p>
+            <MoodSlider label="Feeling before" value={draft.moodBefore} onChange={(v) => update((d) => ({ ...d, moodBefore: v }))} />
+            <MoodSlider label="Feeling after" value={draft.moodAfter} onChange={(v) => update((d) => ({ ...d, moodAfter: v }))} />
+            <button className="sheet-done" onClick={() => setSheet(null)}>
+              Done
+            </button>
+          </div>
+        </div>
+      )}
 
       {hrPrompt && (
         <div className="hr-modal-backdrop">
@@ -633,25 +662,6 @@ export function Today({
           />,
           document.body,
         )}
-    </div>
-  );
-}
-
-function MoodSlider({ label, value, onChange }: { label: string; value?: number; onChange: (v: number) => void }) {
-  return (
-    <div className="mood">
-      <div className="mood-head">
-        <span className="field-label">{label}</span>
-        <span className="mood-val">{value ? `${value}/10` : "—"}</span>
-      </div>
-      <input
-        type="range"
-        min={1}
-        max={10}
-        step={1}
-        value={value ?? 5}
-        onChange={(e) => onChange(parseInt(e.target.value, 10))}
-      />
     </div>
   );
 }

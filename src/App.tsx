@@ -5,7 +5,7 @@ import { db, ensureBootstrapped, getSetting, setSetting, type StoredWorkout } fr
 import { daysAgo } from "./lib/format";
 import { type HrMonitor, createHrMonitor, hrAvailable } from "./lib/hr";
 import { Capacitor } from "@capacitor/core";
-import { notificationsAllowed, requestNotifications, scheduleTrainingReminders, showReminder } from "./lib/notify";
+import { notificationsAllowed, onNotificationTap, requestNotifications, scheduleTrainingReminders, showReminder } from "./lib/notify";
 import { markAppReady } from "./lib/update";
 import { setKeepAwake } from "./lib/pip";
 import { saveFile } from "./lib/download";
@@ -18,6 +18,7 @@ import { Records } from "./components/Records";
 const RouteViewer = lazy(() => import("./components/RouteViewer").then((m) => ({ default: m.RouteViewer })));
 import { Settings } from "./components/Settings";
 import { Today } from "./components/Today";
+import { MoodLogModal } from "./components/MoodLogModal";
 
 type Tab = "today" | "history" | "records" | "settings";
 
@@ -53,6 +54,7 @@ export default function App() {
   const [tab, setTab] = useState<Tab>(updatedVersion ? "settings" : "today");
   const [routeHash, setRouteHash] = useState<string | null>(() => readRouteHash());
   const [pendingEdit, setPendingEdit] = useState<StoredWorkout | null>(null); // History → edit in Today
+  const [moodLogId, setMoodLogId] = useState<number | null>(null); // auto-end notification tap → log mood
 
   // All four tab panels stay mounted (Today MUST, so its workout/PiP/HR logic keeps
   // running when you're on another tab); we just toggle visibility. That also lets
@@ -129,6 +131,10 @@ export default function App() {
       }
     }
   }, [updatedVersion]);
+
+  // Tapping the "workout auto-saved" notification opens the mood-logging modal for
+  // that saved session (native; best-effort on a cold start).
+  useEffect(() => onNotificationTap(setMoodLogId), []);
 
   useEffect(() => {
     (async () => {
@@ -403,6 +409,8 @@ export default function App() {
           <span className="ico">⚙️</span>Settings
         </button>
       </nav>
+
+      {moodLogId != null && <MoodLogModal workoutId={moodLogId} onClose={() => setMoodLogId(null)} />}
     </div>
   );
 }
