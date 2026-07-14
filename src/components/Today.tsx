@@ -22,6 +22,7 @@ import { MoodSlider } from "./MoodSlider";
 import { PipView } from "./PipView";
 import { RestTimer } from "./RestTimer";
 import { TemplateEditor } from "./TemplateEditor";
+import { FlameIcon } from "./icons";
 
 type Props = {
   templates: DayTemplate[];
@@ -338,7 +339,8 @@ export function Today({
         )}
         {due && (
           <div className={`due-prompt cad-bg-${overallCad}`}>
-            {overallCad === "red" ? "You're behind — train today! 💪" : "Time to train today to hit your goal 💪"}
+            <span>{overallCad === "red" ? "You're behind — train today!" : "Time to train today to hit your goal"}</span>
+            <FlameIcon />
           </div>
         )}
         <p className="muted">Pick today's day:</p>

@@ -31,6 +31,7 @@ import {
 import { checkAndApplyUpdate, currentVersion, updatesSupported } from "../lib/update";
 import { applyBackup, exportXlsx, importXlsx, type ImportedBackup } from "../lib/workbook";
 import { Switch } from "./Switch";
+import { MoonIcon, SunIcon } from "./icons";
 
 // A boolean setting: label + switch inline, description below.
 function ToggleRow({
@@ -340,7 +341,15 @@ export function Settings({
           <div className="seg">
             {(["dark", "light"] as const).map((t) => (
               <button key={t} className={theme === t ? "active" : ""} onClick={() => setThemeChoice(t)}>
-                {t === "dark" ? "🌙 Dark" : "☀️ Light"}
+                {t === "dark" ? (
+                  <>
+                    <MoonIcon /> Dark
+                  </>
+                ) : (
+                  <>
+                    <SunIcon /> Light
+                  </>
+                )}
               </button>
             ))}
           </div>

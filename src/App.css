@@ -85,7 +85,11 @@
   color: var(--accent);
 }
 .tabbar .ico {
-  font-size: 20px;
+  font-size: 23px;
+  line-height: 0;
+}
+.tabbar .ico svg {
+  display: block;
 }
 
 /* ---- Day picker ---- */
@@ -219,10 +223,18 @@
   color: var(--danger);
 }
 .due-prompt {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
   border-radius: 10px;
   padding: 11px 14px;
   margin-bottom: 14px;
   font-weight: 600;
+}
+.due-prompt svg {
+  font-size: 20px;
+  flex: none;
 }
 .cad-bg-orange {
   background: color-mix(in srgb, var(--warn) 16%, var(--surface));
@@ -1287,9 +1299,15 @@ input[type="range"] {
   flex: none;
 }
 .cat-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   font-weight: 700;
   font-size: 16px;
   margin-right: auto;
+}
+.cat-name svg {
+  font-size: 20px;
 }
 .cat-count {
   font-size: 12px;
@@ -1664,6 +1682,12 @@ input[type="range"] {
   display: flex;
   gap: 6px;
   flex-wrap: wrap;
+}
+.seg button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
 }
 .seg button.active {
   background: var(--accent);

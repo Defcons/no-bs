@@ -19,6 +19,7 @@ const RouteViewer = lazy(() => import("./components/RouteViewer").then((m) => ({
 import { Settings } from "./components/Settings";
 import { Today } from "./components/Today";
 import { MoodLogModal } from "./components/MoodLogModal";
+import { CalendarCheckIcon, DumbbellIcon, GearIcon, TrophyIcon } from "./components/icons";
 
 type Tab = "today" | "history" | "records" | "settings";
 
@@ -397,16 +398,16 @@ export default function App() {
 
       <nav className="tabbar">
         <button className={tab === "today" ? "active" : ""} onClick={() => go("today")}>
-          <span className="ico">🏋️</span>Today
+          <span className="ico"><DumbbellIcon /></span>Today
         </button>
         <button className={tab === "history" ? "active" : ""} onClick={() => go("history")}>
-          <span className="ico">📅</span>History
+          <span className="ico"><CalendarCheckIcon /></span>History
         </button>
         <button className={tab === "records" ? "active" : ""} onClick={() => go("records")}>
-          <span className="ico">🏆</span>Records
+          <span className="ico"><TrophyIcon /></span>Records
         </button>
         <button className={tab === "settings" ? "active" : ""} onClick={() => go("settings")}>
-          <span className="ico">⚙️</span>Settings
+          <span className="ico"><GearIcon /></span>Settings
         </button>
       </nav>
 
