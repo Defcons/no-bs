@@ -261,6 +261,7 @@
 .mini.active {
   background: var(--accent);
   border-color: var(--accent);
+  color: var(--on-accent);
 }
 
 /* ---- HR watchdog modal ---- */
@@ -400,11 +401,13 @@
 .linkbtn {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   text-decoration: none;
   background: var(--surface-2);
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--radius-sm);
   color: var(--text);
+  font-weight: 600;
 }
 
 /* ---- Active workout header ---- */
@@ -540,11 +543,14 @@
   text-align: center;
   margin: 6px 0 14px;
 }
-/* Full-width close for the header tool sheets. */
+/* Full-width ghost closer for the header tool sheets. */
 .sheet-done {
   width: 100%;
   margin-top: 14px;
-  background: var(--surface-2);
+  background: none;
+  border-color: var(--line);
+  color: var(--muted);
+  font-weight: 600;
 }
 
 /* ---- Rest timer ---- */
@@ -658,11 +664,19 @@
 }
 .mini {
   font-size: 13px;
-  padding: 6px 10px;
+  font-weight: 600;
+  padding: 8px 12px;
 }
+.danger,
 .mini.danger {
+  background: none;
   color: var(--danger);
-  border-color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 55%, var(--line));
+  font-weight: 600;
+}
+.danger:active,
+.mini.danger:active {
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
 }
 .exercise-note,
 .set-note {
@@ -1052,13 +1066,32 @@ input[type="range"] {
   padding: 15px;
   font-weight: 600;
 }
+/* ============ Button system ============
+   One deliberate hierarchy. Text tiers:
+     .primary            — accent fill, dark ink, 700; the single main action per view
+     <button> / .mini    — secondary: neutral surface + line border, 600 (.mini = small)
+     .ghost / .sheet-done — transparent + border, muted; dismiss / low-emphasis
+     .danger / .mini.danger — transparent + soft-red border, danger text; destructive
+   Filled-selected (.seg .active, .mini.active) reuse the accent fill + dark ink.
+   Icon buttons (.hbtn/.stepper/.tool-btn/.break-btn/.set-badge/.day-edit) and
+   cards (.day-btn/.add-exercise) are separate families. */
 .primary {
-  background: var(--accent-2);
-  border-color: var(--accent-2);
-  color: #04120c;
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
+  font-weight: 700;
+}
+.primary:active {
+  background: color-mix(in srgb, var(--accent) 86%, #000);
 }
 .ghost {
   background: none;
+  border-color: var(--line);
+  color: var(--muted);
+  font-weight: 600;
+}
+.ghost:active {
+  background: color-mix(in srgb, var(--muted) 12%, transparent);
 }
 
 /* ---- History ---- */
@@ -1347,7 +1380,7 @@ input[type="range"] {
 }
 .hist-controls .seg button.active {
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
 }
 .hist-row2 {
   display: flex;
@@ -1668,6 +1701,7 @@ input[type="range"] {
 .seg button.active {
   background: var(--accent);
   border-color: var(--accent);
+  color: var(--on-accent);
 }
 /* Weekly goal: 10 options forced onto one equal-width row (no wrap). */
 .seg-wk {
