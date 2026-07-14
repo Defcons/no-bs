@@ -6,7 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import { mmss } from "../lib/format";
 import { showReminder } from "../lib/notify";
 import { getCustomSound, getSetting } from "../db";
-import { type BreakSoundId, customIdOf, decodeSound, isCustom, playBreakSound, playBuffer } from "../lib/sounds";
+import { type BreakSoundId, customIdOf, decodeSound, isCustom, playBreakSound, playBuffer, playCountdownTick } from "../lib/sounds";
 
 type Props = {
   endsAt: number | null; // epoch ms, or null when idle
@@ -37,6 +37,13 @@ export function RestTimer({ endsAt, onChange }: Props) {
     });
   }, []);
 
+  // Optional faint 3-2-1 countdown before the break ends (default off).
+  const countdownRef = useRef(false);
+  useEffect(() => {
+    getSetting<boolean>("breakCountdown", false).then((v) => (countdownRef.current = v));
+  }, []);
+  const tickedRef = useRef<Set<number>>(new Set());
+
   useEffect(() => {
     if (endsAt == null) return;
     // Mounting onto an ALREADY-expired timer (tab switch back, reopening the app
@@ -47,10 +54,16 @@ export function RestTimer({ endsAt, onChange }: Props) {
       return;
     }
     firedRef.current = false;
+    tickedRef.current.clear();
     let id = 0;
     const tick = () => {
       const rem = Math.round((endsAt - Date.now()) / 1000);
       setRemaining(rem);
+      // Faint countdown ticks at 3/2/1s remaining (once each), if enabled.
+      if (countdownRef.current && !firedRef.current && rem >= 1 && rem <= 3 && !tickedRef.current.has(rem)) {
+        tickedRef.current.add(rem);
+        playCountdownTick(rem === 1);
+      }
       if (rem <= 0 && !firedRef.current) {
         firedRef.current = true;
         if (customBufRef.current) playBuffer(customBufRef.current);

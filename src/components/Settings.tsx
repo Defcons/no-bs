@@ -26,6 +26,7 @@ import {
   isCustom,
   playBreakSound,
   playBuffer,
+  playCountdownTick,
 } from "../lib/sounds";
 import { checkAndApplyUpdate, currentVersion, updatesSupported } from "../lib/update";
 import { applyBackup, exportXlsx, importXlsx, type ImportedBackup } from "../lib/workbook";
@@ -97,6 +98,7 @@ export function Settings({
   const [mediaBtnBreak, setMediaBtnBreak] = useState(false);
   // Break sound is a built-in id ("beep"…) OR "custom:<dbId>" (a user's file).
   const [breakSound, setBreakSound] = useState<string>("beep");
+  const [breakCountdown, setBreakCountdown] = useState(false);
   const [customSounds, setCustomSounds] = useState<CustomSound[]>([]);
   const soundFileRef = useRef<HTMLInputElement>(null);
   const native = Capacitor.isNativePlatform();
@@ -150,6 +152,7 @@ export function Settings({
     getSetting("volumeUpBreak", false).then(setVolUpBreak);
     getSetting("mediaBtnBreak", false).then(setMediaBtnBreak);
     getSetting<string>("breakSound", "beep").then(setBreakSound);
+    getSetting("breakCountdown", false).then(setBreakCountdown);
     refreshCustomSounds();
     pendingCount().then(setPending);
     currentVersion().then(setAppVersion);
@@ -382,6 +385,22 @@ export function Settings({
             }}
           />
           <p className="muted tiny">Use a built-in sound or add your own short clip (MP3/WAV/OGG, under 5 MB).</p>
+        </div>
+
+        <div className="setting">
+          <label>Countdown before break ends</label>
+          <button
+            className={`mini ${breakCountdown ? "active" : ""}`}
+            onClick={() => {
+              const v = !breakCountdown;
+              setBreakCountdown(v);
+              setSetting("breakCountdown", v);
+              if (v) playCountdownTick(false); // preview a tick
+            }}
+          >
+            {breakCountdown ? "On — tap to disable" : "Enable"}
+          </button>
+          <p className="muted tiny">Faint 3-2-1 ticks in the last seconds so the end sound doesn't startle you. Off by default.</p>
         </div>
 
         <div className="setting">

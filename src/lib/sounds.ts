@@ -137,6 +137,18 @@ export function playBuffer(buffer: AudioBuffer): void {
   }
 }
 
+// A very faint short tick for the optional "3..2..1" pre-end countdown. The final
+// tick (isFinal) is a touch higher/brighter so "1 → go" reads clearly.
+export function playCountdownTick(isFinal = false): void {
+  try {
+    const c = ctx();
+    if (c.state === "suspended") void c.resume();
+    tone(c, "sine", isFinal ? 1320 : 880, c.currentTime, 0.09, isFinal ? 0.18 : 0.12);
+  } catch {
+    /* audio blocked */
+  }
+}
+
 // A short, subtle rising blip confirming a break just STARTED — feedback for
 // hardware-button (volume/headset) starts where there's nothing on screen to see.
 export function playBreakStart(): void {
