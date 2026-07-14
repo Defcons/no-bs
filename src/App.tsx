@@ -11,7 +11,7 @@ import { markAppReady } from "./lib/update";
 import { setKeepAwake } from "./lib/pip";
 import { saveFile } from "./lib/download";
 import { syncBodyweight } from "./lib/sheetSync";
-import type { BwEntry } from "./lib/standards";
+import type { BwEntry, Sex } from "./lib/standards";
 import { trainingDue } from "./lib/stats";
 import { History } from "./components/History";
 import { Records } from "./components/Records";
@@ -86,6 +86,7 @@ export default function App() {
   const [daysPerWeek, setDpw] = useState(4);
   const [bodyweightKg, setBw] = useState(0); // 0 = not set
   const [age, setAge] = useState(0); // 0 = not set
+  const [sex, setSex] = useState<Sex>("male"); // strength-standard tables
   const [bwHistory, setBwH] = useState<BwEntry[]>([]);
   const [hrLowThreshold, setHrLow] = useState(80);
   const [floatMode, setFloatMode] = useState<"pip" | "off">("pip");
@@ -158,6 +159,7 @@ export default function App() {
       setDpw(dpw);
       setBw(await getSetting("bodyweightKg", 0));
       setAge(await getSetting("age", 0));
+      setSex(await getSetting<Sex>("sex", "male"));
       setBwH(await getSetting<BwEntry[]>("bwHistory", []));
       setHrLow(await getSetting("hrLowThreshold", 80));
       // Coerce the removed "overlay" mode back to PiP for anyone who tried it.
@@ -254,6 +256,10 @@ export default function App() {
   const persistAge = (v: number) => {
     setAge(v);
     setSetting("age", v);
+  };
+  const persistSex = (v: Sex) => {
+    setSex(v);
+    setSetting("sex", v);
   };
   const persistHrLow = (v: number) => {
     setHrLow(v);
@@ -374,7 +380,7 @@ export default function App() {
       </div>
 
       <div className="tabpanel" hidden={tab !== "records"} ref={(el) => { panelRefs.current.records = el; }}>
-        <Records bodyweightKg={bodyweightKg} age={age} bwHistory={bwHistory} />
+        <Records bodyweightKg={bodyweightKg} age={age} sex={sex} bwHistory={bwHistory} />
       </div>
 
       <div className="tabpanel" hidden={tab !== "settings"} ref={(el) => { panelRefs.current.settings = el; }}>
@@ -389,6 +395,8 @@ export default function App() {
           setBodyweightKg={persistBw}
           age={age}
           setAge={persistAge}
+          sex={sex}
+          setSex={persistSex}
           bwHistory={bwHistory}
           setBwHistory={persistBwHistory}
           hrLowThreshold={hrLowThreshold}

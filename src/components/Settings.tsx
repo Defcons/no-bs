@@ -16,7 +16,7 @@ import { saveFile } from "../lib/download";
 import { hrAvailable } from "../lib/hr";
 import { cancelTrainingReminders, notificationsSupported, requestNotifications, scheduleTrainingReminders } from "../lib/notify";
 import { importFromSheet, pendingCount, syncEnabled, syncPending, testSync } from "../lib/sheetSync";
-import type { BwEntry } from "../lib/standards";
+import type { BwEntry, Sex } from "../lib/standards";
 import {
   BREAK_SOUNDS,
   type BreakSoundId,
@@ -67,6 +67,8 @@ type Props = {
   setBodyweightKg: (v: number) => void;
   age: number;
   setAge: (v: number) => void;
+  sex: Sex;
+  setSex: (v: Sex) => void;
   bwHistory: BwEntry[];
   setBwHistory: (v: BwEntry[]) => void;
   hrLowThreshold: number;
@@ -92,6 +94,8 @@ export function Settings({
   setBodyweightKg,
   age,
   setAge,
+  sex,
+  setSex,
   bwHistory,
   setBwHistory,
   hrLowThreshold,
@@ -574,6 +578,17 @@ export function Settings({
 
       <details className="settings-group">
         <summary>Body &amp; strength</summary>
+
+        <div className="setting">
+          <label>Sex (for strength standards)</label>
+          <div className="seg">
+            {(["male", "female"] as const).map((s) => (
+              <button key={s} className={sex === s ? "active" : ""} onClick={() => setSex(s)}>
+                {s === "male" ? "Male" : "Female"}
+              </button>
+            ))}
+          </div>
+        </div>
 
         <div className="setting">
           <label>Body profile (for strength ratings)</label>

@@ -97,7 +97,7 @@ export const LIBRARY: Exercise[] = [
   // ── Back ──
   { id: "deadlift", name: "Deadlift", aliases: ["conventional deadlift", "markløft", "mark", "bb deadlift"], muscle: "Back", secondary: ["Legs"], equipment: "barbell", unit: W, compound: true, standardKey: "deadlift", builtin: true },
   { id: "sumo-deadlift", name: "Sumo Deadlift", aliases: ["sumo"], muscle: "Back", secondary: ["Legs"], equipment: "barbell", unit: W, compound: true, builtin: true },
-  { id: "barbell-row", name: "Barbell Row", aliases: ["bent over row", "bb row", "pendlay row", "barbell bent-over row", "stangroing"], muscle: "Back", secondary: ["Arms"], equipment: "barbell", unit: W, compound: true, builtin: true },
+  { id: "barbell-row", name: "Barbell Row", aliases: ["bent over row", "bb row", "pendlay row", "barbell bent-over row", "stangroing"], muscle: "Back", secondary: ["Arms"], equipment: "barbell", unit: W, compound: true, standardKey: "row", builtin: true },
   { id: "dumbbell-row", name: "Dumbbell Row", aliases: ["db row", "one arm row", "single arm row", "one-arm dumbbell row"], muscle: "Back", secondary: ["Arms"], equipment: "dumbbell", unit: W, compound: true, builtin: true },
   { id: "seated-cable-row", name: "Seated Cable Row", aliases: ["cable row", "seated row", "low row"], muscle: "Back", secondary: ["Arms"], equipment: "cable", unit: W, compound: true, builtin: true },
   { id: "t-bar-row", name: "T-Bar Row", aliases: ["t bar row", "tbar row"], muscle: "Back", secondary: ["Arms"], equipment: "barbell", unit: W, compound: true, builtin: true },

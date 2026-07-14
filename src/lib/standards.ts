@@ -6,16 +6,21 @@ export type Level = "Beginner" | "Novice" | "Intermediate" | "Advanced" | "Elite
 export const LEVELS: Level[] = ["Beginner", "Novice", "Intermediate", "Advanced", "Elite"];
 
 type Thresholds = { beginner: number; novice: number; intermediate: number; advanced: number; elite: number };
+export type Sex = "male" | "female";
+// Allometric reference bodyweight the base ratios are centred on, per sex.
+export const REF_BW: Record<Sex, number> = { male: 90, female: 62 };
 
-// Only the "important" lifts, in display order. `key` matches an exercise's
-// standardKey (see lib/exercises.ts); `name` is the display label.
-export const KEY_LIFTS: { key: string; name: string; std: Thresholds; note?: string }[] = [
-  { key: "squat", name: "Squat", std: { beginner: 0.75, novice: 1.25, intermediate: 1.5, advanced: 2.25, elite: 2.75 } },
-  { key: "bench", name: "Bench Press", std: { beginner: 0.5, novice: 0.75, intermediate: 1.25, advanced: 1.75, elite: 2.0 } },
-  { key: "deadlift", name: "Deadlift", std: { beginner: 1.0, novice: 1.5, intermediate: 2.0, advanced: 2.5, elite: 3.0 } },
-  { key: "ohp", name: "Overhead Press", std: { beginner: 0.35, novice: 0.55, intermediate: 0.8, advanced: 1.1, elite: 1.4 } },
-  { key: "pulldown", name: "Lat Pulldown", std: { beginner: 0.5, novice: 0.75, intermediate: 1.0, advanced: 1.5, elite: 1.75 }, note: "machine — rough" },
-  { key: "legpress", name: "Leg Press", std: { beginner: 1.0, novice: 1.75, intermediate: 2.75, advanced: 4.0, elite: 5.25 }, note: "sled machine — very rough" },
+// The "important" lifts, in display order. `key` matches an exercise's standardKey
+// (see lib/exercises.ts); `name` is the label. Ratios (1RM ÷ BW) per sex, from the
+// StrengthLevel/ExRx consensus — barbell lifts reliable, machines rough.
+export const KEY_LIFTS: { key: string; name: string; male: Thresholds; female: Thresholds; note?: string }[] = [
+  { key: "squat", name: "Squat", male: { beginner: 0.75, novice: 1.25, intermediate: 1.5, advanced: 2.25, elite: 2.75 }, female: { beginner: 0.5, novice: 0.75, intermediate: 1.25, advanced: 1.75, elite: 2.25 } },
+  { key: "bench", name: "Bench Press", male: { beginner: 0.5, novice: 0.75, intermediate: 1.25, advanced: 1.75, elite: 2.0 }, female: { beginner: 0.25, novice: 0.5, intermediate: 0.75, advanced: 1.0, elite: 1.5 } },
+  { key: "deadlift", name: "Deadlift", male: { beginner: 1.0, novice: 1.5, intermediate: 2.0, advanced: 2.5, elite: 3.0 }, female: { beginner: 0.5, novice: 1.0, intermediate: 1.5, advanced: 2.0, elite: 2.5 } },
+  { key: "ohp", name: "Overhead Press", male: { beginner: 0.35, novice: 0.55, intermediate: 0.8, advanced: 1.1, elite: 1.4 }, female: { beginner: 0.2, novice: 0.35, intermediate: 0.5, advanced: 0.75, elite: 1.0 } },
+  { key: "row", name: "Barbell Row", male: { beginner: 0.5, novice: 0.75, intermediate: 1.0, advanced: 1.5, elite: 1.75 }, female: { beginner: 0.35, novice: 0.5, intermediate: 0.75, advanced: 1.0, elite: 1.25 } },
+  { key: "pulldown", name: "Lat Pulldown", male: { beginner: 0.5, novice: 0.75, intermediate: 1.0, advanced: 1.5, elite: 1.75 }, female: { beginner: 0.4, novice: 0.6, intermediate: 0.85, advanced: 1.15, elite: 1.4 }, note: "machine — rough" },
+  { key: "legpress", name: "Leg Press", male: { beginner: 1.0, novice: 1.75, intermediate: 2.75, advanced: 4.0, elite: 5.25 }, female: { beginner: 0.75, novice: 1.5, intermediate: 2.25, advanced: 3.25, elite: 4.25 }, note: "sled machine — very rough" },
 ];
 
 // Adjust the 90 kg / open-age base thresholds for this lifter.
@@ -23,8 +28,8 @@ export const KEY_LIFTS: { key: string; name: string; std: Thresholds; note?: str
 //    threshold(bw) = base * (90/bw)^(1/3). Lighter → higher bar, heavier → lower.
 //  - Age (McCulloch-tracking): no change ≤35, then lower the bar with age.
 // Both are fair "centering" adjustments, not precision instruments.
-export function adjustThresholds(std: Thresholds, bodyweightKg: number, age: number): Thresholds {
-  const bwF = bodyweightKg > 0 ? Math.pow(90 / bodyweightKg, 1 / 3) : 1;
+export function adjustThresholds(std: Thresholds, bodyweightKg: number, age: number, refBw = 90): Thresholds {
+  const bwF = bodyweightKg > 0 ? Math.pow(refBw / bodyweightKg, 1 / 3) : 1;
   const d = age > 35 ? age - 35 : 0;
   const ageF = age > 0 ? 1 + 0.01 * d + 0.00025 * d * d : 1;
   const adj = (r: number) => (r * bwF) / ageF;

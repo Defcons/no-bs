@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db, type StoredWorkout } from "../db";
 import { niceDate } from "../lib/format";
-import { type BwEntry, KEY_LIFTS, adjustThresholds, bodyweightForYear, levelClass, rateLift } from "../lib/standards";
+import { type BwEntry, KEY_LIFTS, REF_BW, type Sex, adjustThresholds, bodyweightForYear, levelClass, rateLift } from "../lib/standards";
 import { type LiftRecord, liftRecords, progression, sessionsPerWeek, summarize, weekNumbersForLast } from "../lib/stats";
 import { MUSCLE_ORDER } from "../lib/exercises";
 import { ProgressChart } from "./ProgressChart";
@@ -12,10 +12,12 @@ import { ProgressChart } from "./ProgressChart";
 export function Records({
   bodyweightKg,
   age,
+  sex,
   bwHistory,
 }: {
   bodyweightKg: number;
   age: number;
+  sex: Sex;
   bwHistory: BwEntry[];
 }) {
   const currentYear = new Date().getFullYear();
@@ -88,7 +90,7 @@ export function Records({
                 const e1rm = rec.bestE1rm.est;
                 const year = parseInt(rec.bestE1rm.date.slice(0, 4), 10);
                 const bw = bodyweightForYear(year, bwHistory, bodyweightKg, currentYear);
-                const r = rateLift(adjustThresholds(kl.std, bw, age), e1rm, bw);
+                const r = rateLift(adjustThresholds(kl[sex], bw, age, REF_BW[sex]), e1rm, bw);
                 return (
                   <div key={kl.key} className="std-row">
                     <div className="std-top">
@@ -110,7 +112,7 @@ export function Records({
                 );
               })}
               <p className="muted tiny">
-                Adjusted for your bodyweight{age > 0 ? " and age" : ""} (male). Barbell lifts are reliable; machine
+                Adjusted for your bodyweight{age > 0 ? " and age" : ""} ({sex}). Barbell lifts are reliable; machine
                 lifts (leg press / pulldown) are approximate.
               </p>
             </div>
