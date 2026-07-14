@@ -171,29 +171,44 @@ export const LIBRARY: Exercise[] = [
   { id: "swimming", name: "Swimming", aliases: ["swim"], muscle: "Other", equipment: "other", unit: "distance", builtin: true },
 ];
 
+// A URL-safe slug id for a user-created exercise.
+export function slug(name: string): string {
+  return norm(name).replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "custom";
+}
+
 // ── Resolver ────────────────────────────────────────────────────────────────
-const builtinIndex = new Map<string, Exercise>();
+const builtinIndex = new Map<string, Exercise>(); // norm(name/alias) → exercise
+const builtinById = new Map<string, Exercise>(); // id → exercise
 for (const ex of LIBRARY) {
+  builtinById.set(ex.id, ex);
   builtinIndex.set(norm(ex.name), ex);
   for (const a of ex.aliases ?? []) if (!builtinIndex.has(norm(a))) builtinIndex.set(norm(a), ex);
 }
 
-// User-created exercises, registered from the Dexie table at app start (P1 fills
-// the creation UI; empty until then). Kept in a module-level index so the
-// resolver stays synchronous.
+// User-created exercises, registered from the Dexie catalog at app start. Kept in
+// module-level indexes so the resolver stays synchronous.
 let customIndex = new Map<string, Exercise>();
+let customById = new Map<string, Exercise>();
 export function registerCustomExercises(list: Exercise[]): void {
-  const m = new Map<string, Exercise>();
+  const byName = new Map<string, Exercise>();
+  const byId = new Map<string, Exercise>();
   for (const ex of list) {
-    m.set(norm(ex.name), ex);
-    for (const a of ex.aliases ?? []) if (!m.has(norm(a))) m.set(norm(a), ex);
+    byId.set(ex.id, ex);
+    byName.set(norm(ex.name), ex);
+    for (const a of ex.aliases ?? []) if (!byName.has(norm(a))) byName.set(norm(a), ex);
   }
-  customIndex = m;
+  customIndex = byName;
+  customById = byId;
 }
 
-// The single source of truth. User catalog wins over built-ins; on a miss, the
-// legacy regex layer synthesises a result so unmatched names never regress.
-export function resolveExercise(name: string): Exercise {
+// The single source of truth. A stamped exerciseId (survives renames) wins; then
+// the user catalog by name, then built-ins; on a miss, the legacy regex layer
+// synthesises a result so unmatched names never regress.
+export function resolveExercise(name: string, exerciseId?: string): Exercise {
+  if (exerciseId) {
+    const byId = customById.get(exerciseId) ?? builtinById.get(exerciseId);
+    if (byId) return byId;
+  }
   const k = norm(name);
   const hit = customIndex.get(k) ?? builtinIndex.get(k);
   if (hit) return hit;

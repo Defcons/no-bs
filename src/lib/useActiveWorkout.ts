@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { db, getSetting, setSetting, type StoredWorkout } from "../db";
 import type { DayTemplate, ExercisePerf, SetEntry } from "../types";
 import { uid } from "./uid";
+import { resolveExercise } from "./exercises";
 
 export type Draft = {
   startedAt: number; // epoch ms (session start, for the date)
@@ -58,10 +59,12 @@ export function wElapsedMs(d: Pick<Draft, "wAccumMs" | "wRunning" | "wSegStart">
 // recent session that actually logged a weight for it.
 function buildExercises(tpl: DayTemplate, history: StoredWorkout[]): ExercisePerf[] {
   return tpl.exercises.map((e) => {
-    // Most recent past sets (with any weight) for this exercise.
+    // Most recent past sets (with any weight) for this exercise (matched by
+    // resolved catalog id so name/spelling variants still line up).
+    const eid = resolveExercise(e.name, e.exerciseId).id;
     let prevSets: SetEntry[] | undefined;
     for (const w of history) {
-      const p = w.exercises.find((x) => x.name === e.name);
+      const p = w.exercises.find((x) => resolveExercise(x.name, x.exerciseId).id === eid);
       if (p && p.sets.some((s) => s.weight != null)) {
         prevSets = p.sets;
         break;
@@ -78,7 +81,7 @@ function buildExercises(tpl: DayTemplate, history: StoredWorkout[]): ExercisePer
         ? [...weighted].sort((a, b) => b - a).slice(0, nSets)
         : Array.from({ length: nSets }, (_, i) => prevSets?.[i]?.weight ?? lastKnown);
     const sets: SetEntry[] = seed.map((w) => ({ id: uid(), weight: w ?? lastKnown, reps: defReps }));
-    return { id: uid(), name: e.name, scheme: e.scheme, step: e.step, sets };
+    return { id: uid(), name: e.name, exerciseId: e.exerciseId, scheme: e.scheme, step: e.step, sets };
   });
 }
 
@@ -202,6 +205,7 @@ export function useActiveWorkout() {
       exercises: w.exercises.map((e) => ({
         id: uid(),
         name: e.name,
+        exerciseId: e.exerciseId,
         scheme: e.scheme,
         note: e.note,
         skipped: e.skipped,

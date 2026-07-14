@@ -91,6 +91,13 @@ export async function upsertExercise(ex: Exercise): Promise<void> {
 export async function deleteExercise(id: string): Promise<void> {
   await db.exercises.delete(id);
 }
+// Distinct exercise names the user has logged (for name autocomplete).
+export async function distinctExerciseNames(): Promise<string[]> {
+  const ws = await db.workouts.toArray();
+  const set = new Set<string>();
+  for (const w of ws) for (const e of w.exercises) if (e.name.trim()) set.add(e.name.trim());
+  return [...set].sort((a, b) => a.localeCompare(b));
+}
 
 // --- The current split (seeded once, editable later) ------------------------
 // Taken from the 2026 tab of the sheet (see reference_gym_sheet).

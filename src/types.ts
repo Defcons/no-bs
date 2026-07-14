@@ -20,6 +20,7 @@ export type SetEntry = {
 export type ExercisePerf = {
   id?: string; // stable key for React lists (see lib/uid)
   name: string;
+  exerciseId?: string; // catalog id (see lib/exercises) — survives name edits
   scheme: Scheme;
   step?: number; // per-exercise ± weight increment (overrides the Settings default)
   sets: SetEntry[];
@@ -52,5 +53,5 @@ export type DayTemplate = {
   id?: number;
   name: string;
   order: number;
-  exercises: { name: string; scheme: Scheme; step?: number }[];
+  exercises: { name: string; scheme: Scheme; step?: number; exerciseId?: string }[];
 };

@@ -1,18 +1,20 @@
 // Create / edit a reusable workout ("day"): a name + an ordered list of exercises
 // with a sets×reps scheme. Saved to db.templates so it shows in the day picker and
 // can be repeated. Deleting a workout keeps its logged sessions in History.
-import { useState } from "react";
-import { db } from "../db";
+import { useEffect, useState } from "react";
+import { db, distinctExerciseNames } from "../db";
 import type { DayTemplate, Scheme } from "../types";
 import { uid } from "../lib/uid";
+import { ExerciseNameField } from "./ExerciseNameField";
 
-type ExRow = { id: string; name: string; sets: string; reps: string; step: string };
+type ExRow = { id: string; name: string; exerciseId?: string; sets: string; reps: string; step: string };
 
 function toRows(t: DayTemplate): ExRow[] {
   if (!t.exercises.length) return [{ id: uid(), name: "", sets: "3", reps: "8", step: "" }];
   return t.exercises.map((e) => ({
     id: uid(),
     name: e.name,
+    exerciseId: e.exerciseId,
     sets: e.scheme.sets == null ? "" : String(e.scheme.sets),
     reps: e.scheme.reps == null ? "" : String(e.scheme.reps),
     step: e.step == null ? "" : String(e.step).replace(".", ","),
@@ -34,7 +36,12 @@ function parseScheme(sets: string, reps: string): Scheme {
 export function TemplateEditor({ template, onClose }: { template: DayTemplate; onClose: () => void }) {
   const [name, setName] = useState(template.name);
   const [rows, setRows] = useState<ExRow[]>(toRows(template));
+  const [history, setHistory] = useState<string[]>([]);
   const isNew = template.id == null;
+
+  useEffect(() => {
+    distinctExerciseNames().then(setHistory);
+  }, []);
 
   const setRow = (id: string, patch: Partial<ExRow>) =>
     setRows((rs) => rs.map((r) => (r.id === id ? { ...r, ...patch } : r)));
@@ -53,7 +60,7 @@ export function TemplateEditor({ template, onClose }: { template: DayTemplate; o
   const save = async () => {
     const exercises = rows
       .filter((r) => r.name.trim())
-      .map((r) => ({ name: r.name.trim(), scheme: parseScheme(r.sets, r.reps), step: parseStep(r.step) }));
+      .map((r) => ({ name: r.name.trim(), exerciseId: r.exerciseId, scheme: parseScheme(r.sets, r.reps), step: parseStep(r.step) }));
     const cleanName = name.trim() || "Workout";
     if (isNew) {
       const last = await db.templates.orderBy("order").last();
@@ -94,12 +101,12 @@ export function TemplateEditor({ template, onClose }: { template: DayTemplate; o
           </div>
           {rows.map((r, i) => (
             <div key={r.id} className="tmpl-row">
-              <input
+              <ExerciseNameField
                 className="tmpl-name"
-                type="text"
                 value={r.name}
                 placeholder="exercise"
-                onChange={(e) => setRow(r.id, { name: e.target.value })}
+                history={history}
+                onChange={(name, ex) => setRow(r.id, { name, exerciseId: ex?.id })}
               />
               <input
                 className="tmpl-num"

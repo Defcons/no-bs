@@ -2,7 +2,8 @@
 // see live HR, and finish. This is the primary "as-easy-as-possible" surface.
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { getSetting, lastWorkoutForDay, type StoredWorkout } from "../db";
+import { distinctExerciseNames, getSetting, lastWorkoutForDay, type StoredWorkout } from "../db";
+import { resolveExercise } from "../lib/exercises";
 import { daysAgo, daysAgoLabel, hhmmss, mmss, niceDate } from "../lib/format";
 import { cancelBreakNotification, scheduleBreakNotification, showAutoEndNotification, showReminder } from "../lib/notify";
 import { startGeofence, stopGeofence } from "../lib/geofence";
@@ -85,6 +86,12 @@ export function Today({
   const lastHrAt = useRef(0); // last time an HR reading arrived
   const [prev, setPrev] = useState<StoredWorkout | undefined>();
   const [lastByDay, setLastByDay] = useState<Record<string, StoredWorkout | undefined>>({});
+  const [nameHistory, setNameHistory] = useState<string[]>([]);
+
+  // Distinct past exercise names for the custom-session name autocomplete.
+  useEffect(() => {
+    if (draft?.custom) distinctExerciseNames().then(setNameHistory);
+  }, [draft?.custom]);
 
   // Load last session of this day for per-set ghost hints.
   useEffect(() => {
@@ -517,10 +524,13 @@ export function Today({
             key={ex.id ?? i}
             exercise={ex}
             step={stepForExercise(ex.name, weightStep, ex.step)}
-            prev={prev?.exercises.find((p) => p.name === ex.name)}
+            prev={prev?.exercises.find(
+              (p) => resolveExercise(p.name, p.exerciseId).id === resolveExercise(ex.name, ex.exerciseId).id,
+            )}
             onChange={(e) => setExercise(i, e)}
             onSetDone={autoBreakOnDone ? startRest : undefined}
             editableName={draft.custom}
+            nameHistory={nameHistory}
             onRemove={draft.custom ? () => removeExercise(i) : undefined}
             onMoveUp={i > 0 ? () => moveExercise(i, -1) : undefined}
             onMoveDown={i < draft.exercises.length - 1 ? () => moveExercise(i, 1) : undefined}

@@ -45,7 +45,7 @@ export function liftRecords(workouts: StoredWorkout[]): LiftRecord[] {
   const map = new Map<string, LiftRecord>();
   for (const w of workouts) {
     for (const ex of w.exercises) {
-      const resolved = resolveExercise(ex.name); // catalog match → shared id; else regex fallback
+      const resolved = resolveExercise(ex.name, ex.exerciseId); // catalog match → shared id; else regex fallback
       const name = resolved.name;
       const key = resolved.id;
       const schemeReps = typeof ex.scheme.reps === "number" ? ex.scheme.reps : 0;
@@ -117,7 +117,7 @@ export function progression(workouts: StoredWorkout[], key: string): ProgressPoi
   for (const w of workouts) {
     const day = w.date.slice(0, 10);
     for (const ex of w.exercises) {
-      if (resolveExercise(ex.name).id !== key) continue;
+      if (resolveExercise(ex.name, ex.exerciseId).id !== key) continue;
       const schemeReps = typeof ex.scheme.reps === "number" ? ex.scheme.reps : 0;
       for (const set of ex.sets) {
         if (!plausible(set.weight)) continue;

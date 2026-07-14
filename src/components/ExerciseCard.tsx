@@ -4,6 +4,7 @@ import { useState } from "react";
 import type { ExercisePerf, SetEntry } from "../types";
 import { uid } from "../lib/uid";
 import { SetInput } from "./SetInput";
+import { ExerciseNameField } from "./ExerciseNameField";
 
 type Props = {
   exercise: ExercisePerf;
@@ -12,12 +13,13 @@ type Props = {
   onChange: (ex: ExercisePerf) => void;
   onSetDone?: () => void; // set explicitly marked done via its badge (not weight edits)
   editableName?: boolean; // custom sessions: let the user name the exercise
+  nameHistory?: string[]; // distinct past exercise names (autocomplete)
   onRemove?: () => void; // custom sessions: remove this exercise
   onMoveUp?: () => void; // reorder within this session only
   onMoveDown?: () => void;
 };
 
-export function ExerciseCard({ exercise, step, prev, onChange, onSetDone, editableName, onRemove, onMoveUp, onMoveDown }: Props) {
+export function ExerciseCard({ exercise, step, prev, onChange, onSetDone, editableName, nameHistory, onRemove, onMoveUp, onMoveDown }: Props) {
   const [showNote, setShowNote] = useState(!!exercise.note);
 
   const patchSet = (i: number, patch: Partial<SetEntry>) => {
@@ -41,12 +43,12 @@ export function ExerciseCard({ exercise, step, prev, onChange, onSetDone, editab
     <section className="exercise-card">
       <header className="exercise-head">
         {editableName ? (
-          <input
+          <ExerciseNameField
             className="exercise-name-input"
-            type="text"
             value={exercise.name}
             placeholder="exercise name…"
-            onChange={(e) => onChange({ ...exercise, name: e.target.value })}
+            history={nameHistory}
+            onChange={(name, ex) => onChange({ ...exercise, name, exerciseId: ex?.id })}
           />
         ) : (
           <h3>{exercise.name}</h3>
