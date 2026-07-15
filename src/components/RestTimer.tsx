@@ -16,6 +16,7 @@ type Props = {
 export function RestTimer({ endsAt, onChange }: Props) {
   const [remaining, setRemaining] = useState(0);
   const firedRef = useRef(false);
+  const dismissRef = useRef(0); // auto-dismiss timeout after the alarm fires
   // Pre-load the chosen alarm sound so it plays instantly when rest ends. The
   // setting is either a built-in id ("beep"…) or "custom:<id>" (a user's file,
   // pre-decoded into an AudioBuffer here).
@@ -73,11 +74,18 @@ export function RestTimer({ endsAt, onChange }: Props) {
         // so only fire the web SW notification here to avoid a duplicate.
         if (!Capacitor.isNativePlatform()) showReminder("Rest over — go! 💪", "Time for your next set.");
         window.clearInterval(id); // stop ticking once fired (no endless 250ms loop)
+        // Clear itself away shortly after the alarm — no manual "Dismiss" needed.
+        dismissRef.current = window.setTimeout(() => onChange(null), 5000);
       }
     };
     tick();
     id = window.setInterval(tick, 250);
-    return () => window.clearInterval(id);
+    return () => {
+      window.clearInterval(id);
+      window.clearTimeout(dismissRef.current);
+    };
+    // onChange is stable enough here; re-running on every render would restart the tick.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [endsAt]);
 
   if (endsAt == null) return null;

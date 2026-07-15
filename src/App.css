@@ -424,10 +424,15 @@
 }
 
 /* ---- Active workout header ---- */
-.workout-bar {
+/* Header + rest timer stick together as ONE unit, so the timer can never
+   underlap the header when the header's height changes. */
+.wb-sticky {
   position: sticky;
   top: 0;
   z-index: 5;
+  background: var(--bg);
+}
+.workout-bar {
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -566,9 +571,6 @@
 
 /* ---- Rest timer ---- */
 .rest-timer {
-  position: sticky;
-  top: 61px;
-  z-index: 4;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1037,9 +1039,11 @@
   padding: 0 1px;
 }
 .reps-field {
-  width: 48px;
+  /* Wide enough for 2-digit reps ("12 reps"); the weight field is flex so it
+     gives up the space. */
+  width: 60px;
   flex: none;
-  padding: 0 6px;
+  padding: 0 4px;
 }
 .time-field,
 .dist-field {

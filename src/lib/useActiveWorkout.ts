@@ -74,11 +74,17 @@ function buildExercises(tpl: DayTemplate, history: StoredWorkout[]): ExercisePer
     const lastKnown = weighted.at(-1) ?? null;
     const nSets = e.scheme.sets ?? 3;
     const defReps = typeof e.scheme.reps === "number" ? e.scheme.reps : null;
-    // If last session logged MORE sets than the scheme's default, seed with the
-    // heaviest N (descending); otherwise carry each set's weight across position.
+    // If last session logged MORE sets than the scheme's default, keep the heaviest
+    // N but IN THE ORDER THEY WERE PERFORMED — a 70-80-90-100 ramp must seed
+    // 80-90-100, not 100-90-80. Otherwise carry each set's weight across position.
     const seed: (number | null)[] =
       weighted.length > nSets
-        ? [...weighted].sort((a, b) => b - a).slice(0, nSets)
+        ? weighted
+            .map((w, i) => ({ w, i }))
+            .sort((a, b) => b.w - a.w)
+            .slice(0, nSets)
+            .sort((a, b) => a.i - b.i)
+            .map((x) => x.w)
         : Array.from({ length: nSets }, (_, i) => prevSets?.[i]?.weight ?? lastKnown);
     const sets: SetEntry[] = seed.map((w) => ({ id: uid(), weight: w ?? lastKnown, reps: defReps }));
     return { id: uid(), name: e.name, exerciseId: e.exerciseId, scheme: e.scheme, step: e.step, sets };

@@ -421,6 +421,12 @@ export function Today({
     playBreakStart(); // audible confirmation (matters for volume/headset-button starts)
     update((d) => ({ ...d, restEndsAt: at, lastActivityAt: Date.now() }));
   };
+  // Auto-start on "set done": only when nothing is already counting down, so
+  // finishing sets back-to-back doesn't keep resetting a running break.
+  const autoStartRest = () => {
+    const running = draft?.restEndsAt != null && draft.restEndsAt > Date.now();
+    if (!running) startRest();
+  };
   const setRest = (endsAt: number | null) => {
     if (endsAt == null) cancelBreakNotification();
     else scheduleBreakNotification(endsAt);
@@ -444,6 +450,7 @@ export function Today({
 
   return (
     <div className="today">
+      <div className="wb-sticky">
       <header className="workout-bar">
         <div className="wb-left">
           {draft.custom ? (
@@ -508,6 +515,7 @@ export function Today({
       </header>
 
       <RestTimer endsAt={draft.restEndsAt ?? null} onChange={setRest} />
+      </div>
 
       {draft.custom && native && (
         <div className="pad gps-toggle-row">
@@ -531,7 +539,7 @@ export function Today({
               (p) => resolveExercise(p.name, p.exerciseId).id === resolveExercise(ex.name, ex.exerciseId).id,
             )}
             onChange={(e) => setExercise(i, e)}
-            onSetDone={autoBreakOnDone ? startRest : undefined}
+            onSetDone={autoBreakOnDone ? autoStartRest : undefined}
             editableName={draft.custom}
             units={units}
             nameHistory={nameHistory}
@@ -654,11 +662,11 @@ export function Today({
               onChange={(v) => update((d) => ({ ...d, moodAfter: v }))}
             />
             <div className="row" style={{ marginTop: 14 }}>
-              <button className="primary" onClick={() => finishNow(false)}>
-                Finish workout
-              </button>
               <button className="ghost" onClick={() => finishNow(false)}>
                 Skip
+              </button>
+              <button className="primary" onClick={() => finishNow(false)}>
+                Finish workout
               </button>
             </div>
           </div>
