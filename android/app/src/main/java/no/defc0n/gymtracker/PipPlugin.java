@@ -90,9 +90,28 @@ public class PipPlugin extends Plugin {
 
     @PluginMethod
     public void setAutoEnter(PluginCall call) {
-        autoEnter = call.getBoolean("enabled", false);
+        autoEnter = Boolean.TRUE.equals(call.getBoolean("enabled", false));
         autoW = call.getInt("width", 1);
         autoH = call.getInt("height", 1);
+        // Android 12+ (S): hand auto-enter to the SYSTEM via setAutoEnterEnabled, which
+        // floats the timer whenever the app is backgrounded — Home, the Recents /
+        // task-view button AND the swipe-up gesture. The onUserLeaveHint fallback in
+        // MainActivity only ever fires for Home, which is why task-view didn't float it.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && supported()) {
+            final boolean on = autoEnter;
+            final Rational ratio = new Rational(autoW, autoH);
+            getActivity().runOnUiThread(() -> {
+                try {
+                    getActivity().setPictureInPictureParams(
+                            new PictureInPictureParams.Builder()
+                                    .setAspectRatio(ratio)
+                                    .setAutoEnterEnabled(on)
+                                    .build());
+                } catch (Exception e) {
+                    // OEM / policy may refuse — the pre-S Home hook still applies.
+                }
+            });
+        }
         call.resolve();
     }
 

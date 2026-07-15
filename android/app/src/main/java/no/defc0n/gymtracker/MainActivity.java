@@ -48,8 +48,13 @@ public class MainActivity extends BridgeActivity {
     }
 
     // Leaving the app during a workout with the timer armed → float it as PiP.
+    // Android 12+ handles this itself via PictureInPictureParams.setAutoEnterEnabled
+    // (set in PipPlugin.setAutoEnter) — which ALSO covers the Recents/task-view button
+    // and the swipe-up gesture. onUserLeaveHint only fires for Home, so it's just the
+    // pre-12 fallback; running both would try to enter PiP twice.
     @Override
     protected void onUserLeaveHint() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) return;
         if (PipPlugin.autoEnter
                 && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
                 && getPackageManager().hasSystemFeature(android.content.pm.PackageManager.FEATURE_PICTURE_IN_PICTURE)) {
