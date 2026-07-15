@@ -3,6 +3,7 @@
 import Dexie, { type Table } from "dexie";
 import type { DayTemplate, ExercisePerf, Scheme, TrackPoint } from "./types";
 import type { Exercise } from "./lib/exercises";
+import { DEFAULT_SYNC_SECRET, DEFAULT_SYNC_URL } from "./lib/syncConfig";
 
 export interface StoredWorkout {
   id?: number;
@@ -190,10 +191,28 @@ let booting: Promise<void> | null = null;
 export function ensureBootstrapped(): Promise<void> {
   // Don't cache a rejection — a transient IndexedDB failure (quota, private mode)
   // would otherwise brick every retry until a full restart.
-  return (booting ??= doBootstrap().catch((e) => {
+  return (booting ??= (async () => {
+    await captureBakedSyncConfig();
+    await doBootstrap();
+  })().catch((e) => {
     booting = null;
     throw e;
   }));
+}
+
+// A personal build bakes the sync config into the JS bundle (VITE_SYNC_URL/SECRET) and
+// `sheetSync` falls back to it when nothing is stored. But OTA replaces that bundle with
+// the PUBLIC one, where those constants are EMPTY — which would silently kill sync
+// (syncEnabled even defaults to !!DEFAULT_SYNC_URL). So copy the baked values into
+// settings, which live in IndexedDB and survive every bundle swap + in-place upgrade.
+// Deliberately OUTSIDE doBootstrap's `bootstrapped` guard so an already-seeded install
+// still captures it. No-op on the public build, and never overwrites what you typed in.
+async function captureBakedSyncConfig(): Promise<void> {
+  if (!DEFAULT_SYNC_URL) return; // public build — nothing baked
+  if (await getSetting<string>("sheetSyncUrl", "")) return; // already stored — leave it
+  await setSetting("sheetSyncUrl", DEFAULT_SYNC_URL);
+  if (DEFAULT_SYNC_SECRET) await setSetting("sheetSyncSecret", DEFAULT_SYNC_SECRET);
+  if ((await getSetting<boolean | null>("syncEnabled", null)) === null) await setSetting("syncEnabled", true);
 }
 
 async function doBootstrap(): Promise<void> {
