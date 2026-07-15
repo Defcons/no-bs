@@ -11,7 +11,8 @@ export type SetEntry = {
   id?: string; // stable key for React lists (see lib/uid)
   weight: number | null; // kg (per dumbbell for DB moves); for bodyweight moves = ADDED weight; null if none
   reps: number | null; // actual reps; null -> falls back to scheme reps
-  seconds?: number | null; // duration for timed exercises (planks, holds)
+  seconds?: number | null; // duration (timed holds; also the time for a distance set)
+  distanceM?: number | null; // metres, for distance exercises (run/bike/swim/row)
   assist?: number | null; // extra/assisted reps → written as "(n)" in the sheet
   done?: boolean; // set completed (green) — toggled by the badge or on any value edit
   note?: string;

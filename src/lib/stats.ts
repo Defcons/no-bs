@@ -42,11 +42,13 @@ export type LiftRecord = {
   bestE1rm: { est: number; weight: number; reps: number; date: string }; // weight only
   maxReps: { reps: number; weight: number; date: string }; // bodyweight
   maxDuration: { seconds: number; date: string }; // time
+  maxDistance: { meters: number; seconds: number; date: string }; // distance
+  bestPace: { secPerKm: number; date: string }; // distance (fastest)
 };
 
 // A record has meaningful data for its unit (used to filter out empty rows).
 export function hasRecord(r: LiftRecord): boolean {
-  return r.maxWeight.weight > 0 || r.maxReps.reps > 0 || r.maxDuration.seconds > 0;
+  return r.maxWeight.weight > 0 || r.maxReps.reps > 0 || r.maxDuration.seconds > 0 || r.maxDistance.meters > 0;
 }
 
 export function liftRecords(workouts: StoredWorkout[]): LiftRecord[] {
@@ -69,10 +71,23 @@ export function liftRecords(workouts: StoredWorkout[]): LiftRecord[] {
           bestE1rm: { est: 0, weight: 0, reps: 0, date: "" },
           maxReps: { reps: 0, weight: 0, date: "" },
           maxDuration: { seconds: 0, date: "" },
+          maxDistance: { meters: 0, seconds: 0, date: "" },
+          bestPace: { secPerKm: 0, date: "" },
         };
         map.set(key, rec);
       }
       for (const set of ex.sets) {
+        if (resolved.unit === "distance") {
+          const m = set.distanceM ?? 0;
+          const s = set.seconds ?? 0;
+          if (m > 0 || s > 0) rec.count++;
+          if (m > rec.maxDistance.meters) rec.maxDistance = { meters: m, seconds: s, date: w.date };
+          if (m > 0 && s > 0) {
+            const pace = s / (m / 1000); // sec per km
+            if (rec.bestPace.secPerKm === 0 || pace < rec.bestPace.secPerKm) rec.bestPace = { secPerKm: pace, date: w.date };
+          }
+          continue;
+        }
         if (resolved.unit === "time") {
           const s = set.seconds ?? 0;
           if (s > 0) {

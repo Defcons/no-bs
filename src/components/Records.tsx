@@ -166,7 +166,23 @@ function RecordRow({ r, workouts, units }: { r: LiftRecord; workouts: StoredWork
           <span className="record-chev">{open ? "▴" : "▾"}</span>
         </div>
         <div className="record-nums">
-          {r.unit === "time" ? (
+          {r.unit === "distance" ? (
+            <>
+              <div className="rec-metric">
+                <div className="rec-lbl">Longest</div>
+                <span className="big">{Number((r.maxDistance.meters / 1000).toFixed(2))}<span className="rec-u"> km</span></span>
+                {r.maxDistance.seconds > 0 && <span className="muted"> · {mmss(r.maxDistance.seconds)}</span>}
+                <div className="tiny muted">{niceDate(r.maxDistance.date)}</div>
+              </div>
+              {r.bestPace.secPerKm > 0 && (
+                <div className="rec-metric">
+                  <div className="rec-lbl">Best pace</div>
+                  <span className="big">{mmss(Math.round(r.bestPace.secPerKm))}<span className="rec-u"> /km</span></span>
+                  <div className="tiny muted">{niceDate(r.bestPace.date)}</div>
+                </div>
+              )}
+            </>
+          ) : r.unit === "time" ? (
             <div className="rec-metric">
               <div className="rec-lbl">Best hold</div>
               <span className="big">{mmss(r.maxDuration.seconds)}</span>

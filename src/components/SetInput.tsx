@@ -3,6 +3,7 @@
 //  - bodyweight: same layout but the weight is optional ADDED weight ("+kg", "BW"
 //    placeholder) and reps is the point (so pull-ups/dips/push-ups count).
 //  - time: a single duration field (seconds) for planks/holds.
+//  - distance: km + minutes, what runners/swimmers/cyclists actually log.
 // The rare extras (assist reps + note) live behind a ⋯ reveal. (Phase 2 + P2 units.)
 import { type KeyboardEvent, useRef, useState } from "react";
 import type { ExerciseUnit } from "../lib/exercises";
@@ -36,7 +37,9 @@ const blurOnEnter = (e: KeyboardEvent<HTMLInputElement>) => {
   if (e.key === "Enter") e.currentTarget.blur();
 };
 
-type NumField = "weight" | "reps" | "assist" | "seconds";
+type NumField = "weight" | "reps" | "assist" | "seconds" | "distanceM";
+// Trim trailing zeros: 5.20 → "5.2", 5.00 → "5".
+const tidy = (n: number, digits: number) => String(Number(n.toFixed(digits)));
 
 export function SetInput({ index, set, step, unit = "weight", units = "kg", active, prevWeight, onChange }: Props) {
   const hasExtra = !!set.note || set.assist != null;
@@ -44,6 +47,7 @@ export function SetInput({ index, set, step, unit = "weight", units = "kg", acti
   const done = !!set.done;
   const bodyweight = unit === "bodyweight";
   const timed = unit === "time";
+  const distance = unit === "distance";
   // Weight is stored in kg; display + entry happen in the user's unit.
   const dispStep = displayStep(step, units);
   // Only the number badge marks a set done — value edits deliberately do NOT
@@ -86,6 +90,41 @@ export function SetInput({ index, set, step, unit = "weight", units = "kg", acti
           />
           <span className="unit">sec</span>
         </div>
+      ) : distance ? (
+        <>
+          <div className="field dist-field">
+            <input
+              type="text"
+              inputMode="decimal"
+              value={set.distanceM == null ? "" : tidy(set.distanceM / 1000, 2)}
+              placeholder="—"
+              onFocus={clearOnFocus("distanceM")}
+              onBlur={restoreOnBlur("distanceM")}
+              onKeyDown={blurOnEnter}
+              onChange={(e) => {
+                const km = parseWeight(e.target.value);
+                onChange({ distanceM: km == null ? null : Math.round(km * 1000) });
+              }}
+            />
+            <span className="unit">km</span>
+          </div>
+          <div className="field dist-field">
+            <input
+              type="text"
+              inputMode="decimal"
+              value={set.seconds == null ? "" : tidy(set.seconds / 60, 1)}
+              placeholder="—"
+              onFocus={clearOnFocus("seconds")}
+              onBlur={restoreOnBlur("seconds")}
+              onKeyDown={blurOnEnter}
+              onChange={(e) => {
+                const min = parseWeight(e.target.value);
+                onChange({ seconds: min == null ? null : Math.round(min * 60) });
+              }}
+            />
+            <span className="unit">min</span>
+          </div>
+        </>
       ) : (
         <>
           <div className="weight-group">
@@ -140,7 +179,7 @@ export function SetInput({ index, set, step, unit = "weight", units = "kg", acti
 
       {showMore && (
         <div className="set-extra">
-          {!timed && (
+          {!timed && !distance && (
             <label className="extra-field" title="assisted or extra reps — shown as (n) in the sheet">
               <span className="extra-lbl">Assist / extra reps</span>
               <div className="field assist-field">

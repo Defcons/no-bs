@@ -19,7 +19,10 @@ const MONTHS = [
 ];
 
 const setsOf = (w: StoredWorkout) =>
-  w.exercises.reduce((a, e) => a + e.sets.filter((s) => s.weight != null || s.reps != null || s.seconds != null).length, 0);
+  w.exercises.reduce(
+    (a, e) => a + e.sets.filter((s) => s.weight != null || s.reps != null || s.seconds != null || s.distanceM != null).length,
+    0,
+  );
 
 // Monday-anchored key ("YYYY-MM-DD") for the week a date falls in — built from
 // local Y/M/D parts to avoid UTC-parse drift.
@@ -203,6 +206,11 @@ function LogRow({
           {w.exercises.map((e, i) => {
             const unit = resolveExercise(e.name, e.exerciseId).unit;
             const fmt = (s: (typeof e.sets)[number]) => {
+              if (unit === "distance") {
+                const km = s.distanceM != null ? `${Number((s.distanceM / 1000).toFixed(2))} km` : "";
+                const t = s.seconds != null ? mmss(s.seconds) : "";
+                return [km, t].filter(Boolean).join(" · ");
+              }
               if (unit === "time") return s.seconds != null ? mmss(s.seconds) : "";
               const a = s.assist != null ? `(${s.assist})` : "";
               if (unit === "bodyweight") {
@@ -211,7 +219,13 @@ function LogRow({
               }
               return s.weight != null ? `${weightStr(s.weight, units)}${s.reps ? `×${s.reps}` : ""}${a}` : "";
             };
-            const sets = e.sets.filter((s) => (unit === "time" ? s.seconds != null : s.weight != null || s.reps != null));
+            const sets = e.sets.filter((s) =>
+              unit === "time"
+                ? s.seconds != null
+                : unit === "distance"
+                  ? s.distanceM != null || s.seconds != null
+                  : s.weight != null || s.reps != null,
+            );
             return (
               <div key={i} className="log-ex">
                 <span className="log-ex-name">{e.name}</span>
