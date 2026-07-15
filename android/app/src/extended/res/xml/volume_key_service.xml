@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- PERSONAL flavour only. flagRequestFilterKeyEvents + canRequestFilterKeyEvents are
+<!-- EXTENDED flavour only. flagRequestFilterKeyEvents + canRequestFilterKeyEvents are
      what let onKeyEvent see volume presses globally (locked screen, music playing). -->
 <accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
     android:description="@string/volume_key_service_desc"

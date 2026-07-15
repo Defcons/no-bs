@@ -12,7 +12,7 @@ import { computeRun, fmtDist, fmtPace } from "./runStats";
 import { downsample, encodePolyline } from "./polyline";
 import type { BwEntry } from "./standards";
 import type { ExercisePerf } from "../types";
-import { APP_PUBLIC_URL, DEFAULT_SYNC_SECRET, DEFAULT_SYNC_URL } from "./syncConfig";
+import { APP_PUBLIC_URL } from "./syncConfig";
 
 const BODYWEIGHT_TAB = "Bodyweight";
 
@@ -73,18 +73,17 @@ function fmtDate(iso: string): string {
 }
 
 async function config(): Promise<{ url: string; secret: string }> {
-  // Per-device Settings override the built-in defaults.
+  // Per-device Settings are the only source — nothing is ever baked into the bundle.
   return {
-    url: (await getSetting<string>("sheetSyncUrl", "")) || DEFAULT_SYNC_URL,
-    secret: (await getSetting<string>("sheetSyncSecret", "")) || DEFAULT_SYNC_SECRET,
+    url: await getSetting<string>("sheetSyncUrl", ""),
+    secret: await getSetting<string>("sheetSyncSecret", ""),
   };
 }
 
-// Google Sheets sync is OPTIONAL. It defaults ON only when a URL is baked in (the
-// personal build) so existing installs keep syncing; a fresh/public build with no
-// default URL is off until the user opts in. Local + file backup is the default.
+// Google Sheets sync is OPTIONAL and off until the user configures it in Settings.
+// Local + file backup is the default.
 export async function syncEnabled(): Promise<boolean> {
-  return getSetting<boolean>("syncEnabled", !!DEFAULT_SYNC_URL);
+  return getSetting<boolean>("syncEnabled", false);
 }
 
 async function post(url: string, payload: unknown): Promise<SyncResult> {

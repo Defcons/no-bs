@@ -5,7 +5,7 @@ import android.view.KeyEvent;
 import android.view.accessibility.AccessibilityEvent;
 
 /**
- * PERSONAL FLAVOUR ONLY (src/personal) — not in the public/Play build.
+ * EXTENDED FLAVOUR ONLY (src/extended) — not in the Play build.
  *
  * Why this exists: the whole point of the volume-button break is to press a button on
  * your HEADPHONES without taking the phone out. MainActivity.onKeyDown only gets volume

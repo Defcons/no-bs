@@ -3,7 +3,6 @@
 import Dexie, { type Table } from "dexie";
 import type { DayTemplate, ExercisePerf, Scheme, TrackPoint } from "./types";
 import type { Exercise } from "./lib/exercises";
-import { DEFAULT_SYNC_SECRET, DEFAULT_SYNC_URL } from "./lib/syncConfig";
 
 export interface StoredWorkout {
   id?: number;
@@ -100,54 +99,9 @@ export async function distinctExerciseNames(): Promise<string[]> {
   return [...set].sort((a, b) => a.localeCompare(b));
 }
 
-// --- The current split (seeded once, editable later) ------------------------
-// Taken from the 2026 tab of the sheet (see reference_gym_sheet).
 const s = (sets: number, reps: number | "Max"): Scheme => ({ sets, reps });
-export const DEFAULT_TEMPLATES: Omit<DayTemplate, "id">[] = [
-  {
-    name: "Chest & Arms",
-    order: 0,
-    exercises: [
-      { name: "Bench", scheme: s(3, 5) },
-      { name: "Incline", scheme: s(3, 8) },
-      { name: "Flyes", scheme: s(3, 8) },
-      { name: "Decline flyes", scheme: s(3, 8) },
-      { name: "2H Extension", scheme: s(3, 8) },
-      { name: "1H Extension", scheme: s(3, 10) },
-    ],
-  },
-  {
-    name: "Back & Bi & Abs",
-    order: 1,
-    exercises: [
-      { name: "Deadlift", scheme: s(3, 5) },
-      { name: "Pulldown", scheme: s(3, 8) },
-      { name: "2H Rows", scheme: s(3, 8) },
-      { name: "1H Rows", scheme: s(3, 8) },
-      { name: "Korsrygg", scheme: s(3, 10) },
-      { name: "Curl stang", scheme: s(3, 8) },
-      { name: "Curl 1h", scheme: s(3, 8) },
-      { name: "Abs", scheme: s(3, 8) },
-      { name: "Crunches", scheme: s(3, "Max") },
-    ],
-  },
-  {
-    name: "Legs & Shoulder",
-    order: 2,
-    exercises: [
-      { name: "Squat", scheme: s(3, 5) },
-      { name: "Militarypress", scheme: s(3, 5) },
-      { name: "Legpress", scheme: s(3, 8) },
-      { name: "Shoulderpress", scheme: s(3, 8) },
-      { name: "Calves", scheme: s(3, 10) },
-      { name: "Shrugs", scheme: s(3, 8) },
-      { name: "Hamstring", scheme: s(3, 8) },
-      { name: "Quad", scheme: s(3, 10) },
-    ],
-  },
-];
 
-// Generic starter split for a fresh (public) install — universal names, editable.
+// Starter split seeded on first run — universal names, fully editable.
 export const GENERIC_TEMPLATES: Omit<DayTemplate, "id">[] = [
   {
     name: "Push",
@@ -191,57 +145,21 @@ let booting: Promise<void> | null = null;
 export function ensureBootstrapped(): Promise<void> {
   // Don't cache a rejection — a transient IndexedDB failure (quota, private mode)
   // would otherwise brick every retry until a full restart.
-  return (booting ??= (async () => {
-    await captureBakedSyncConfig();
-    await doBootstrap();
-  })().catch((e) => {
+  return (booting ??= doBootstrap().catch((e) => {
     booting = null;
     throw e;
   }));
-}
-
-// A personal build bakes the sync config into the JS bundle (VITE_SYNC_URL/SECRET) and
-// `sheetSync` falls back to it when nothing is stored. But OTA replaces that bundle with
-// the PUBLIC one, where those constants are EMPTY — which would silently kill sync
-// (syncEnabled even defaults to !!DEFAULT_SYNC_URL). So copy the baked values into
-// settings, which live in IndexedDB and survive every bundle swap + in-place upgrade.
-// Deliberately OUTSIDE doBootstrap's `bootstrapped` guard so an already-seeded install
-// still captures it. No-op on the public build, and never overwrites what you typed in.
-async function captureBakedSyncConfig(): Promise<void> {
-  if (!DEFAULT_SYNC_URL) return; // public build — nothing baked
-  if (await getSetting<string>("sheetSyncUrl", "")) return; // already stored — leave it
-  await setSetting("sheetSyncUrl", DEFAULT_SYNC_URL);
-  if (DEFAULT_SYNC_SECRET) await setSetting("sheetSyncSecret", DEFAULT_SYNC_SECRET);
-  if ((await getSetting<boolean | null>("syncEnabled", null)) === null) await setSetting("syncEnabled", true);
 }
 
 async function doBootstrap(): Promise<void> {
   const done = await getSetting("bootstrapped", false);
   if (done) return;
 
-  // Belt-and-suspenders: only seed when the tables are actually empty. Personal
-  // build → my split; public build → a generic starter (both editable/deletable).
+  // Belt-and-suspenders: only seed when the tables are actually empty. Every build
+  // gets the same generic starter split (editable/deletable). History comes from the
+  // user's own import/restore — the app never ships anyone's data.
   if ((await db.templates.count()) === 0) {
-    const starters = import.meta.env.VITE_SEED ? DEFAULT_TEMPLATES : GENERIC_TEMPLATES;
-    await db.templates.bulkAdd(starters as DayTemplate[]);
-  }
-
-  // Personal history seed — ONLY in a personal build (VITE_SEED). A build-time
-  // constant, so Vite tree-shakes the seed data out of the public bundle entirely.
-  if (import.meta.env.VITE_SEED && (await db.workouts.where("source").startsWith("sheet:").count()) === 0) {
-    const { parseWorkbook } = await import("./lib/sheet");
-    const seed = (await import("./data/history-seed.json")).default as Record<string, string>;
-    // Drop sessions dated in the future (sheet typos like a stray "33" year).
-    const cutoff = new Date(Date.now() + 2 * 86400000).toISOString().slice(0, 10);
-    const parsed = parseWorkbook(seed).filter((w) => w.date <= cutoff);
-    const rows: StoredWorkout[] = parsed.map((w) => ({
-      date: w.date,
-      dayName: w.dayName,
-      exercises: w.exercises,
-      note: w.note,
-      source: `sheet:${w.source ?? "?"}`,
-    }));
-    await db.workouts.bulkAdd(rows);
+    await db.templates.bulkAdd(GENERIC_TEMPLATES as DayTemplate[]);
   }
 
   await setSetting("bootstrapped", true);

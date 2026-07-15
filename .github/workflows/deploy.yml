@@ -23,11 +23,12 @@ jobs:
       - name: Deploy via SSH over Tailscale
         uses: appleboy/ssh-action@v1
         env:
-          # PUBLIC build — app.codecrafts.cc and its OTA bundles are world-readable
-          # (OTA requires it), so NO personal config may be baked in here. Sync is
-          # configured per-device in Settings. (A personal VITE_SYNC_* bake was
-          # correct in the CF-Access-gated gym.defc0n.no era and leaked after the
-          # 2026-07 public migration — never reintroduce it.)
+          # app.codecrafts.cc and its OTA bundles are world-readable (OTA requires
+          # it). VITE_APP_URL is the ONLY var the build takes. Sync is configured
+          # per-device in Settings — since 1.47.0 no build can bake it in at all
+          # (VITE_SYNC_URL/SECRET/SEED are gone from the source). A VITE_SYNC_* bake
+          # was correct in the CF-Access-gated gym.defc0n.no era and leaked after the
+          # 2026-07 public migration — never reintroduce it.
           VITE_APP_URL:     ${{ secrets.VITE_APP_URL }}
         with:
           host:     ${{ secrets.DEPLOY_HOST }}

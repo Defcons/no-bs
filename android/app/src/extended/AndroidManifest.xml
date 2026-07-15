@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- PERSONAL flavour only — merged into the manifest for `personal` builds. The public /
+<!-- EXTENDED flavour only — merged into the manifest for `extended` builds. The Play /
      Play (`standard`) build never declares this service. exported=true is required (the
      SYSTEM binds accessibility services); it is protected by BIND_ACCESSIBILITY_SERVICE,
      which only the system holds, so nothing else can bind it. -->

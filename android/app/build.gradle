@@ -34,17 +34,19 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
-    // Two distributions from ONE codebase:
-    //  - standard : what ships publicly / to Play. No AccessibilityService.
-    //  - personal : the owner's own sideloaded build. Adds a VolumeKeyAccessibilityService
-    //               (src/personal/) so a headphone volume press starts the break with the
-    //               screen LOCKED and music playing — the only reliable way to do that.
-    //               Play rejects non-accessibility uses of that API, hence the split.
+    // Two distributions from ONE codebase. Identical apart from the service below —
+    // neither bakes in any user's data or credentials.
+    //  - standard : what ships to Play. No AccessibilityService.
+    //  - extended : sideload-only. Adds a VolumeKeyAccessibilityService (src/extended/)
+    //               so a headphone volume press starts the break with the screen LOCKED
+    //               and music playing — the only reliable way to do that. Play rejects
+    //               non-accessibility uses of that API, which is the whole reason it
+    //               can't be one build.
     // Same applicationId + debug keystore, so either upgrades the other in place.
     flavorDimensions "distribution"
     productFlavors {
         standard { dimension "distribution" }
-        personal { dimension "distribution" }
+        extended { dimension "distribution" }
     }
     signingConfigs {
         if (hasSigning) {
