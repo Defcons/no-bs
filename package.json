@@ -1,7 +1,7 @@
 {
   "name": "no-bs",
   "private": true,
-  "version": "1.47.0",
+  "version": "1.47.1",
   "type": "module",
   "scripts": {
     "dev": "vite",

@@ -103,8 +103,12 @@ function doPost(e) {
     var doneNames = {};
     for (var rr = headerRow + 1; rr < data.length; rr++) {
       if (rowHasDate(data[rr])) break; // reached the next day-block header
-      lastBlockRow = rr;
       var label = String(data[rr][0]).trim();
+      // Only a labelled row extends the block. A trailing blank row is the SPACER
+      // that separates this block from the next — if it counted as block content,
+      // self-healed meta rows would be inserted BELOW it, stranding the separator
+      // mid-block and welding the two splits together.
+      if (label) lastBlockRow = rr;
       var kind = metaKind(label);
       if (kind) {
         if (metaRow[kind] < 0) metaRow[kind] = rr;
