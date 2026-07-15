@@ -34,6 +34,18 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    // Two distributions from ONE codebase:
+    //  - standard : what ships publicly / to Play. No AccessibilityService.
+    //  - personal : the owner's own sideloaded build. Adds a VolumeKeyAccessibilityService
+    //               (src/personal/) so a headphone volume press starts the break with the
+    //               screen LOCKED and music playing — the only reliable way to do that.
+    //               Play rejects non-accessibility uses of that API, hence the split.
+    // Same applicationId + debug keystore, so either upgrades the other in place.
+    flavorDimensions "distribution"
+    productFlavors {
+        standard { dimension "distribution" }
+        personal { dimension "distribution" }
+    }
     signingConfigs {
         if (hasSigning) {
             release {

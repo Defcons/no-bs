@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- PERSONAL flavour only — merged into the manifest for `personal` builds. The public /
+     Play (`standard`) build never declares this service. exported=true is required (the
+     SYSTEM binds accessibility services); it is protected by BIND_ACCESSIBILITY_SERVICE,
+     which only the system holds, so nothing else can bind it. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <service
+            android:name=".VolumeKeyAccessibilityService"
+            android:exported="true"
+            android:label="@string/volume_key_service_label"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/volume_key_service" />
+        </service>
+    </application>
+</manifest>

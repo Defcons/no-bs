@@ -29,7 +29,27 @@ public class HwButtonsPlugin extends Plugin {
     // Read by MainActivity.onKeyDown() — captures BOTH volume up and down.
     static boolean captureVolume = false;
 
+    // Live instance, so the PERSONAL flavor's VolumeKeyAccessibilityService can fire
+    // a volume press from OUTSIDE the activity (screen locked / another app on top).
+    // It runs in this same process but has no Capacitor Bridge of its own.
+    private static HwButtonsPlugin instance;
+
     private MediaSession session;
+
+    @Override
+    public void load() {
+        instance = this;
+    }
+
+    /** Static entry point for the accessibility service. True if the press was consumed. */
+    static boolean fireVolumeKey() {
+        HwButtonsPlugin p = instance;
+        if (p != null && captureVolume) {
+            p.notifyVolumeKey();
+            return true;
+        }
+        return false;
+    }
 
     @PluginMethod
     public void setCapture(PluginCall call) {
@@ -94,6 +114,7 @@ public class HwButtonsPlugin extends Plugin {
     @Override
     protected void handleOnDestroy() {
         stopSession();
+        if (instance == this) instance = null;
     }
 
     // Called by MainActivity when a captured volume key (up or down) fires.
