@@ -286,7 +286,7 @@ var KEY_LIFTS = {
 
 // Bump when the summary logic changes — echoed in the response so a deploy can
 // be verified against the repo (Apps Script pastes have gone stale before).
-var SUMMARY_V = 2;
+var SUMMARY_V = 3;
 
 // action:"summary" → last workout, this-ISO-week count, next split due, per-day
 // stats, and last/best top set for the four headline lifts.
@@ -370,7 +370,7 @@ function summaryAction(body) {
 function liftSummaryAction(body) {
   var raw = String(body.exercise == null ? "" : body.exercise).trim();
   if (!raw) return json({ ok: false, error: "missing exercise" });
-  var name = stripScheme(raw).toLowerCase();
+  var name = normName(stripScheme(raw));
   var names = [name];
   for (var key in KEY_LIFTS) {
     if (KEY_LIFTS[key].indexOf(name) >= 0) { names = KEY_LIFTS[key]; break; }
@@ -468,8 +468,8 @@ function scanTab(disp, isCurrentYear, out) {
       var name = stripScheme(label);
       if (label && name !== label) blockHasScheme = true; // had a "3x8 " prefix
       if (!name && firstCol >= 2) name = String(disp[rr][1]).trim(); // 2018-19 two-col layout
+      name = normName(name);
       if (!name || metaKind(name)) continue;
-      name = name.toLowerCase();
       for (var d = 0; d < dates.length; d++) {
         var kg = topSetKg(disp[rr][dates[d].col]);
         if (kg != null) out.occurrences.push({ name: name, date: dates[d].date, topKg: kg });
@@ -539,9 +539,24 @@ function cellDate(v) {
   return dt;
 }
 
-// Strip a leading "3x8 " scheme from a row label (same regex as matchName).
+// Strip a leading "3x8 " scheme from a row label. Zero-width chars are removed
+// first — hand-typed labels can hide them, and they'd both break the scheme
+// match and survive trim(). Accepts × as well as x ("3×5").
 function stripScheme(label) {
-  return String(label).replace(/^\s*\d+\s*[xX]\s*(\d+|Max|max|MAX)\b\s*/, "").trim();
+  return String(label)
+    .replace(/[\u200B-\u200D\u2060\uFEFF]/g, "")
+    .replace(/^\s*\d+\s*[xX×]\s*(\d+|Max|max|MAX)\b\s*/, "")
+    .trim();
+}
+
+// Normalize a name for matching: zero-width chars out, whitespace runs
+// collapsed to one space, lowercased. Hand-filled sheets need the tolerance.
+function normName(s) {
+  return String(s)
+    .replace(/[\u200B-\u200D\u2060\uFEFF]/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
 }
 
 function dayStart(d) {
@@ -608,10 +623,10 @@ function rowHasDate(row) {
   return false;
 }
 
-// Match an app exercise name to a sheet row label (strip the leading "3x8 " scheme).
+// Match an app exercise name to a sheet row label (strip the leading "3x8 "
+// scheme, tolerate zero-width chars / odd whitespace via normName).
 function matchName(rowLabel, exName) {
-  var name = rowLabel.replace(/^\s*\d+\s*[xX]\s*(\d+|Max|max|MAX)\b\s*/, "").trim().toLowerCase();
-  return name === String(exName).trim().toLowerCase();
+  return normName(stripScheme(rowLabel)) === normName(exName);
 }
 
 function json(obj) {
