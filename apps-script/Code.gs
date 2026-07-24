@@ -286,7 +286,7 @@ var KEY_LIFTS = {
 
 // Bump when the summary logic changes — echoed in the response so a deploy can
 // be verified against the repo (Apps Script pastes have gone stale before).
-var SUMMARY_V = 3;
+var SUMMARY_V = 4;
 
 // action:"summary" → last workout, this-ISO-week count, next split due, per-day
 // stats, and last/best top set for the four headline lifts.
@@ -360,6 +360,23 @@ function summaryAction(body) {
       }
     }
     resp.debug = { sessions: scan.sessions.length, occurrences: scan.occurrences.length, names: names };
+    // Echo the LIVE alias table + inline match counts + function fingerprints,
+    // so a drifted/shadowed deployment is directly visible in the response.
+    resp.debug.keyLifts = KEY_LIFTS;
+    var matches = {};
+    for (var mk in KEY_LIFTS) {
+      var cnt = 0;
+      for (var mo = 0; mo < scan.occurrences.length; mo++) {
+        if (KEY_LIFTS[mk].indexOf(scan.occurrences[mo].name) >= 0) cnt++;
+      }
+      matches[mk] = cnt;
+    }
+    resp.debug.matches = matches;
+    resp.debug.fns = {
+      scanTab: scanTab.toString().length,
+      liftStats: liftStats.toString().length,
+      normName: normName.toString().length,
+    };
   }
   return json(resp);
 }
