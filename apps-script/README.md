@@ -26,6 +26,38 @@ From then on, tapping **Finish workout** writes a new dated column into the corr
 ## How it writes
 For the workout's year tab (e.g. `2026`), it finds the day-block whose header cell equals the day name (e.g. `Chest & Arms`), writes the date (`dd.mm.yy`) in the first empty column of that header row, and fills each exercise row (matched by name, ignoring the `3x8` prefix) with the sets string (e.g. `72,5-70-70`, reps annotated as `(6)` only when they differ from the scheme). The day note goes in the block's `Note` row.
 
+## Read-only summary API (Home Assistant voice)
+
+Two read actions let external consumers (the HA voice assistant) query the sheet. Same POST body + secret as the sync actions; they never write, and they scan only the **current + previous year tabs** (one displayValues read each).
+
+`{ "secret": "...", "action": "summary" }` →
+
+```json
+{
+  "ok": true,
+  "lastWorkout": { "date": "2026-07-23", "dayName": "Running", "daysAgo": 1 },
+  "weekWorkouts": 3,
+  "nextSplit": { "dayName": "Legs", "lastDate": "2026-07-16", "daysAgo": 8 },
+  "days": [ { "dayName": "Pull", "lastDate": "2026-07-22", "daysAgo": 2, "sessions": 12, "split": true } ],
+  "lifts": { "deadlift": { "lastKg": 140, "lastDate": "2026-07-14", "bestKg": 150 } }
+}
+```
+
+- `lastWorkout.dayName` answers "what workout/split did I do" — it's the sheet block name, so one-off blocks (Running, Innebandy…) show up too.
+- `weekWorkouts` = sessions in the current ISO week (Mon–Sun).
+- `nextSplit` = the least-recently-done strength split in the current year tab (the app's "reddest" day-picker entry) — answers "what split is next/today". Falls back to the previous year's splits while a fresh year tab is still empty.
+- `days` = every day-block, splits **and** cardio blocks alike, most recent first (capped at 20) — answers "when did I last swim". `split` = the block has scheme-prefixed rows (`3x5 …`), which template splits always have and app-created cardio blocks never do. `sessions` counts dated columns in the scanned two years.
+- `lifts` has all four of `deadlift` / `squat` / `bench` / `ohp`; values are the **top set per session** (heaviest token in cells like `72,5-70-70`), `bestKg` the best across the scanned two years. A lift with no data → `null`.
+
+`{ "secret": "...", "action": "liftSummary", "exercise": "bench" }` →
+
+```json
+{ "ok": true, "exercise": "bench", "found": true, "lastKg": 75, "lastDate": "2026-07-20", "bestKg": 80,
+  "sessions": [ { "date": "2026-07-20", "topKg": 75 } ] }
+```
+
+`sessions` = the 3 most recent. Matching is the same as write-back — exact scheme-stripped row-label match — and the four headline lifts accept their app aliases (`bench` → "Bench Press", `markløft` → "Deadlift"). Rep-only exercises (pull-ups logged as `(10)-(9)`) carry no weight and report `found: false`; an unknown name does too.
+
 ## Updating the script later
 If you edit `Code.gs`, **Deploy → Manage deployments → (edit) → New version** so the `/exec` URL keeps working.
 

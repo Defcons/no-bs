@@ -3,7 +3,9 @@
  *
  * Bound Apps Script Web App for the "Trening" sheet. The PWA POSTs a finished
  * workout; this script finds the matching year tab + day-block and writes a new
- * dated column in the sheet's own transposed layout.
+ * dated column in the sheet's own transposed layout. Also serves read-only
+ * summaries (action "summary" / "liftSummary") for external consumers like the
+ * Home Assistant voice assistant.
  *
  * Setup: Extensions → Apps Script, paste this, set SECRET below, then
  * Deploy → New deployment → Web app → Execute as: Me, Who has access: Anyone.
@@ -32,6 +34,11 @@ function doPost(e) {
       });
       return json({ ok: true, tabs: out });
     }
+
+    // Read-only summaries for external consumers (e.g. the Home Assistant
+    // voice assistant). Nothing mutates, so no lock is taken.
+    if (body.action === "summary") return summaryAction();
+    if (body.action === "liftSummary") return liftSummaryAction(body);
 
     // Serialize all mutations so two devices syncing at once can't compute the
     // same "first empty column" and clobber each other.
@@ -259,6 +266,283 @@ function writeBodyweight(body) {
     }
   }
   return json({ ok: true, bodyweight: true, count: entries.length });
+}
+
+// ---------------------------------------------------------------------------
+// Read-only summaries (action "summary" / "liftSummary") — consumed by the
+// Home Assistant voice assistant. One getDisplayValues pull per tab (current +
+// previous year), everything computed in-script; nothing is written.
+// ---------------------------------------------------------------------------
+
+// Headline lifts + alias sets (mirrors the app's exercise library). Matching is
+// EXACT on the scheme-stripped lowercased row label — same convention as
+// matchName — so "Romanian Deadlift" never counts as a deadlift.
+var KEY_LIFTS = {
+  deadlift: ["deadlift", "conventional deadlift", "markløft", "mark", "bb deadlift"],
+  squat: ["squat", "back squat", "barbell squat", "knebøy", "high bar squat", "low bar squat"],
+  bench: ["bench press", "bench", "benkpress", "flat bench", "barbell bench press", "bb bench"],
+  ohp: ["overhead press", "ohp", "military press", "military", "standing press", "strict press"],
+};
+
+// action:"summary" → last workout, this-ISO-week count, next split due, per-day
+// stats, and last/best top set for the four headline lifts.
+function summaryAction() {
+  var scan = scanRecentTabs();
+  var today = dayStart(new Date());
+
+  var last = null;
+  for (var i = 0; i < scan.sessions.length; i++) {
+    if (!last || scan.sessions[i].date > last.date) last = scan.sessions[i];
+  }
+
+  var mon = mondayOf(new Date());
+  var weekWorkouts = 0;
+  for (var j = 0; j < scan.sessions.length; j++) {
+    if (mondayOf(scan.sessions[j].date) === mon) weekWorkouts++;
+  }
+
+  // Per day-block stats — splits and one-off cardio blocks (Running, Innebandy…)
+  // alike, so "when did I last swim" is answerable too.
+  var days = [];
+  for (var bk in scan.blocks) {
+    var b = scan.blocks[bk];
+    days.push({
+      dayName: b.dayName,
+      lastDate: isoDate(b.lastDate),
+      daysAgo: daysBetween(b.lastDate, today),
+      sessions: b.count,
+      split: b.splitAny,
+    });
+  }
+  days.sort(function (a, b) { return a.lastDate < b.lastDate ? 1 : -1; });
+  if (days.length > 20) days.length = 20;
+
+  // Next split = the least-recently-done strength split in the current year tab
+  // (the active rotation) — the app's "reddest" day-picker entry. Falls back to
+  // the previous year's splits while a new year tab has no data yet.
+  var next = null;
+  for (var nk in scan.blocks) {
+    var bl = scan.blocks[nk];
+    if (!(scan.hasCurrentSplits ? bl.splitInCurrent : bl.splitAny)) continue;
+    if (!next || bl.lastDate < next.lastDate) next = bl;
+  }
+
+  var lifts = {};
+  for (var lk in KEY_LIFTS) lifts[lk] = liftStats(scan.occurrences, KEY_LIFTS[lk]);
+
+  return json({
+    ok: true,
+    lastWorkout: last
+      ? { date: isoDate(last.date), dayName: last.dayName, daysAgo: daysBetween(last.date, today) }
+      : null,
+    weekWorkouts: weekWorkouts,
+    nextSplit: next
+      ? { dayName: next.dayName, lastDate: isoDate(next.lastDate), daysAgo: daysBetween(next.lastDate, today) }
+      : null,
+    days: days,
+    lifts: lifts,
+  });
+}
+
+// action:"liftSummary" {exercise} → last/best top set + the 3 most recent
+// sessions for one exercise. A key-lift alias widens to its whole alias set
+// ("bench" also matches "Bench Press" rows).
+function liftSummaryAction(body) {
+  var raw = String(body.exercise == null ? "" : body.exercise).trim();
+  if (!raw) return json({ ok: false, error: "missing exercise" });
+  var name = stripScheme(raw).toLowerCase();
+  var names = [name];
+  for (var key in KEY_LIFTS) {
+    if (KEY_LIFTS[key].indexOf(name) >= 0) { names = KEY_LIFTS[key]; break; }
+  }
+
+  var occs = [];
+  var all = scanRecentTabs().occurrences;
+  for (var i = 0; i < all.length; i++) {
+    if (names.indexOf(all[i].name) >= 0) occs.push(all[i]);
+  }
+  if (!occs.length) return json({ ok: true, exercise: raw, found: false });
+
+  occs.sort(function (a, b) { return b.date - a.date; });
+  var best = null;
+  for (var j = 0; j < occs.length; j++) {
+    if (best == null || occs[j].topKg > best) best = occs[j].topKg;
+  }
+  var recent = [];
+  for (var r = 0; r < occs.length && recent.length < 3; r++) {
+    recent.push({ date: isoDate(occs[r].date), topKg: occs[r].topKg });
+  }
+  return json({
+    ok: true,
+    exercise: raw,
+    found: true,
+    lastKg: occs[0].topKg,
+    lastDate: isoDate(occs[0].date),
+    bestKg: best,
+    sessions: recent,
+  });
+}
+
+// Most recent + best top set among occurrences matching one of `names`.
+function liftStats(occurrences, names) {
+  var last = null;
+  var best = null;
+  for (var i = 0; i < occurrences.length; i++) {
+    var o = occurrences[i];
+    if (names.indexOf(o.name) < 0) continue;
+    if (best == null || o.topKg > best) best = o.topKg;
+    if (!last || o.date > last.date) last = o;
+  }
+  return last ? { lastKg: last.topKg, lastDate: isoDate(last.date), bestKg: best } : null;
+}
+
+// Scan the current + previous year tabs (one getDisplayValues each) into:
+//   sessions:    every dated block column   → { date, dayName }
+//   occurrences: every filled exercise cell → { name, date, topKg }
+//   blocks:      per day-block name         → { dayName, lastDate, count, splitAny, splitInCurrent }
+// A "split" block has at least one scheme-prefixed row ("3x5 …") — template
+// splits always do, createBlock cardio blocks never do. Future dates (sheet
+// year typos) are dropped, like the app's importer.
+function scanRecentTabs() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var year = new Date().getFullYear();
+  var out = { sessions: [], occurrences: [], blocks: {}, hasCurrentSplits: false };
+  [year - 1, year].forEach(function (y) {
+    var sh = ss.getSheetByName(String(y));
+    if (sh) scanTab(sh.getDataRange().getDisplayValues(), y === year, out);
+  });
+  for (var k in out.blocks) {
+    if (out.blocks[k].splitInCurrent) out.hasCurrentSplits = true;
+  }
+  return out;
+}
+
+function scanTab(disp, isCurrentYear, out) {
+  var today = dayStart(new Date());
+  var r = 0;
+  while (r < disp.length) {
+    var hdr = dateCells(disp[r]);
+    if (!hdr.length) {
+      r++;
+      continue;
+    }
+    // Day name = label cells before the first date, minus "Dag N" (as sheet.ts).
+    var firstCol = hdr[0].col;
+    var parts = [];
+    for (var c = 0; c < firstCol; c++) {
+      var t = String(disp[r][c]).trim();
+      if (t && !/^dag\s*\d+$/i.test(t)) parts.push(t);
+    }
+    var dayName = parts.join(" ") || "Workout";
+    var dates = [];
+    for (var h = 0; h < hdr.length; h++) {
+      if (dayStart(hdr[h].date) <= today) dates.push(hdr[h]);
+    }
+
+    // Walk the block's rows until the next header (or EOF).
+    var blockHasScheme = false;
+    var rr = r + 1;
+    for (; rr < disp.length; rr++) {
+      if (dateCells(disp[rr]).length) break;
+      var label = String(disp[rr][0]).trim();
+      var name = stripScheme(label);
+      if (label && name !== label) blockHasScheme = true; // had a "3x8 " prefix
+      if (!name && firstCol >= 2) name = String(disp[rr][1]).trim(); // 2018-19 two-col layout
+      if (!name || metaKind(name)) continue;
+      name = name.toLowerCase();
+      for (var d = 0; d < dates.length; d++) {
+        var kg = topSetKg(disp[rr][dates[d].col]);
+        if (kg != null) out.occurrences.push({ name: name, date: dates[d].date, topKg: kg });
+      }
+    }
+
+    if (dates.length) {
+      for (var s = 0; s < dates.length; s++) {
+        out.sessions.push({ date: dates[s].date, dayName: dayName });
+      }
+      var bk = dayName.toLowerCase();
+      var blk = out.blocks[bk];
+      if (!blk) {
+        blk = out.blocks[bk] = { dayName: dayName, lastDate: null, count: 0, splitAny: false, splitInCurrent: false };
+      }
+      blk.count += dates.length;
+      for (var s2 = 0; s2 < dates.length; s2++) {
+        if (!blk.lastDate || dates[s2].date > blk.lastDate) blk.lastDate = dates[s2].date;
+      }
+      if (blockHasScheme) {
+        blk.splitAny = true;
+        if (isCurrentYear) blk.splitInCurrent = true;
+      }
+    }
+    r = rr;
+  }
+}
+
+// Heaviest set in a cell like "72,5-70-70" / "80(6)-75(8)" / "110x3".
+// Norwegian decimal commas; "(30)" (reps-only, bodyweight) has no weight;
+// "x" = skipped session. The 500 kg cap mirrors the app's typo guard.
+function topSetKg(cell) {
+  var t = String(cell == null ? "" : cell).trim();
+  if (!t || /^x+$/i.test(t)) return null;
+  t = t.replace(/\(\d+\s*[xX]\s*\d+\)/, " "); // whole-cell "(3x8)" rep override
+  var toks = t.split("-");
+  var best = null;
+  for (var i = 0; i < toks.length; i++) {
+    var head = toks[i].split("(")[0].replace(",", ".");
+    var m = head.match(/\d+(?:\.\d+)?/);
+    if (!m) continue;
+    var kg = parseFloat(m[0]);
+    if (kg > 0 && kg <= 500 && (best == null || kg > best)) best = kg;
+  }
+  return best;
+}
+
+// Every parseable "dd.mm.yy" date cell in a row (col 1+) → [{ col, date }].
+function dateCells(row) {
+  var out = [];
+  for (var c = 1; c < row.length; c++) {
+    var d = cellDate(row[c]);
+    if (d) out.push({ col: c, date: d });
+  }
+  return out;
+}
+
+// Parse a "dd.mm.yy(yy)" display cell (tolerating trailing text) to a Date.
+function cellDate(v) {
+  var m = String(v == null ? "" : v).trim().match(/^(\d{1,2})\.(\d{1,2})\.(\d{2,4})/);
+  if (!m) return null;
+  var d = +m[1], mo = +m[2], y = +m[3];
+  if (y < 100) y += 2000;
+  if (mo < 1 || mo > 12 || d < 1 || d > 31) return null;
+  var dt = new Date(y, mo - 1, d);
+  if (dt.getFullYear() !== y || dt.getMonth() !== mo - 1 || dt.getDate() !== d) return null; // 31.02 etc.
+  return dt;
+}
+
+// Strip a leading "3x8 " scheme from a row label (same regex as matchName).
+function stripScheme(label) {
+  return String(label).replace(/^\s*\d+\s*[xX]\s*(\d+|Max|max|MAX)\b\s*/, "").trim();
+}
+
+function dayStart(d) {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+}
+
+// Midnight of the ISO week's Monday — two dates in the same ISO week share it.
+function mondayOf(d) {
+  var t = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  t.setDate(t.getDate() - ((t.getDay() + 6) % 7));
+  return t.getTime();
+}
+
+function daysBetween(d, todayMs) {
+  return Math.round((todayMs - dayStart(d)) / 86400000);
+}
+
+function isoDate(d) {
+  var mo = d.getMonth() + 1;
+  var da = d.getDate();
+  return d.getFullYear() + "-" + (mo < 10 ? "0" : "") + mo + "-" + (da < 10 ? "0" : "") + da;
 }
 
 // Normalize a "dd.mm.yy(yy)" cell (string or Date) to "d.m.yy" for comparison.
