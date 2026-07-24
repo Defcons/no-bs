@@ -3,6 +3,7 @@ import { useLiveQuery } from "dexie-react-hooks";
 import "./App.css";
 import { db, ensureBootstrapped, getSetting, listExercises, setSetting, type StoredWorkout } from "./db";
 import { registerCustomExercises } from "./lib/exercises";
+import { loadExerciseRest } from "./lib/exerciseRest";
 import type { WeightUnit } from "./lib/units";
 import { daysAgo } from "./lib/format";
 import { type HrMonitor, createHrMonitor, hrAvailable } from "./lib/hr";
@@ -155,6 +156,7 @@ export default function App() {
       const theme = await getSetting<string>("theme", "dark");
       if (theme === "light") document.documentElement.dataset.theme = "light";
       await ensureBootstrapped();
+      await loadExerciseRest(); // per-exercise rest overrides (global, by exercise id)
       setRest(await getSetting("restDefaultSec", 90));
       setStep(await getSetting("weightStep", 2.5));
       const dpw = await getSetting("daysPerWeek", 4);

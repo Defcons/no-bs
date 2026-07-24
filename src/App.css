@@ -690,6 +690,47 @@
   color: var(--accent);
   border-color: var(--accent);
 }
+/* Per-exercise rest chip in the card header (wider than .hbtn — holds "⏱ 2:00"). */
+.rest-chip {
+  height: 30px;
+  padding: 0 7px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.rest-chip.set {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.rest-chip.open {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+}
+.rest-picker {
+  margin-top: 8px;
+}
+.rest-picker-lbl {
+  display: block;
+  font-size: 11px;
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+.rest-picker-opts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.rest-picker-opts button {
+  padding: 6px 10px;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.rest-picker-opts button.active {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
 .set-count {
   min-width: 15px;
   text-align: center;

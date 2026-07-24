@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { distinctExerciseNames, getSetting, lastWorkoutForDay, type StoredWorkout } from "../db";
 import { resolveExercise } from "../lib/exercises";
+import { restForId } from "../lib/exerciseRest";
 import { daysAgo, daysAgoLabel, hhmmss, mmss, niceDate } from "../lib/format";
 import { cancelBreakNotification, scheduleBreakNotification, showAutoEndNotification, showReminder } from "../lib/notify";
 import { startGeofence, stopGeofence } from "../lib/geofence";
@@ -416,17 +417,25 @@ export function Today({
     update((d) => ({ ...d, lastActivityAt: Date.now(), exercises: d.exercises.map((e, idx) => (idx === i ? ex : e)) }));
   };
 
-  const startRest = () => {
-    const at = Date.now() + restDefaultSec * 1000;
+  // Rest seconds for an exercise: its own global override (by resolved id) or the
+  // Settings default. `ex` omitted (manual/hardware start) → the exercise whose
+  // next set is up, so an earbud-started break still honors the per-exercise rest.
+  const restSecFor = (ex?: ExercisePerf): number => {
+    const target = ex ?? draft?.exercises.find((e) => e.sets.some((s) => !s.done)) ?? draft?.exercises[0];
+    const id = target ? resolveExercise(target.name, target.exerciseId).id : "";
+    return restForId(id) ?? restDefaultSec;
+  };
+  const startRest = (ex?: ExercisePerf) => {
+    const at = Date.now() + restSecFor(ex) * 1000;
     scheduleBreakNotification(at); // native: fires even if app is backgrounded
     playBreakStart(); // audible confirmation (matters for volume/headset-button starts)
     update((d) => ({ ...d, restEndsAt: at, lastActivityAt: Date.now() }));
   };
   // Auto-start on "set done": only when nothing is already counting down, so
   // finishing sets back-to-back doesn't keep resetting a running break.
-  const autoStartRest = () => {
+  const autoStartRest = (ex?: ExercisePerf) => {
     const running = draft?.restEndsAt != null && draft.restEndsAt > Date.now();
-    if (!running) startRest();
+    if (!running) startRest(ex);
   };
   const setRest = (endsAt: number | null) => {
     if (endsAt == null) cancelBreakNotification();
@@ -511,7 +520,7 @@ export function Today({
               <path d="M9 9.5h.01M15 9.5h.01" />
             </svg>
           </button>
-          <button className="break-btn" onClick={startRest} aria-label="Start rest timer" title="Rest timer">
+          <button className="break-btn" onClick={() => startRest()} aria-label="Start rest timer" title="Rest timer">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
               <path d="M6 3.4h12M6 20.6h12" />
               <path d="M7.6 4c0 4.7 4.4 6 4.4 8s-4.4 3.3-4.4 8" />
@@ -547,7 +556,8 @@ export function Today({
               (p) => resolveExercise(p.name, p.exerciseId).id === resolveExercise(ex.name, ex.exerciseId).id,
             )}
             onChange={(e) => setExercise(i, e)}
-            onSetDone={autoBreakOnDone ? autoStartRest : undefined}
+            onSetDone={autoBreakOnDone ? () => autoStartRest(ex) : undefined}
+            defaultRest={restDefaultSec}
             editableName={draft.custom}
             units={units}
             nameHistory={nameHistory}
