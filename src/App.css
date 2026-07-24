@@ -839,6 +839,66 @@
   margin-top: 8px;
 }
 
+/* "Last time" read-only panel (swipe right on the card, or the ↺ header button). */
+.prev-panel {
+  margin-top: 8px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--accent) 6%, var(--bg));
+}
+.prev-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.prev-panel-title {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--accent);
+}
+.prev-panel-date {
+  font-weight: 500;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--muted);
+}
+.prev-sets {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.prev-sets li {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+.prev-set-n {
+  width: 18px;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--muted);
+}
+.prev-set-v {
+  font-family: var(--display);
+  font-variant-numeric: tabular-nums;
+  font-size: 16px;
+  font-weight: 700;
+}
+.prev-note {
+  color: var(--muted);
+  font-style: italic;
+  font-size: 13px;
+}
+
 /* ---- Full-screen route viewer (from a sheet Route link) ---- */
 .route-viewer {
   position: fixed;

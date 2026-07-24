@@ -555,6 +555,7 @@ export function Today({
             prev={prev?.exercises.find(
               (p) => resolveExercise(p.name, p.exerciseId).id === resolveExercise(ex.name, ex.exerciseId).id,
             )}
+            prevDate={prev?.date}
             onChange={(e) => setExercise(i, e)}
             onSetDone={autoBreakOnDone ? () => autoStartRest(ex) : undefined}
             defaultRest={restDefaultSec}
