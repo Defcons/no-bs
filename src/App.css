@@ -839,32 +839,43 @@
   margin-top: 8px;
 }
 
-/* "Last time" read-only panel (swipe right on the card, or the ↺ header button). */
+/* "Last time" READ-ONLY panel (swipe right on the card, or the ↺ header button).
+   Deliberately archival — dashed border + muted, desaturated palette — so it never
+   reads as an editable current-week card. */
 .prev-panel {
   margin-top: 8px;
-  padding: 10px;
-  border: 1px solid var(--line);
+  padding: 10px 12px 12px;
+  border: 1px dashed color-mix(in srgb, var(--muted) 55%, var(--line));
   border-radius: var(--radius-sm);
-  background: color-mix(in srgb, var(--accent) 6%, var(--bg));
+  background: color-mix(in srgb, var(--muted) 8%, var(--bg));
 }
 .prev-panel-head {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  margin-bottom: 8px;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  margin-bottom: 10px;
 }
-.prev-panel-title {
-  font-size: 12px;
-  font-weight: 700;
+/* Prominent "LAST TIME" badge so it's unmistakable which week you're looking at. */
+.prev-badge {
+  font-size: 11px;
+  font-weight: 800;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--accent);
+  letter-spacing: 0.07em;
+  color: var(--bg);
+  background: var(--muted);
+  padding: 2px 8px;
+  border-radius: 999px;
 }
 .prev-panel-date {
-  font-weight: 500;
-  text-transform: none;
-  letter-spacing: 0;
+  font-size: 12px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.prev-ro {
+  margin-left: auto;
+  font-size: 11px;
+  font-weight: 600;
   color: var(--muted);
 }
 .prev-sets {
@@ -887,16 +898,22 @@
   font-weight: 700;
   color: var(--muted);
 }
+/* Muted (not full-contrast) numbers reinforce "this is old, not your live entry". */
 .prev-set-v {
   font-family: var(--display);
   font-variant-numeric: tabular-nums;
   font-size: 16px;
   font-weight: 700;
+  color: var(--text-dim, var(--muted));
 }
 .prev-note {
   color: var(--muted);
   font-style: italic;
   font-size: 13px;
+}
+.prev-back {
+  margin-top: 10px;
+  width: 100%;
 }
 
 /* ---- Full-screen route viewer (from a sheet Route link) ---- */

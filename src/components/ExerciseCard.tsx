@@ -184,15 +184,15 @@ export function ExerciseCard({ exercise, step, prev, prevDate, onChange, onSetDo
       )}
 
       {showPrev ? (
-        <div className="prev-panel">
+        <div className="prev-panel" aria-readonly="true">
           <div className="prev-panel-head">
-            <span className="prev-panel-title">
-              Last time
-              {prevDate ? <span className="prev-panel-date"> · {niceDate(prevDate)} ({daysAgoLabel(prevDate)})</span> : ""}
-            </span>
-            <button className="mini" onClick={() => setShowPrev(false)}>
-              Back to editing
-            </button>
+            <span className="prev-badge">↺ Last time</span>
+            {prevDate && (
+              <span className="prev-panel-date">
+                {niceDate(prevDate)} · {daysAgoLabel(prevDate)}
+              </span>
+            )}
+            <span className="prev-ro">🔒 read-only</span>
           </div>
           {prev && prev.sets.length ? (
             <ol className="prev-sets">
@@ -207,6 +207,9 @@ export function ExerciseCard({ exercise, step, prev, prevDate, onChange, onSetDo
           ) : (
             <p className="muted tiny">No previous session logged for this exercise yet.</p>
           )}
+          <button className="mini prev-back" onClick={() => setShowPrev(false)}>
+            ← Back to this week (edit)
+          </button>
         </div>
       ) : (
         <div className="sets">
