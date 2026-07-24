@@ -16,6 +16,7 @@ type Props = {
   step: number; // +/- increment in kg
   unit?: ExerciseUnit; // exercise unit (default weight)
   units?: WeightUnit; // weight display/entry unit (kg default)
+  defaultReps?: number | null; // scheme's target reps — border greens if you beat it, reds if under
   active?: boolean; // the next set to log (first not-done) — subtle outline
   prevWeight?: number | null; // last session's weight (kg), shown as ghost hint
   onChange: (patch: Partial<SetEntry>) => void;
@@ -41,7 +42,7 @@ type NumField = "weight" | "reps" | "assist" | "seconds" | "distanceM";
 // Trim trailing zeros: 5.20 → "5.2", 5.00 → "5".
 const tidy = (n: number, digits: number) => String(Number(n.toFixed(digits)));
 
-export function SetInput({ index, set, step, unit = "weight", units = "kg", active, prevWeight, onChange }: Props) {
+export function SetInput({ index, set, step, unit = "weight", units = "kg", defaultReps, active, prevWeight, onChange }: Props) {
   const hasExtra = !!set.note || set.assist != null;
   const [showMore, setShowMore] = useState(hasExtra);
   const done = !!set.done;
@@ -152,7 +153,15 @@ export function SetInput({ index, set, step, unit = "weight", units = "kg", acti
             </button>
           </div>
 
-          <div className="field reps-field">
+          <div
+            className={`field reps-field ${
+              set.reps != null && defaultReps != null && set.reps !== defaultReps
+                ? set.reps > defaultReps
+                  ? "reps-over"
+                  : "reps-under"
+                : ""
+            }`}
+          >
             <input
               type="text"
               inputMode="numeric"

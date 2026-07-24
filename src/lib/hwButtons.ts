@@ -7,6 +7,7 @@ import { Capacitor, registerPlugin, type PluginListenerHandle } from "@capacitor
 interface HwButtonsPlugin {
   setCapture(options: { enabled: boolean }): Promise<void>;
   setMediaCapture(options: { enabled: boolean }): Promise<void>;
+  duck(options: { durationMs: number }): Promise<void>;
   addListener(event: "volumeKey" | "mediaButton", cb: () => void): Promise<PluginListenerHandle>;
 }
 
@@ -33,6 +34,17 @@ export async function setMediaButtonCapture(enabled: boolean): Promise<void> {
   if (!native()) return;
   try {
     await HwButtons.setMediaCapture({ enabled });
+  } catch {
+    /* plugin missing (old APK) */
+  }
+}
+
+// Duck a playing music app (dim, not pause) for ~durationMs while a break sound or
+// countdown plays over it — via transient MAY_DUCK audio focus. No-op on web/old APKs.
+export async function duckAudio(durationMs: number): Promise<void> {
+  if (!native()) return;
+  try {
+    await HwButtons.duck({ durationMs });
   } catch {
     /* plugin missing (old APK) */
   }

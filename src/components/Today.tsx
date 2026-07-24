@@ -69,6 +69,7 @@ export function Today({
     finish,
     update,
     startWorkoutTimer,
+    toggleWorkoutTimer,
     toggleStopwatch,
     resetStopwatch,
     moveExercise,
@@ -465,10 +466,17 @@ export function Today({
             <div className="wb-day">{draft.dayName}</div>
           )}
           <div className="wb-time-row">
-            {/* Wall-clock since the workout started — deliberately not pausable. */}
-            <span className="wb-timer" title="Total workout time">
+            {/* Tap to pause/resume the total workout time; paused shows a yellow ring. */}
+            <button
+              type="button"
+              className={`wb-timer ${draft.wRunning ? "" : "paused"}`}
+              onClick={toggleWorkoutTimer}
+              title={draft.wRunning ? "Tap to pause the workout timer" : "Tap to resume the workout timer"}
+              aria-label={draft.wRunning ? "Pause workout timer" : "Resume workout timer"}
+            >
               {hhmmss(elapsed)}
-            </span>
+              {!draft.wRunning && <span className="wb-paused-tag">paused</span>}
+            </button>
           </div>
         </div>
         <div className="wb-right">

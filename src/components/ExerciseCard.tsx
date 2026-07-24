@@ -33,10 +33,11 @@ export function ExerciseCard({ exercise, step, prev, onChange, onSetDone, editab
     // set done, but always alongside their value) — that's the "set finished" signal.
     if (patch.done === true && Object.keys(patch).length === 1) onSetDone?.();
   };
+  // Scheme's target reps (null for "Max"): the rep-vs-target border cue + new-set default.
+  const defReps = typeof exercise.scheme.reps === "number" ? exercise.scheme.reps : null;
   const addSet = () => {
     const last = exercise.sets.at(-1);
     // Carry the previous set's weight, but reset reps to the exercise's scheme default.
-    const defReps = typeof exercise.scheme.reps === "number" ? exercise.scheme.reps : null;
     onChange({ ...exercise, sets: [...exercise.sets, { id: uid(), weight: last?.weight ?? null, reps: defReps, done: false }] });
   };
   const removeSet = () => {
@@ -113,6 +114,7 @@ export function ExerciseCard({ exercise, step, prev, onChange, onSetDone, editab
             step={step}
             unit={unit}
             units={units}
+            defaultReps={defReps}
             active={i === exercise.sets.findIndex((x) => !x.done)}
             prevWeight={prev?.sets[i]?.weight ?? prev?.sets.at(-1)?.weight ?? null}
             onChange={(p) => patchSet(i, p)}

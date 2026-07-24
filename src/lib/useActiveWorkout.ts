@@ -46,11 +46,12 @@ function isoNow(): string {
 function swElapsedMs(d: Draft): number {
   return d.swAccumMs + (d.swRunning ? Date.now() - d.swSegStart : 0);
 }
-// Workout time: wall-clock since start once started; a not-started draft shows 0,
-// and an edit draft shows the fixed recorded duration (wAccumMs). Exported so
-// PipView ticks from the exact same math as the in-app header.
+// Workout time: banked ms + the current running segment. Paused/not-started/edit
+// drafts show the banked total (wAccumMs); a running one adds the live segment.
+// Standard stopwatch math — same shape as swElapsedMs. Exported so PipView ticks
+// from the exact same math as the in-app header.
 export function wElapsedMs(d: Pick<Draft, "wAccumMs" | "wRunning" | "wSegStart">): number {
-  return d.wRunning ? Date.now() - d.wSegStart : d.wAccumMs;
+  return d.wAccumMs + (d.wRunning ? Date.now() - d.wSegStart : 0);
 }
 
 // Build fresh exercises for a day, pre-filling each set with last week's number
@@ -112,12 +113,6 @@ export function useActiveWorkout() {
         d.wRunning = true;
         d.wAccumMs = 0;
         d.wSegStart = d.startedAt;
-      }
-      // Migrate a running pausable-era draft: fold banked time into the anchor so
-      // wall-clock elapsed (now - wSegStart) keeps the total it had accumulated.
-      if (d && d.wRunning && d.wAccumMs > 0) {
-        d.wSegStart -= d.wAccumMs;
-        d.wAccumMs = 0;
       }
       setDraft(d);
       setLoaded(true);
@@ -257,8 +252,30 @@ export function useActiveWorkout() {
   // the Start button / first weight-rep edit). From then on it's pure wall-clock —
   // no pause/reset. Editing a past workout must NOT restart the clock (its
   // recorded duration lives in wAccumMs and is kept as-is).
+  // Idempotent auto-start on the Start button / first weight-rep edit. Skips a
+  // timer that's already running, an edit draft, AND one the user has manually
+  // paused (wAccumMs > 0 means it ran and was banked) — an explicit pause sticks
+  // until they tap to resume, rather than a set edit silently restarting it.
   const startWorkoutTimer = useCallback(
-    () => update((d) => (d.wRunning || d.editId != null ? d : { ...d, wRunning: true, wSegStart: Date.now() })),
+    () =>
+      update((d) =>
+        d.wRunning || d.editId != null || d.wAccumMs > 0 ? d : { ...d, wRunning: true, wSegStart: Date.now() },
+      ),
+    [update],
+  );
+
+  // Tap the workout timer to pause/resume it. Pausing banks the running segment
+  // into wAccumMs; resuming (or a first tap before any set is logged) starts a new
+  // segment. No-op while editing a past workout (its duration is fixed in wAccumMs).
+  const toggleWorkoutTimer = useCallback(
+    () =>
+      update((d) =>
+        d.editId != null
+          ? d
+          : d.wRunning
+            ? { ...d, wRunning: false, wAccumMs: d.wAccumMs + (Date.now() - d.wSegStart) }
+            : { ...d, wRunning: true, wSegStart: Date.now() },
+      ),
     [update],
   );
 
@@ -367,6 +384,7 @@ export function useActiveWorkout() {
     finish,
     update,
     startWorkoutTimer,
+    toggleWorkoutTimer,
     toggleStopwatch,
     resetStopwatch,
     moveExercise,

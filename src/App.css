@@ -458,6 +458,29 @@
   font-variant-numeric: tabular-nums;
   font-size: 30px;
   letter-spacing: -0.01em;
+  /* Reset the button chrome — it reads as text until you know it's tappable. */
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: none;
+  border: 2px solid transparent;
+  border-radius: var(--radius-sm);
+  padding: 2px 6px;
+  margin: -2px -6px; /* keep the glyphs aligned where the span sat */
+  color: inherit;
+  cursor: pointer;
+}
+.wb-timer.paused {
+  border-color: var(--warn);
+  color: var(--warn);
+}
+.wb-paused-tag {
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--warn);
 }
 .wb-right {
   display: flex;
@@ -1061,6 +1084,16 @@
   font-family: var(--display);
   font-size: 17px;
   font-weight: 700;
+}
+/* Border-only cue vs the scheme's target reps: green if you beat it, red if under.
+   Two-class selector outranks `.field`'s base border; focus outline still layers on. */
+.reps-field.reps-over {
+  border-color: var(--accent-2);
+  box-shadow: inset 0 0 0 1px var(--accent-2);
+}
+.reps-field.reps-under {
+  border-color: var(--danger);
+  box-shadow: inset 0 0 0 1px var(--danger);
 }
 .more-toggle {
   width: 30px;

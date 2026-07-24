@@ -1,5 +1,6 @@
 // Break-over alarm sounds — synthesized with Web Audio so there are no audio files
 // to bundle (and they play instantly, offline). Pick one in Settings.
+import { duckAudio } from "./hwButtons";
 
 // One shared AudioContext for the whole app — a fresh one per play leaks contexts
 // and hits the browser's ~6-per-page limit, after which alarms go silent.
@@ -126,6 +127,7 @@ export function playBuffer(buffer: AudioBuffer): void {
   try {
     const c = ctx();
     if (c.state === "suspended") void c.resume();
+    void duckAudio(Math.min(6000, Math.round(buffer.duration * 1000) + 300));
     const src = c.createBufferSource();
     const g = c.createGain();
     src.buffer = buffer;
@@ -143,6 +145,9 @@ export function playCountdownTick(isFinal = false): void {
   try {
     const c = ctx();
     if (c.state === "suspended") void c.resume();
+    // Duck a bit past one second so music stays dimmed across the 3-2-1 ticks
+    // instead of bobbing back up between them.
+    void duckAudio(1200);
     tone(c, "sine", isFinal ? 1320 : 880, c.currentTime, 0.09, isFinal ? 0.18 : 0.12);
   } catch {
     /* audio blocked */
@@ -155,6 +160,7 @@ export function playBreakStart(): void {
   try {
     const c = ctx();
     if (c.state === "suspended") void c.resume();
+    void duckAudio(900);
     const t = c.currentTime;
     tone(c, "sine", 660, t, 0.08, 0.25);
     tone(c, "sine", 990, t + 0.07, 0.1, 0.25);
@@ -167,6 +173,7 @@ export function playBreakSound(id: BreakSoundId): void {
   try {
     const c = ctx();
     if (c.state === "suspended") void c.resume();
+    void duckAudio(2600); // longest alarm patterns run ~2s; dim music over them
     const t = c.currentTime;
     switch (id) {
       case "bell":
