@@ -58,6 +58,8 @@ Two read actions let external consumers (the HA voice assistant) query the sheet
 
 `sessions` = the 3 most recent. Matching is the same as write-back — exact scheme-stripped row-label match — and the four headline lifts accept their app aliases (`bench` → "Bench Press", `markløft` → "Deadlift"). Rep-only exercises (pull-ups logged as `(10)-(9)`) carry no weight and report `found: false`; an unknown name does too.
 
+The summary response carries `v` (script version marker — compare it after a redeploy to confirm the new code is live) and, with `"debug": true` in the request, a `debug` block (session/occurrence counts + the distinct row names the scanner saw) for troubleshooting mismatches.
+
 ## Updating the script later
 If you edit `Code.gs`, **Deploy → Manage deployments → (edit) → New version** so the `/exec` URL keeps working.
 

@@ -37,7 +37,7 @@ function doPost(e) {
 
     // Read-only summaries for external consumers (e.g. the Home Assistant
     // voice assistant). Nothing mutates, so no lock is taken.
-    if (body.action === "summary") return summaryAction();
+    if (body.action === "summary") return summaryAction(body);
     if (body.action === "liftSummary") return liftSummaryAction(body);
 
     // Serialize all mutations so two devices syncing at once can't compute the
@@ -281,12 +281,18 @@ var KEY_LIFTS = {
   deadlift: ["deadlift", "conventional deadlift", "markløft", "mark", "bb deadlift"],
   squat: ["squat", "back squat", "barbell squat", "knebøy", "high bar squat", "low bar squat"],
   bench: ["bench press", "bench", "benkpress", "flat bench", "barbell bench press", "bb bench"],
-  ohp: ["overhead press", "ohp", "military press", "military", "standing press", "strict press"],
+  ohp: ["overhead press", "ohp", "military press", "militarypress", "military", "standing press", "strict press"],
 };
+
+// Bump when the summary logic changes — echoed in the response so a deploy can
+// be verified against the repo (Apps Script pastes have gone stale before).
+var SUMMARY_V = 2;
 
 // action:"summary" → last workout, this-ISO-week count, next split due, per-day
 // stats, and last/best top set for the four headline lifts.
-function summaryAction() {
+// body.debug:true adds scan internals (counts + row names seen) for remote
+// troubleshooting without exposing any weights beyond the normal response.
+function summaryAction(body) {
   var scan = scanRecentTabs();
   var today = dayStart(new Date());
 
@@ -330,8 +336,9 @@ function summaryAction() {
   var lifts = {};
   for (var lk in KEY_LIFTS) lifts[lk] = liftStats(scan.occurrences, KEY_LIFTS[lk]);
 
-  return json({
+  var resp = {
     ok: true,
+    v: SUMMARY_V,
     lastWorkout: last
       ? { date: isoDate(last.date), dayName: last.dayName, daysAgo: daysBetween(last.date, today) }
       : null,
@@ -341,7 +348,20 @@ function summaryAction() {
       : null,
     days: days,
     lifts: lifts,
-  });
+  };
+  if (body && body.debug) {
+    var seen = {};
+    var names = [];
+    for (var oi = 0; oi < scan.occurrences.length && names.length < 25; oi++) {
+      var on = scan.occurrences[oi].name;
+      if (!seen[on]) {
+        seen[on] = true;
+        names.push(on);
+      }
+    }
+    resp.debug = { sessions: scan.sessions.length, occurrences: scan.occurrences.length, names: names };
+  }
+  return json(resp);
 }
 
 // action:"liftSummary" {exercise} → last/best top set + the 3 most recent
