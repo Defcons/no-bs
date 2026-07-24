@@ -24,23 +24,22 @@ import com.getcapacitor.annotation.CapacitorPlugin;
 /**
  * Hardware-button bridge, armed only while a workout is active (Settings toggles):
  *
- * - Volume-up: MainActivity.onKeyDown consumes VOLUME UP and emits "volumeUp"
- *   instead of changing the volume. Headphone volume buttons send the same
- *   keycode, so they work too.
+ * - Volume-CHANGE observer (armed with setCapture): the BREAK is started by a Bluetooth
+ *   earbud volume rocker, which sends an AVRCP absolute-volume command — NOT a key event,
+ *   so onKeyDown and the accessibility service never see it, but with absolute volume
+ *   (Android's default) it DOES move the media-stream level. We watch that level and,
+ *   while armed, treat a change as a break trigger (emit "volumeKey") and snap the volume
+ *   back so music volume doesn't drift. This is the only route that works from earbuds.
+ *
+ *   The PHONE's physical volume keys stay NORMAL VOLUME — they are never consumed. To keep
+ *   the observer from mistaking a phone-key change for an earbud press, MainActivity
+ *   (foreground) and the accessibility service (locked) call suppressVolumeChange() first,
+ *   so that one level change is ignored. Net: phone buttons = volume, earbud rocker = break.
  *
  * - Headphone/media button (optional, separate toggle): a foreground MediaSession
  *   claims media-button routing and emits "mediaButton" on play/pause/headset-hook
  *   presses. TRADE-OFF (shown in Settings): while armed, that button starts the
  *   break INSTEAD of controlling the user's music app.
- *
- * - Volume-CHANGE observer (armed with setCapture): a Bluetooth earbud volume
- *   rocker sends an AVRCP absolute-volume command, NOT a key event, so onKeyDown
- *   and the accessibility service never see it — but with absolute volume (Android's
- *   default) it DOES move the media-stream level. We watch that level and, while
- *   armed, treat a change as a break trigger and snap the volume back. This is the
- *   only route that works from the earbuds. Phone/accessibility volume KEYS are
- *   consumed before the level changes, so they go through notifyVolumeKey() instead
- *   and never reach this observer — the two paths compose, they don't double-fire.
  *
  * - duck(): request transient MAY_DUCK audio focus so a playing music app dims
  *   (not pauses) while a break sound / countdown plays over it, then release.
@@ -62,7 +61,11 @@ public class HwButtonsPlugin extends Plugin {
     private AudioManager audioManager;
     private ContentObserver volumeObserver;
     private int lastMusicVol = -1;
-    private boolean suppressVolumeObserver = false; // ignore our own snap-back write
+    // Ignore the next level change: set for our own snap-back write AND for a PHONE
+    // volume-key press (so phone buttons stay normal volume and only the earbud fires
+    // the break). volatile — set from the accessibility service's key thread, read on main.
+    private volatile boolean suppressVolumeObserver = false;
+    private final Runnable clearSuppress = () -> suppressVolumeObserver = false;
 
     // --- Audio-focus ducking ---
     private AudioFocusRequest duckRequest;
@@ -75,14 +78,20 @@ public class HwButtonsPlugin extends Plugin {
         audioManager = (AudioManager) getContext().getSystemService(Context.AUDIO_SERVICE);
     }
 
-    /** Static entry point for the accessibility service. True if the press was consumed. */
-    static boolean fireVolumeKey() {
+    // Tell the volume observer to ignore the next level change — because a PHONE
+    // volume KEY (from MainActivity.onKeyDown foreground, or the accessibility service
+    // when locked) is about to change it, and phone keys must stay normal volume, not
+    // a break trigger. Only the earbud AVRCP change (no key event → no suppress) fires
+    // the break. Safe to call from any thread.
+    static void suppressVolumeChange() {
         HwButtonsPlugin p = instance;
-        if (p != null && captureVolume) {
-            p.notifyVolumeKey();
-            return true;
-        }
-        return false;
+        if (p != null) p.doSuppress();
+    }
+
+    private void doSuppress() {
+        suppressVolumeObserver = true;
+        main.removeCallbacks(clearSuppress);
+        main.postDelayed(clearSuppress, 400);
     }
 
     @PluginMethod
@@ -106,17 +115,16 @@ public class HwButtonsPlugin extends Plugin {
                 if (audioManager == null) return;
                 int now = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC);
                 if (now == lastMusicVol) return; // a different stream changed
-                if (suppressVolumeObserver) { // our own snap-back write
+                if (suppressVolumeObserver) { // our own snap-back OR a phone-key change
                     lastMusicVol = now;
                     return;
                 }
                 if (captureVolume) {
-                    // Consume the change as a break trigger and restore the level so
-                    // the user's music volume doesn't drift over the session.
+                    // An earbud rocker change (no key event preceded it): treat it as a
+                    // break trigger and restore the level so music volume doesn't drift.
                     final int restore = lastMusicVol;
-                    suppressVolumeObserver = true;
+                    doSuppress(); // guard the snap-back write below
                     audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, restore, 0);
-                    main.postDelayed(() -> suppressVolumeObserver = false, 300);
                     notifyVolumeKey();
                 } else {
                     lastMusicVol = now;

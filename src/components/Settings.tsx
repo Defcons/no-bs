@@ -493,17 +493,15 @@ export function Settings({
         </div>
 
         {native && (
-          <ToggleRow label="Volume buttons control the break" checked={volUpBreak} onChange={toggleVolUpBreak}>
+          <ToggleRow label="Earbud volume rocker starts the break" checked={volUpBreak} onChange={toggleVolUpBreak}>
             <p className="muted tiny">
-              During a workout, press <b>either</b> volume button (phone or headphone) to start the break — press again
-              to skip/dismiss a running one. The volume itself won't change while a workout is active. Works only while
-              the app is on screen (Android doesn't send volume keys to a backgrounded app). Needs a current APK.
+              During a workout, press your <b>Bluetooth earbud's</b> volume rocker (either direction) to start the break —
+              press again to skip/dismiss a running one. Works with the screen locked and music playing. Your{" "}
+              <b>phone's</b> volume buttons keep adjusting volume as normal. Needs a current APK.
             </p>
             <p className="muted tiny">
-              <b>Headphones + music?</b> This is the trick: only the <b>volume</b> buttons are safe to grab while music
-              plays (play/pause is owned by your music app). Many earbuds — Galaxy Buds, Pixel Buds, Sony, some Beats —
-              let you remap a tap/long-press to <b>Volume up/down</b> in their companion app. Do that and this catches
-              it, with no music interference.
+              On the <b>extended</b> build, also turn on <b>Accessibility → NoBS break button</b> — that's what keeps the
+              phone's own volume buttons working as volume while a workout runs.
             </p>
           </ToggleRow>
         )}

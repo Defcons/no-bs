@@ -19,32 +19,18 @@ public class MainActivity extends BridgeActivity {
         super.onCreate(savedInstanceState);
     }
 
-    // Volume up OR down → start/skip break (Settings toggle; armed only during an
-    // active workout). Consumed so the media volume doesn't change while armed.
-    // NOTE: onKeyDown only fires while the app has window focus (foreground) — Android
-    // does not deliver volume keys to a backgrounded or PiP app; that's a platform limit.
+    // The PHONE's physical volume buttons keep working as VOLUME (do NOT consume). The
+    // break is triggered only by a Bluetooth EARBUD volume rocker, which arrives as an
+    // AVRCP volume-level change (not a key event) and is caught by HwButtonsPlugin's
+    // ContentObserver. To stop that observer from mistaking a phone-key volume change
+    // for an earbud press, we tell it to ignore the very next level change while armed.
     @Override
     public boolean onKeyDown(int keyCode, KeyEvent event) {
         if ((keyCode == KeyEvent.KEYCODE_VOLUME_UP || keyCode == KeyEvent.KEYCODE_VOLUME_DOWN)
                 && HwButtonsPlugin.captureVolume) {
-            PluginHandle handle = getBridge() != null ? getBridge().getPlugin("HwButtons") : null;
-            if (handle != null && handle.getInstance() instanceof HwButtonsPlugin) {
-                ((HwButtonsPlugin) handle.getInstance()).notifyVolumeKey();
-                return true;
-            }
+            HwButtonsPlugin.suppressVolumeChange();
         }
-        return super.onKeyDown(keyCode, event);
-    }
-
-    // Also swallow the matching key-up while armed, or the system still shows the
-    // volume slider (volume is often applied on ACTION_UP).
-    @Override
-    public boolean onKeyUp(int keyCode, KeyEvent event) {
-        if ((keyCode == KeyEvent.KEYCODE_VOLUME_UP || keyCode == KeyEvent.KEYCODE_VOLUME_DOWN)
-                && HwButtonsPlugin.captureVolume) {
-            return true;
-        }
-        return super.onKeyUp(keyCode, event);
+        return super.onKeyDown(keyCode, event); // let the system adjust volume normally
     }
 
     // Leaving the app during a workout with the timer armed → float it as PiP.

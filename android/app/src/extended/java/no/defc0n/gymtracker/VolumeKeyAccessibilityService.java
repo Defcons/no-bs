@@ -7,18 +7,20 @@ import android.view.accessibility.AccessibilityEvent;
 /**
  * EXTENDED FLAVOUR ONLY (src/extended) — not in the Play build.
  *
- * Why this exists: the whole point of the volume-button break is to press a button on
- * your HEADPHONES without taking the phone out. MainActivity.onKeyDown only gets volume
- * keys while the app has window focus, so it dies the moment the screen locks. A
- * MediaSession VolumeProvider doesn't save us either — volume keys route to whichever
- * media session is active, so a playing music app wins exactly when you need this.
+ * The break is started by a Bluetooth EARBUD volume rocker, which reaches the app as an
+ * AVRCP volume-LEVEL change (not a key event) and is caught by HwButtonsPlugin's volume
+ * observer — that works even with the screen locked, no accessibility API needed.
  *
- * An AccessibilityService with flagRequestFilterKeyEvents receives key events GLOBALLY —
- * screen locked, any app on top, music playing. It's the only reliable route. Google Play
- * rejects non-accessibility uses of this API, which is why it lives in this flavour only.
+ * The PHONE's physical volume keys must stay normal VOLUME. In the foreground
+ * MainActivity.onKeyDown handles that, but when the screen is LOCKED or another app is on
+ * top, onKeyDown never fires — so a phone-key volume change would reach the observer and be
+ * mistaken for an earbud press. This service (which sees key events globally via
+ * flagRequestFilterKeyEvents) exists solely to catch that case: it NEVER consumes the key
+ * (volume still adjusts), it just tells the observer to ignore the change the key causes.
+ * Google Play rejects non-accessibility uses of this API, which is why it's flavour-only.
  *
  * Runs in the app's process, so it can poke HwButtonsPlugin's static hook directly.
- * The user must enable it once: Android Settings → Accessibility → NoBS break button.
+ * The user enables it once: Android Settings → Accessibility → NoBS break button.
  */
 public class VolumeKeyAccessibilityService extends AccessibilityService {
 
@@ -36,12 +38,11 @@ public class VolumeKeyAccessibilityService extends AccessibilityService {
     protected boolean onKeyEvent(KeyEvent event) {
         int c = event.getKeyCode();
         if (c != KeyEvent.KEYCODE_VOLUME_UP && c != KeyEvent.KEYCODE_VOLUME_DOWN) return false;
-        // Only swallow the press while a workout has actually armed it; otherwise the
-        // volume keys must behave completely normally.
-        if (!HwButtonsPlugin.captureVolume) return false;
-        if (event.getAction() == KeyEvent.ACTION_DOWN) {
-            if (!HwButtonsPlugin.fireVolumeKey()) return false; // no live plugin → let it pass
+        // Phone volume keys stay normal volume even when locked — never consumed. We only
+        // stop the observer from reading this phone-key change as an earbud break trigger.
+        if (HwButtonsPlugin.captureVolume && event.getAction() == KeyEvent.ACTION_DOWN) {
+            HwButtonsPlugin.suppressVolumeChange();
         }
-        return true; // consume DOWN *and* UP, else the volume slider still pops up
+        return false; // never consume — let the system adjust the volume
     }
 }
