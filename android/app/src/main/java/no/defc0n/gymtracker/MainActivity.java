@@ -38,12 +38,29 @@ public class MainActivity extends BridgeActivity {
                     + " deviceId=" + event.getDeviceId()
                     + " name=" + (dev != null ? dev.getName() : "?")
                     + " external=" + (dev != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q ? dev.isExternal() : "?")
-                    + " capture=" + HwButtonsPlugin.captureVolume);
+                    + " capture=" + HwButtonsPlugin.captureVolume + " phoneBreak=" + HwButtonsPlugin.phoneKeyBreak);
+            // Opt-in: the phone's own volume keys start/skip the break and are consumed
+            // (no volume change). On the extended build the a11y service usually catches
+            // these first; this covers the standard build + the foreground case.
+            if (HwButtonsPlugin.phoneKeyBreak) {
+                if (event.getRepeatCount() == 0) HwButtonsPlugin.firePhoneKeyBreak();
+                return true; // consume → volume does NOT change
+            }
             if (HwButtonsPlugin.captureVolume) {
                 HwButtonsPlugin.suppressVolumeChange("onKeyDown-fg");
             }
         }
         return super.onKeyDown(keyCode, event); // let the system adjust volume normally
+    }
+
+    // When phone-volume-break is on, also swallow the key-UP so nothing adjusts volume.
+    @Override
+    public boolean onKeyUp(int keyCode, KeyEvent event) {
+        if ((keyCode == KeyEvent.KEYCODE_VOLUME_UP || keyCode == KeyEvent.KEYCODE_VOLUME_DOWN)
+                && HwButtonsPlugin.phoneKeyBreak) {
+            return true;
+        }
+        return super.onKeyUp(keyCode, event);
     }
 
     // Leaving the app during a workout with the timer armed → float it as PiP.

@@ -9,7 +9,7 @@ import { daysAgo, daysAgoLabel, hhmmss, mmss, niceDate } from "../lib/format";
 import { cancelBreakNotification, scheduleBreakNotification, showAutoEndNotification, showReminder } from "../lib/notify";
 import { startGeofence, stopGeofence } from "../lib/geofence";
 import { exitPip, isInPip, onPipChange, setPipAutoEnter } from "../lib/pip";
-import { onMediaButton, onVolumeKey, setMediaButtonCapture, setVolumeCapture } from "../lib/hwButtons";
+import { onMediaButton, onVolumeKey, setMediaButtonCapture, setPhoneKeyCapture, setVolumeCapture } from "../lib/hwButtons";
 import { startTracking, stopTracking } from "../lib/tracker";
 import { stepForExercise } from "../lib/steps";
 import { playBreakStart } from "../lib/sounds";
@@ -117,24 +117,36 @@ export function Today({
   // - volumeUpBreak: volume-up key (phone or headphone volume buttons)
   // - mediaBtnBreak: headphone play/pause button (takes it over from music!)
   const [volUpBreak, setVolUpBreak] = useState(false);
+  const [phoneVolBreak, setPhoneVolBreak] = useState(false);
   const [mediaBtnBreak, setMediaBtnBreak] = useState(false);
   // The button action: start a break, or skip/dismiss the one that's running.
   // Reassigned every render (below) so it sees the live draft.
   const hwBreakRef = useRef<() => void>(() => {});
   useEffect(() => {
     getSetting("volumeUpBreak", false).then(setVolUpBreak);
+    getSetting("phoneVolumeBreak", false).then(setPhoneVolBreak);
     getSetting("mediaBtnBreak", false).then(setMediaBtnBreak);
   }, [draft == null]);
+  // Earbud volume rocker → break (AVRCP volume-observer path).
   useEffect(() => {
-    const armed = !!draft && volUpBreak;
-    setVolumeCapture(armed);
-    if (!armed) return;
-    const off = onVolumeKey(() => hwBreakRef.current());
+    setVolumeCapture(!!draft && volUpBreak);
     return () => {
-      off();
       setVolumeCapture(false);
     };
   }, [draft == null, volUpBreak]);
+  // Phone volume buttons → break (key-consume path; opt-in, removes volume control).
+  useEffect(() => {
+    setPhoneKeyCapture(!!draft && phoneVolBreak);
+    return () => {
+      setPhoneKeyCapture(false);
+    };
+  }, [draft == null, phoneVolBreak]);
+  // Both paths emit the same "volumeKey" event — one listener handles either.
+  useEffect(() => {
+    if (!draft || (!volUpBreak && !phoneVolBreak)) return;
+    const off = onVolumeKey(() => hwBreakRef.current());
+    return () => off();
+  }, [draft == null, volUpBreak, phoneVolBreak]);
   useEffect(() => {
     const armed = !!draft && mediaBtnBreak;
     setMediaButtonCapture(armed);

@@ -12,6 +12,7 @@ import android.net.Uri;
 import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.SystemClock;
 import android.provider.Settings;
 import android.util.Log;
 import android.view.KeyEvent;
@@ -53,6 +54,12 @@ public class HwButtonsPlugin extends Plugin {
 
     // Read by MainActivity.onKeyDown() — captures BOTH volume up and down.
     static boolean captureVolume = false;
+
+    // When true, the PHONE's own volume keys are CONSUMED (no volume change) and
+    // start/skip the break instead — opt-in (setting `phoneVolumeBreak`). Read by
+    // MainActivity.onKeyDown (foreground) and VolumeKeyAccessibilityService (locked).
+    static boolean phoneKeyBreak = false;
+    private long lastPhoneFire = 0; // debounce: a11y + activity can both see one press
 
     // Live instance, so the EXTENDED flavor's VolumeKeyAccessibilityService can fire
     // a volume press from OUTSIDE the activity (screen locked / another app on top).
@@ -99,6 +106,22 @@ public class HwButtonsPlugin extends Plugin {
         main.postDelayed(clearSuppress, 400);
     }
 
+    // A PHONE volume key was pressed while `phoneKeyBreak` is on → fire the break.
+    // Debounced because the accessibility service (locked) and the activity's
+    // onKeyDown (foreground) can both observe the same press, and keys auto-repeat.
+    static void firePhoneKeyBreak() {
+        HwButtonsPlugin p = instance;
+        if (p != null) p.doPhoneKeyBreak();
+    }
+
+    private void doPhoneKeyBreak() {
+        long now = SystemClock.uptimeMillis();
+        if (now - lastPhoneFire < 300) return;
+        lastPhoneFire = now;
+        Log.d(TAG, "phone volume key -> break");
+        notifyVolumeKey();
+    }
+
     @PluginMethod
     public void setCapture(PluginCall call) {
         captureVolume = Boolean.TRUE.equals(call.getBoolean("enabled", false));
@@ -107,6 +130,13 @@ public class HwButtonsPlugin extends Plugin {
             if (captureVolume) startVolumeObserver();
             else stopVolumeObserver();
         });
+        call.resolve();
+    }
+
+    @PluginMethod
+    public void setPhoneKeyCapture(PluginCall call) {
+        phoneKeyBreak = Boolean.TRUE.equals(call.getBoolean("enabled", false));
+        Log.d(TAG, "setPhoneKeyCapture enabled=" + phoneKeyBreak);
         call.resolve();
     }
 

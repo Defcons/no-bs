@@ -131,6 +131,7 @@ export function Settings({
   const [theme, setTheme] = useState<"dark" | "light">("dark");
   const [autoBreak, setAutoBreak] = useState(false);
   const [volUpBreak, setVolUpBreak] = useState(false);
+  const [phoneVolBreak, setPhoneVolBreak] = useState(false);
   const [mediaBtnBreak, setMediaBtnBreak] = useState(false);
   // Break sound is a built-in id ("beep"…) OR "custom:<dbId>" (a user's file).
   const [breakSound, setBreakSound] = useState<string>("beep");
@@ -187,6 +188,7 @@ export function Settings({
     getSetting<string>("theme", "dark").then((t) => setTheme(t === "light" ? "light" : "dark"));
     getSetting("autoBreakOnDone", false).then(setAutoBreak);
     getSetting("volumeUpBreak", false).then(setVolUpBreak);
+    getSetting("phoneVolumeBreak", false).then(setPhoneVolBreak);
     getSetting("mediaBtnBreak", false).then(setMediaBtnBreak);
     getSetting<string>("breakSound", "beep").then(setBreakSound);
     getSetting("breakCountdown", false).then(setBreakCountdown);
@@ -243,6 +245,11 @@ export function Settings({
     const v = !volUpBreak;
     setVolUpBreak(v);
     setSetting("volumeUpBreak", v);
+  };
+  const togglePhoneVolBreak = () => {
+    const v = !phoneVolBreak;
+    setPhoneVolBreak(v);
+    setSetting("phoneVolumeBreak", v);
   };
   const toggleMediaBtnBreak = () => {
     const v = !mediaBtnBreak;
@@ -502,6 +509,17 @@ export function Settings({
             <p className="muted tiny">
               On the <b>extended</b> build, also turn on <b>Accessibility → NoBS break button</b> — that's what keeps the
               phone's own volume buttons working as volume while a workout runs.
+            </p>
+          </ToggleRow>
+        )}
+
+        {native && (
+          <ToggleRow label="Phone volume buttons start the break" checked={phoneVolBreak} onChange={togglePhoneVolBreak}>
+            <p className="muted tiny">
+              During a workout, your <b>phone's own</b> volume buttons start/skip the break instead of changing volume.{" "}
+              <b>Trade-off:</b> while this is on you can't adjust volume with the phone buttons — use your earbuds or the
+              notification shade. Foreground works on any build; the <b>locked screen</b> needs the <b>extended</b> build
+              with <b>Accessibility → NoBS break button</b> on. Needs a current APK.
             </p>
           </ToggleRow>
         )}

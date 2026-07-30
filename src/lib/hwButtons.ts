@@ -7,6 +7,7 @@ import { Capacitor, registerPlugin, type PluginListenerHandle } from "@capacitor
 interface HwButtonsPlugin {
   setCapture(options: { enabled: boolean }): Promise<void>;
   setMediaCapture(options: { enabled: boolean }): Promise<void>;
+  setPhoneKeyCapture(options: { enabled: boolean }): Promise<void>;
   duck(options: { durationMs: number }): Promise<void>;
   addListener(event: "volumeKey" | "mediaButton", cb: () => void): Promise<PluginListenerHandle>;
 }
@@ -34,6 +35,19 @@ export async function setMediaButtonCapture(enabled: boolean): Promise<void> {
   if (!native()) return;
   try {
     await HwButtons.setMediaCapture({ enabled });
+  } catch {
+    /* plugin missing (old APK) */
+  }
+}
+
+// Arm/disarm the PHONE's own volume keys as a break trigger. While armed the phone
+// volume buttons are CONSUMED (no volume change) and start/skip the break instead —
+// opt-in, since it removes hardware volume control. Fires the same "volumeKey" event
+// as the earbud path. Locked-screen support needs the extended accessibility service.
+export async function setPhoneKeyCapture(enabled: boolean): Promise<void> {
+  if (!native()) return;
+  try {
+    await HwButtons.setPhoneKeyCapture({ enabled });
   } catch {
     /* plugin missing (old APK) */
   }

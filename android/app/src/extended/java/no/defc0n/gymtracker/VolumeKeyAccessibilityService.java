@@ -50,9 +50,19 @@ public class VolumeKeyAccessibilityService extends AccessibilityService {
                 + " deviceId=" + event.getDeviceId()
                 + " name=" + (dev != null ? dev.getName() : "?")
                 + " external=" + (dev != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q ? dev.isExternal() : "?")
-                + " capture=" + HwButtonsPlugin.captureVolume);
-        // Phone volume keys stay normal volume even when locked — never consumed. We only
-        // stop the observer from reading this phone-key change as an earbud break trigger.
+                + " capture=" + HwButtonsPlugin.captureVolume + " phoneBreak=" + HwButtonsPlugin.phoneKeyBreak);
+        // Opt-in: phone volume keys start/skip the break and are CONSUMED (no volume
+        // change). This global handler is what makes phone-volume-break work with the
+        // screen LOCKED / another app on top (extended build only).
+        if (HwButtonsPlugin.phoneKeyBreak) {
+            if (event.getAction() == KeyEvent.ACTION_DOWN && event.getRepeatCount() == 0) {
+                HwButtonsPlugin.firePhoneKeyBreak();
+            }
+            return true; // consume both down & up → volume does NOT change
+        }
+        // Otherwise phone volume keys stay normal volume even when locked — never
+        // consumed. We only stop the observer from reading this phone-key change as an
+        // earbud break trigger (so the EARBUD path doesn't mis-fire on a phone press).
         if (HwButtonsPlugin.captureVolume && event.getAction() == KeyEvent.ACTION_DOWN) {
             HwButtonsPlugin.suppressVolumeChange("onKeyEvent-a11y");
         }
