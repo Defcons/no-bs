@@ -4,7 +4,6 @@ import android.content.res.Configuration;
 import android.app.PictureInPictureParams;
 import android.os.Build;
 import android.os.Bundle;
-import android.util.Log;
 import android.util.Rational;
 import android.view.InputDevice;
 import android.view.KeyEvent;
@@ -34,7 +33,7 @@ public class MainActivity extends BridgeActivity {
             // is, suppressing it below is what kills the break. Built-in phone keys and
             // earbud keys have different device names/ids.
             InputDevice dev = event.getDevice();
-            Log.d(HwButtonsPlugin.TAG, "onKeyDown(fg) code=" + keyCode
+            HwButtonsPlugin.log("onKeyDown(fg) code=" + keyCode
                     + " deviceId=" + event.getDeviceId()
                     + " name=" + (dev != null ? dev.getName() : "?")
                     + " external=" + (dev != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q ? dev.isExternal() : "?")

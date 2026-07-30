@@ -2,7 +2,6 @@ package no.defc0n.gymtracker;
 
 import android.accessibilityservice.AccessibilityService;
 import android.os.Build;
-import android.util.Log;
 import android.view.InputDevice;
 import android.view.KeyEvent;
 import android.view.accessibility.AccessibilityEvent;
@@ -45,7 +44,7 @@ public class VolumeKeyAccessibilityService extends AccessibilityService {
         // key event (external/Bluetooth device), suppressing it below is exactly what kills
         // the break when the screen is locked / another app is on top.
         InputDevice dev = event.getDevice();
-        Log.d(HwButtonsPlugin.TAG, "onKeyEvent(a11y) code=" + c
+        HwButtonsPlugin.log("onKeyEvent(a11y) code=" + c
                 + " action=" + event.getAction()
                 + " deviceId=" + event.getDeviceId()
                 + " name=" + (dev != null ? dev.getName() : "?")
