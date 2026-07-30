@@ -24,6 +24,16 @@ export function niceDate(iso: string): string {
   return d.toLocaleDateString(undefined, { day: "2-digit", month: "short", year: "numeric" });
 }
 
+// Local "HH:MM" clock time for an ISO datetime that carries a time component
+// (app-logged sessions store a full timestamp); "" for a bare "yyyy-mm-dd" (e.g.
+// sheet imports), so History doesn't show a meaningless 00:00 for those.
+export function clockTime(iso: string): string {
+  if (!iso || !iso.includes("T")) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+}
+
 // Whole calendar days between that date and today, in LOCAL time. (Date.parse of a
 // "yyyy-mm-dd" string is UTC midnight, so subtracting epochs and rounding gave an
 // off-by-one in timezones ahead of UTC — e.g. yesterday reading as "2 days ago".)

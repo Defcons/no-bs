@@ -338,7 +338,9 @@ export function useActiveWorkout() {
         exercises: draft.exercises.filter((ex) =>
           draft.custom
             ? ex.name.trim() !== ""
-            : ex.sets.some((s) => s.weight != null || s.reps != null || s.done || s.note) || ex.note,
+            : (ex.sets.some((s) => s.weight != null || s.reps != null || s.done || s.note) || ex.note) &&
+              // An alternative added mid-session must have a name to be kept.
+              (!ex.added || ex.name.trim() !== ""),
         ),
         note: draft.note,
         durationSec,

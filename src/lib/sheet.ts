@@ -121,9 +121,14 @@ const NOTE_LABELS = new Set(["note", "notes", "notat", "notater"]);
 const MOOD_LABELS = new Set(["mood", "feeling", "humør", "form"]);
 const TIME_LABELS = new Set(["time", "tid", "duration", "varighet"]);
 const HR_LABELS = new Set(["avg hr", "hr", "puls", "avg puls", "heart rate", "snittpuls"]);
-// Derived cardio rows we write but don't import back (recomputed from the track) —
-// recognised here only so they aren't parsed as fake exercises.
-const SKIP_LABELS = new Set(["distance", "distanse", "pace", "tempo", "speed", "fart", "route", "rute"]);
+// Rows we write but don't import back — derived cardio rows (recomputed from the
+// track) plus the "Time of day" clock stamp (the app-logged session already carries
+// it in its own timestamp). Recognised here only so they aren't parsed as fake
+// exercises. MUST stay in sync with metaKind() in apps-script/Code.gs.
+const SKIP_LABELS = new Set([
+  "distance", "distanse", "pace", "tempo", "speed", "fart", "route", "rute",
+  "time of day", "tid på dagen", "klokkeslett",
+]);
 
 // "6→8" / "6→" / "→8" (also -> - /) → {before?, after?}. Single number → before.
 function parseMood(txt: string): { before?: number; after?: number } {

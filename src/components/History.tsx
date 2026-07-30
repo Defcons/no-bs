@@ -4,7 +4,7 @@
 import { Suspense, lazy, useMemo, useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db, type StoredWorkout } from "../db";
-import { daysAgoLabel, hhmmss, mmss, niceDate } from "../lib/format";
+import { clockTime, daysAgoLabel, hhmmss, mmss, niceDate } from "../lib/format";
 import { computeRun, fmtDist, fmtPace } from "../lib/runStats";
 import { resolveExercise } from "../lib/exercises";
 import { type WeightUnit, weightStr } from "../lib/units";
@@ -191,7 +191,8 @@ function LogRow({
         <span className="log-info">
           <span className="log-day">{w.dayName}</span>
           <span className="tiny muted">
-            {niceDate(w.date)} · {daysAgoLabel(w.date)}
+            {niceDate(w.date)}
+            {clockTime(w.date) && ` · ${clockTime(w.date)}`} · {daysAgoLabel(w.date)}
           </span>
         </span>
         <span className="tiny muted log-count">

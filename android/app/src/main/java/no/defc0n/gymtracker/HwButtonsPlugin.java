@@ -13,6 +13,7 @@ import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
 import android.provider.Settings;
+import android.util.Log;
 import android.view.KeyEvent;
 
 import com.getcapacitor.JSObject;
@@ -46,6 +47,9 @@ import com.getcapacitor.annotation.CapacitorPlugin;
  */
 @CapacitorPlugin(name = "HwButtons")
 public class HwButtonsPlugin extends Plugin {
+
+    // Diagnostic tag — `adb logcat -s HwBreak:D` to trace the earbud-break chain.
+    static final String TAG = "HwBreak";
 
     // Read by MainActivity.onKeyDown() — captures BOTH volume up and down.
     static boolean captureVolume = false;
@@ -83,12 +87,13 @@ public class HwButtonsPlugin extends Plugin {
     // when locked) is about to change it, and phone keys must stay normal volume, not
     // a break trigger. Only the earbud AVRCP change (no key event → no suppress) fires
     // the break. Safe to call from any thread.
-    static void suppressVolumeChange() {
+    static void suppressVolumeChange(String source) {
         HwButtonsPlugin p = instance;
-        if (p != null) p.doSuppress();
+        if (p != null) p.doSuppress(source);
     }
 
-    private void doSuppress() {
+    private void doSuppress(String source) {
+        Log.d(TAG, "suppress armed by " + source);
         suppressVolumeObserver = true;
         main.removeCallbacks(clearSuppress);
         main.postDelayed(clearSuppress, 400);
@@ -97,6 +102,7 @@ public class HwButtonsPlugin extends Plugin {
     @PluginMethod
     public void setCapture(PluginCall call) {
         captureVolume = Boolean.TRUE.equals(call.getBoolean("enabled", false));
+        Log.d(TAG, "setCapture enabled=" + captureVolume);
         getActivity().runOnUiThread(() -> {
             if (captureVolume) startVolumeObserver();
             else stopVolumeObserver();
@@ -109,13 +115,21 @@ public class HwButtonsPlugin extends Plugin {
     private void startVolumeObserver() {
         if (volumeObserver != null || audioManager == null) return;
         lastMusicVol = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC);
+        Log.d(TAG, "observer registered, music vol=" + lastMusicVol
+                + " max=" + audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC));
         volumeObserver = new ContentObserver(main) {
             @Override
             public void onChange(boolean selfChange) {
                 if (audioManager == null) return;
                 int now = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC);
-                if (now == lastMusicVol) return; // a different stream changed
+                Log.d(TAG, "onChange music now=" + now + " last=" + lastMusicVol
+                        + " suppress=" + suppressVolumeObserver + " capture=" + captureVolume);
+                if (now == lastMusicVol) {
+                    Log.d(TAG, "  -> no music-level change (different stream, or at min/max dead zone)");
+                    return; // a different stream changed
+                }
                 if (suppressVolumeObserver) { // our own snap-back OR a phone-key change
+                    Log.d(TAG, "  -> suppressed (phone key or our snap-back); tracking last=" + now);
                     lastMusicVol = now;
                     return;
                 }
@@ -123,7 +137,8 @@ public class HwButtonsPlugin extends Plugin {
                     // An earbud rocker change (no key event preceded it): treat it as a
                     // break trigger and restore the level so music volume doesn't drift.
                     final int restore = lastMusicVol;
-                    doSuppress(); // guard the snap-back write below
+                    Log.d(TAG, "  -> EARBUD BREAK fire; restoring vol to " + restore);
+                    doSuppress("snap-back"); // guard the snap-back write below
                     audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, restore, 0);
                     notifyVolumeKey();
                 } else {
@@ -259,6 +274,7 @@ public class HwButtonsPlugin extends Plugin {
 
     // Called by MainActivity when a captured volume key (up or down) fires.
     void notifyVolumeKey() {
+        Log.d(TAG, "notifyVolumeKey -> JS (break start/skip)");
         notifyListeners("volumeKey", new JSObject());
     }
 }

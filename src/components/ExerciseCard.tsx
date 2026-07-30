@@ -1,17 +1,13 @@
 // A single exercise within the active workout: header (name + scheme), its set
 // rows, add/remove set, and an optional per-exercise note.
-import { type TouchEvent, useEffect, useRef, useState } from "react";
+import { type TouchEvent, useRef, useState } from "react";
 import type { ExercisePerf, SetEntry } from "../types";
 import { uid } from "../lib/uid";
 import { SetInput } from "./SetInput";
 import { ExerciseNameField } from "./ExerciseNameField";
 import { resolveExercise } from "../lib/exercises";
-import { restForId, setRestForId } from "../lib/exerciseRest";
 import { type WeightUnit, weightStr } from "../lib/units";
 import { daysAgoLabel, niceDate } from "../lib/format";
-
-const REST_PRESETS = [30, 60, 90, 120, 150, 180];
-const fmtRest = (s: number) => (s >= 60 ? `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}` : `${s}s`);
 
 type Props = {
   exercise: ExercisePerf;
@@ -20,7 +16,6 @@ type Props = {
   prevDate?: string; // ISO date of that last session (for the swipe-in "last time" panel)
   onChange: (ex: ExercisePerf) => void;
   onSetDone?: () => void; // set explicitly marked done via its badge (not weight edits)
-  defaultRest?: number; // Settings global rest default (shown when this exercise has no own value)
   editableName?: boolean; // custom sessions: let the user name the exercise
   units?: WeightUnit; // weight display/entry unit
   nameHistory?: string[]; // distinct past exercise names (autocomplete)
@@ -29,7 +24,7 @@ type Props = {
   onMoveDown?: () => void;
 };
 
-export function ExerciseCard({ exercise, step, prev, prevDate, onChange, onSetDone, defaultRest = 90, editableName, units, nameHistory, onRemove, onMoveUp, onMoveDown }: Props) {
+export function ExerciseCard({ exercise, step, prev, prevDate, onChange, onSetDone, editableName, units, nameHistory, onRemove, onMoveUp, onMoveDown }: Props) {
   const [showNote, setShowNote] = useState(!!exercise.note);
   const resolved = resolveExercise(exercise.name, exercise.exerciseId);
   const unit = resolved.unit;
@@ -61,17 +56,6 @@ export function ExerciseCard({ exercise, step, prev, prevDate, onChange, onSetDo
     if (unit === "bodyweight") return s.weight ? `+${weightStr(s.weight, u)}${u} × ${reps}` : `BW × ${reps}`;
     return s.weight != null ? `${weightStr(s.weight, u)}${u} × ${reps}` : `× ${reps}`;
   };
-  // Per-exercise rest override (global, by resolved id). Local mirror so the chip
-  // updates on pick; re-reads when the resolved exercise changes (name edits).
-  const [showRest, setShowRest] = useState(false);
-  const [rest, setRest] = useState<number | undefined>(restForId(resolved.id));
-  useEffect(() => setRest(restForId(resolved.id)), [resolved.id]);
-  const pickRest = (sec: number | null) => {
-    void setRestForId(resolved.id, sec);
-    setRest(sec == null ? undefined : sec);
-    setShowRest(false);
-  };
-
   const patchSet = (i: number, patch: Partial<SetEntry>) => {
     const sets = exercise.sets.map((s, idx) => (idx === i ? { ...s, ...patch } : s));
     onChange({ ...exercise, sets });
@@ -125,14 +109,6 @@ export function ExerciseCard({ exercise, step, prev, prevDate, onChange, onSetDo
             ↺
           </button>
           <button
-            className={`rest-chip ${rest != null ? "set" : ""} ${showRest ? "open" : ""}`}
-            title="Default rest for this exercise (applies everywhere it's used)"
-            aria-label="set default rest for this exercise"
-            onClick={() => setShowRest((v) => !v)}
-          >
-            ⏱ {fmtRest(rest ?? defaultRest)}
-          </button>
-          <button
             className={`hbtn ${exercise.note ? "has-note" : ""}`}
             aria-label="exercise note"
             onClick={() => setShowNote((v) => !v)}
@@ -156,22 +132,6 @@ export function ExerciseCard({ exercise, step, prev, prevDate, onChange, onSetDo
           )}
         </div>
       </header>
-
-      {showRest && (
-        <div className="rest-picker">
-          <span className="rest-picker-lbl">Rest for this exercise</span>
-          <div className="rest-picker-opts">
-            {REST_PRESETS.map((s) => (
-              <button key={s} className={rest === s ? "active" : ""} onClick={() => pickRest(s)}>
-                {fmtRest(s)}
-              </button>
-            ))}
-            <button className={rest == null ? "active" : ""} onClick={() => pickRest(null)}>
-              Default ({fmtRest(defaultRest)})
-            </button>
-          </div>
-        </div>
-      )}
 
       {showNote && (
         <input

@@ -105,7 +105,7 @@ function doPost(e) {
     // Walk the block's rows until the next block header (a row with date cells).
     // Track the per-session meta rows (Note / Mood / Time / Avg HR) as we go.
     var written = [];
-    var metaRow = { Note: -1, Mood: -1, Time: -1, "Avg HR": -1 };
+    var metaRow = { Note: -1, Mood: -1, Time: -1, "Time of day": -1, "Avg HR": -1 };
     var lastBlockRow = headerRow; // last row belonging to this block
     var doneNames = {};
     for (var rr = headerRow + 1; rr < data.length; rr++) {
@@ -140,6 +140,7 @@ function doPost(e) {
       { label: "Note", value: body.note },
       { label: "Mood", value: body.mood },
       { label: "Time", value: body.time },
+      { label: "Time of day", value: body.timeOfDay },
       { label: "Avg HR", value: body.hr },
       { label: "Distance", value: body.distance },
       { label: "Pace", value: body.pace },
@@ -196,6 +197,7 @@ function createBlock(sheet, body) {
   rows.push(["Note", safe(body.note) || ""]);
   rows.push(["Mood", body.mood || ""]);
   rows.push(["Time", body.time || ""]);
+  rows.push(["Time of day", body.timeOfDay || ""]);
   rows.push(["Avg HR", body.hr || ""]);
   // Cardio-only meta rows: skip the ones that are empty for a normal session.
   ["Distance", "Pace", "Speed", "Route"].forEach(function (lbl) {
@@ -229,6 +231,7 @@ function metaKind(label) {
   if (l === "note" || l === "notes" || l === "notat" || l === "notater") return "Note";
   if (l === "mood" || l === "feeling" || l === "humør" || l === "form") return "Mood";
   if (l === "time" || l === "tid" || l === "duration" || l === "varighet") return "Time";
+  if (l === "time of day" || l === "tid på dagen" || l === "klokkeslett") return "Time of day";
   if (l === "avg hr" || l === "hr" || l === "puls" || l === "avg puls" || l === "snittpuls" || l === "heart rate") return "Avg HR";
   if (l === "distance" || l === "distanse") return "Distance";
   if (l === "pace" || l === "tempo") return "Pace";

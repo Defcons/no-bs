@@ -80,6 +80,7 @@ export function Today({
   const [sheet, setSheet] = useState<null | "stopwatch" | "mood">(null); // header tool sheets
   const [finishAsk, setFinishAsk] = useState(false);
   const [pipMode, setPipMode] = useState(false);
+  const [geoArmed, setGeoArmed] = useState(false); // leave-gym watcher armed (only near end of workout)
   const [editTpl, setEditTpl] = useState<DayTemplate | null>(null); // workout being created/edited
   const native = Capacitor.isNativePlatform();
   const bpmRef = useRef<number | null>(null);
@@ -93,10 +94,11 @@ export function Today({
   const [lastByDay, setLastByDay] = useState<Record<string, StoredWorkout | undefined>>({});
   const [nameHistory, setNameHistory] = useState<string[]>([]);
 
-  // Distinct past exercise names for the custom-session name autocomplete.
+  // Distinct past exercise names for the name autocomplete (custom sessions and
+  // alternative exercises added to a normal session).
   useEffect(() => {
-    if (draft?.custom) distinctExerciseNames().then(setNameHistory);
-  }, [draft?.custom]);
+    if (draft) distinctExerciseNames().then(setNameHistory);
+  }, [draft == null]);
 
   // Load last session of this day for per-set ghost hints.
   useEffect(() => {
@@ -281,10 +283,37 @@ export function Today({
     };
   }, [trackGps]);
 
-  // Leave-gym auto-end: while a (non-Alternative) workout runs, watch location in
-  // the background; when you've clearly left the gym, save + finish the session.
+  // Leave-gym auto-end. The background-location watcher forces a persistent Android
+  // notification for its whole lifetime, so we DON'T run it for the entire session
+  // (that notification was just noise). Instead we ARM it only once the workout
+  // looks nearly done — most sets marked complete, OR a long stretch with no
+  // activity (finished, or walked off without ending) — so the notification only
+  // shows for the last few minutes, exactly when leaving actually matters.
+  const NEAR_END_FRACTION = 0.6; // ≥60% of sets marked done
+  const IDLE_ARM_MS = 12 * 60 * 1000; // ...or no activity for 12 min
+  useEffect(() => setGeoArmed(false), [draft?.startedAt]); // fresh session → disarm
   useEffect(() => {
-    if (!draft || draft.custom) return;
+    if (!draft || draft.custom || geoArmed) return;
+    const total = draft.exercises.reduce((n, e) => n + e.sets.length, 0);
+    const done = draft.exercises.reduce((n, e) => n + e.sets.filter((s) => s.done).length, 0);
+    if (total > 0 && done / total >= NEAR_END_FRACTION) {
+      setGeoArmed(true);
+      return;
+    }
+    // Idle fallback: arm when the last activity is IDLE_ARM_MS old. Re-runs on every
+    // draft change (a set edit bumps lastActivityAt), so activity keeps postponing it.
+    const since = draft.lastActivityAt ?? draft.startedAt;
+    const remaining = since + IDLE_ARM_MS - Date.now();
+    if (remaining <= 0) {
+      setGeoArmed(true);
+      return;
+    }
+    const id = window.setTimeout(() => setGeoArmed(true), remaining);
+    return () => window.clearTimeout(id);
+  }, [draft, draft?.custom, geoArmed]);
+  // Once armed, watch location in the background; leaving the gym saves + finishes.
+  useEffect(() => {
+    if (!draft || draft.custom || !geoArmed) return;
     let active = true;
     startGeofence(() => {
       if (!active) return;
@@ -296,7 +325,7 @@ export function Today({
       active = false;
       stopGeofence();
     };
-  }, [draft?.startedAt, draft?.custom]);
+  }, [geoArmed, draft?.startedAt, draft?.custom]);
 
   // Low-HR watchdog: after HR sits below the threshold for 10 min, ask if you're
   // still working out; if unanswered for 5 more min, auto-end. Driven by HR updates.
@@ -448,12 +477,22 @@ export function Today({
     if (draft?.restEndsAt != null) setRest(null);
     else startRest();
   };
+  // Add an exercise to the running session. In a normal (template) session this is
+  // an "alternative" — e.g. no bench available, do curls instead — flagged `added`
+  // so it's editable/removable while the template's own exercises stay fixed.
   const addExercise = () =>
     update((d) => ({
       ...d,
+      lastActivityAt: Date.now(),
       exercises: [
         ...d.exercises,
-        { id: uid(), name: "", scheme: { sets: null, reps: null }, sets: [{ id: uid(), weight: null, reps: null }] },
+        {
+          id: uid(),
+          name: "",
+          scheme: { sets: null, reps: null },
+          sets: [{ id: uid(), weight: null, reps: null }],
+          ...(d.custom ? {} : { added: true }),
+        },
       ],
     }));
   const removeExercise = (i: number) => update((d) => ({ ...d, exercises: d.exercises.filter((_, idx) => idx !== i) }));
@@ -558,20 +597,17 @@ export function Today({
             prevDate={prev?.date}
             onChange={(e) => setExercise(i, e)}
             onSetDone={autoBreakOnDone ? () => autoStartRest(ex) : undefined}
-            defaultRest={restDefaultSec}
-            editableName={draft.custom}
+            editableName={draft.custom || !!ex.added}
             units={units}
             nameHistory={nameHistory}
-            onRemove={draft.custom ? () => removeExercise(i) : undefined}
+            onRemove={draft.custom || ex.added ? () => removeExercise(i) : undefined}
             onMoveUp={i > 0 ? () => moveExercise(i, -1) : undefined}
             onMoveDown={i < draft.exercises.length - 1 ? () => moveExercise(i, 1) : undefined}
           />
         ))}
-        {draft.custom && (
-          <button className="add-exercise" onClick={addExercise}>
-            ＋ Add exercise
-          </button>
-        )}
+        <button className="add-exercise" onClick={addExercise}>
+          {draft.custom ? "＋ Add exercise" : "＋ Add alternative exercise"}
+        </button>
         {draft.custom && draft.exercises.length === 0 && (
           <p className="muted tiny pad">
             Add your own exercises, or just use the timer + heart rate and jot it in the note below (e.g. “5 km run”).

@@ -72,6 +72,16 @@ function fmtDate(iso: string): string {
   return `${d}.${m}.${y.slice(2)}`;
 }
 
+// Local "HH:MM" the session started, for the sheet's "Time of day" row (so time-of-
+// day vs mood/strength can be analysed later). "" for a bare date with no time
+// component (imported sessions never re-sync, so app sessions always have one).
+function timeOfDayStr(iso: string): string {
+  if (!iso.includes("T")) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+}
+
 async function config(): Promise<{ url: string; secret: string }> {
   // Per-device Settings are the only source — nothing is ever baked into the bundle.
   return {
@@ -184,6 +194,7 @@ async function syncWorkoutNow(row: StoredWorkout): Promise<SyncResult | null> {
     note: row.note ?? "",
     mood: moodStr(row),
     time: durationStr(row.durationSec),
+    timeOfDay: timeOfDayStr(row.date),
     hr: row.avgHr != null ? String(row.avgHr) : "",
     distance: run ? fmtDist(run.distanceM) : "",
     pace: run ? fmtPace(run.avgPaceSecPerKm) : "",

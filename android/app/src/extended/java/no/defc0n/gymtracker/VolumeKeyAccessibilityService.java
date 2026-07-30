@@ -1,6 +1,9 @@
 package no.defc0n.gymtracker;
 
 import android.accessibilityservice.AccessibilityService;
+import android.os.Build;
+import android.util.Log;
+import android.view.InputDevice;
 import android.view.KeyEvent;
 import android.view.accessibility.AccessibilityEvent;
 
@@ -38,10 +41,20 @@ public class VolumeKeyAccessibilityService extends AccessibilityService {
     protected boolean onKeyEvent(KeyEvent event) {
         int c = event.getKeyCode();
         if (c != KeyEvent.KEYCODE_VOLUME_UP && c != KeyEvent.KEYCODE_VOLUME_DOWN) return false;
+        // DIAGNOSTIC: log the source input device. If the EARBUD rocker reaches here as a
+        // key event (external/Bluetooth device), suppressing it below is exactly what kills
+        // the break when the screen is locked / another app is on top.
+        InputDevice dev = event.getDevice();
+        Log.d(HwButtonsPlugin.TAG, "onKeyEvent(a11y) code=" + c
+                + " action=" + event.getAction()
+                + " deviceId=" + event.getDeviceId()
+                + " name=" + (dev != null ? dev.getName() : "?")
+                + " external=" + (dev != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q ? dev.isExternal() : "?")
+                + " capture=" + HwButtonsPlugin.captureVolume);
         // Phone volume keys stay normal volume even when locked — never consumed. We only
         // stop the observer from reading this phone-key change as an earbud break trigger.
         if (HwButtonsPlugin.captureVolume && event.getAction() == KeyEvent.ACTION_DOWN) {
-            HwButtonsPlugin.suppressVolumeChange();
+            HwButtonsPlugin.suppressVolumeChange("onKeyEvent-a11y");
         }
         return false; // never consume — let the system adjust the volume
     }

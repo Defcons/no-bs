@@ -28,6 +28,7 @@ export type ExercisePerf = {
   sets: SetEntry[];
   note?: string;
   skipped?: boolean; // cell was "x"
+  added?: boolean; // added mid-session as an alternative (editable/removable in a non-custom session)
 };
 
 export type Workout = {
