@@ -3,7 +3,10 @@ import type { CapacitorConfig } from "@capacitor/cli";
 // Wraps the built web app (dist/) into a native Android app. The web version at
 // app.codecrafts.cc is unaffected — this is an additional target.
 const config: CapacitorConfig = {
-  appId: "no.defc0n.gymtracker",
+  // Public Play identity (Agentas rebrand 2026-07-30). The Android `namespace` /
+  // Java package stays `no.defc0n.gymtracker` (see android/app/build.gradle) — only
+  // this applicationId changed. Launcher name stays "NoBS".
+  appId: "net.agentas.nobs",
   appName: "NoBS – Workout Log",
   webDir: "dist",
   plugins: {

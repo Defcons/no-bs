@@ -19,10 +19,15 @@ if (hasSigning) {
 }
 
 android {
+    // namespace = the Java/R package (kept as the original to avoid a package-rename
+    // refactor); applicationId = the PUBLIC Play identity (net.agentas.nobs, Agentas
+    // rebrand 2026-07-30, locks forever at first Play upload). They're intentionally
+    // different — supported by Android; manifest relative names (.MainActivity etc.)
+    // resolve against the namespace, `${applicationId}` refs use the new id.
     namespace = "no.defc0n.gymtracker"
     compileSdk = rootProject.ext.compileSdkVersion
     defaultConfig {
-        applicationId "no.defc0n.gymtracker"
+        applicationId "net.agentas.nobs"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode vMajor * 10000 + vMinor * 100 + vPatch
