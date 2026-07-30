@@ -21,7 +21,7 @@ RUN printf 'VITE_SYNC_URL=%s\nVITE_SYNC_SECRET=%s\nVITE_APP_URL=%s\nVITE_SEED=%s
 RUN apk add --no-cache zip \
   && SEMVER="$(node -p "require('./package.json').version")" \
   && (cd dist && zip -qr "/app/bundle-${APP_VERSION}.zip" .) \
-  && printf '{"version":"%s+%s","url":"https://app.codecrafts.cc/bundle-%s.zip"}\n' "$SEMVER" "$APP_VERSION" "$APP_VERSION" > /app/version.json
+  && printf '{"version":"%s+%s","url":"https://app.agentas.net/bundle-%s.zip"}\n' "$SEMVER" "$APP_VERSION" "$APP_VERSION" > /app/version.json
 
 FROM nginx:alpine
 RUN rm -rf /usr/share/nginx/html/*

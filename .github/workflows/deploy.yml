@@ -23,7 +23,7 @@ jobs:
       - name: Deploy via SSH over Tailscale
         uses: appleboy/ssh-action@v1
         env:
-          # app.codecrafts.cc and its OTA bundles are world-readable (OTA requires
+          # app.agentas.net and its OTA bundles are world-readable (OTA requires
           # it). VITE_APP_URL is the ONLY var the build takes. Sync is configured
           # per-device in Settings — since 1.47.0 no build can bake it in at all
           # (VITE_SYNC_URL/SECRET/SEED are gone from the source). A VITE_SYNC_* bake
