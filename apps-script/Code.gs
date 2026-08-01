@@ -105,7 +105,13 @@ function doPost(e) {
     // Walk the block's rows until the next block header (a row with date cells).
     // Track the per-session meta rows (Note / Mood / Time / Avg HR) as we go.
     var written = [];
-    var metaRow = { Note: -1, Mood: -1, Time: -1, "Time of day": -1, "Avg HR": -1 };
+    // MUST list every label metaKind() can return (incl. the cardio rows), else a
+    // re-sync of an existing cardio block leaves target=undefined → getRange(NaN…),
+    // which the Apps Script bridge casts to row 0 → "start row of range too small".
+    var metaRow = {
+      Note: -1, Mood: -1, Time: -1, "Time of day": -1, "Avg HR": -1,
+      Distance: -1, Pace: -1, Speed: -1, Route: -1,
+    };
     var lastBlockRow = headerRow; // last row belonging to this block
     var doneNames = {};
     for (var rr = headerRow + 1; rr < data.length; rr++) {

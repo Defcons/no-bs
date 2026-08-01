@@ -1,13 +1,14 @@
 {
   "name": "no-bs",
   "private": true,
-  "version": "1.51.1",
+  "version": "1.51.2",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "postinstall": "patch-package"
   },
   "dependencies": {
     "@capacitor-community/background-geolocation": "^1.2.26",
@@ -35,6 +36,7 @@
     "@types/web-bluetooth": "^0.0.21",
     "@vitejs/plugin-react": "^6.0.3",
     "oxlint": "^1.71.0",
+    "patch-package": "^8.0.1",
     "sharp": "^0.35.3",
     "tsx": "^4.22.4",
     "typescript": "~6.0.2",
