@@ -11,6 +11,7 @@ import { Capacitor } from "@capacitor/core";
 import { notificationsAllowed, onNotificationTap, requestNotifications, scheduleTrainingReminders, showReminder } from "./lib/notify";
 import { markAppReady } from "./lib/update";
 import { isExtendedBuild } from "./lib/buildInfo";
+import { collectSettings } from "./lib/workbook";
 import { setKeepAwake } from "./lib/pip";
 import { saveFile } from "./lib/download";
 import { syncBodyweight } from "./lib/sheetSync";
@@ -302,13 +303,13 @@ export default function App() {
 
   const onExport = async () => {
     const data = {
+      v: 3,
       workouts: await db.workouts.toArray(),
       templates: await db.templates.toArray(),
-      // Strip sync credentials — a backup shared for help/debugging must not
-      // leak the user's Apps Script secret (activeDraft is transient noise too).
-      settings: (await db.settings.toArray()).filter(
-        (s) => !["sheetSyncSecret", "sheetSyncUrl", "activeDraft"].includes(String(s.key)),
-      ),
+      bwHistory: await getSetting<BwEntry[]>("bwHistory", []),
+      // Allowlisted preferences only (collectSettings excludes sync credentials +
+      // transient state), as an object that restore reads back through applyBackup.
+      settings: await collectSettings(),
       exportedAt: new Date().toISOString(),
     };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });

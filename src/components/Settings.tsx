@@ -336,14 +336,21 @@ export function Settings({
       let imported: ImportedBackup;
       if (file.name.toLowerCase().endsWith(".json")) {
         const j = JSON.parse(new TextDecoder().decode(buf)) as ImportedBackup;
-        imported = { workouts: j.workouts ?? [], bwHistory: j.bwHistory, templates: j.templates };
+        imported = { workouts: j.workouts ?? [], bwHistory: j.bwHistory, templates: j.templates, settings: j.settings };
       } else {
         imported = await importXlsx(buf);
       }
-      const { added, bwYears } = await applyBackup(imported);
+      const { added, bwYears, settings } = await applyBackup(imported);
       const bw = bwYears ? ` · ${bwYears} bodyweight year${bwYears === 1 ? "" : "s"}` : "";
-      setBackupMsg((added ? `Restored ${added} workout${added === 1 ? "" : "s"}` : "Nothing new to restore") + bw + ".");
+      const set = settings ? ` · ${settings} setting${settings === 1 ? "" : "s"}` : "";
+      setBackupMsg(
+        (added ? `Restored ${added} workout${added === 1 ? "" : "s"}` : "Nothing new to restore") +
+          bw + set + (settings ? " — reloading to apply…" : "."),
+      );
       if (bwYears) onImported();
+      // Preferences (theme/toggles/rest defaults) are read at mount, so reload to
+      // apply them this session rather than only on the next launch.
+      if (settings) setTimeout(() => location.reload(), 1500);
     } catch (e) {
       setBackupMsg(`Restore failed: ${(e as Error).message}`);
     }

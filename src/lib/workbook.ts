@@ -15,6 +15,64 @@ import { parseBodyweightTab, parseSheet } from "./sheet";
 
 export type SheetTab = { name: string; rows: string[][] };
 
+// Preference keys carried by a backup so a REINSTALL keeps the user's setup — the
+// break-trigger toggles especially (a fresh install resets them to off, so nothing
+// starts a break). Allowlist, deliberately EXCLUDING: transient state
+// (`activeDraft`/`lastReminder`/`bootstrapped`), sync credentials
+// (`sheetSync*`/`syncEnabled`/`sheetViewUrl` — a shared backup must never leak the
+// secret), and bodyweight (carried by the dedicated Bodyweight tab / bwHistory path).
+export const BACKUP_SETTINGS = [
+  "age", "sex",
+  "autoBreakOnDone", "volumeUpBreak", "phoneVolumeBreak", "mediaBtnBreak",
+  "breakCountdown", "breakSound",
+  "restDefaultSec", "weightStep", "daysPerWeek",
+  "units", "theme",
+  "keepScreenOn", "floatMode",
+  "autoEndOnLeave", "hrLowThreshold",
+  "remindersEnabled", "exerciseRest",
+] as const;
+
+// Read the allowlisted preferences into a plain object (skips unset keys).
+export async function collectSettings(): Promise<Record<string, unknown>> {
+  const allow = new Set<string>(BACKUP_SETTINGS);
+  const out: Record<string, unknown> = {};
+  for (const row of await db.settings.toArray()) {
+    if (allow.has(String(row.key)) && row.value !== undefined && row.value !== null) out[String(row.key)] = row.value;
+  }
+  return out;
+}
+
+// Restore preferences — allowlist-filtered on the way IN too, so a hand-edited or
+// older backup can never inject a sync secret or transient key.
+async function applySettings(settings: Record<string, unknown> | undefined): Promise<number> {
+  if (!settings) return 0;
+  let n = 0;
+  for (const key of BACKUP_SETTINGS) {
+    if (key in settings && settings[key] !== undefined && settings[key] !== null) {
+      await setSetting(key, settings[key]);
+      n++;
+    }
+  }
+  return n;
+}
+
+// Parse a visible "Settings" tab (Key | Value) back to an object, JSON-decoding
+// non-string values (numbers/bools/objects were stringified on export).
+function parseSettingsTab(rows: string[][]): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const r of rows.slice(1)) {
+    const key = String(r?.[0] ?? "").trim();
+    if (!key) continue;
+    const raw = r?.[1] ?? "";
+    try {
+      out[key] = JSON.parse(String(raw));
+    } catch {
+      out[key] = raw; // plain string value
+    }
+  }
+  return out;
+}
+
 const DATA_TAB = "_data";
 
 const fmtDate = (iso: string): string => {
@@ -93,7 +151,11 @@ function yearRows(list: StoredWorkout[]): string[][] {
   return rows;
 }
 
-export function workbookTabs(workouts: StoredWorkout[], bwHistory: BwEntry[]): SheetTab[] {
+export function workbookTabs(
+  workouts: StoredWorkout[],
+  bwHistory: BwEntry[],
+  settings?: Record<string, unknown>,
+): SheetTab[] {
   const byYear = new Map<string, StoredWorkout[]>();
   for (const w of workouts) {
     const y = w.date.slice(0, 4);
@@ -110,6 +172,15 @@ export function workbookTabs(workouts: StoredWorkout[], bwHistory: BwEntry[]): S
       rows: [["Year", "Kg"], ...bw.map((e) => [String(e.year), String(e.kg).replace(".", ",")])],
     });
   }
+  if (settings && Object.keys(settings).length) {
+    tabs.push({
+      name: "Settings",
+      rows: [
+        ["Key", "Value"],
+        ...Object.entries(settings).map(([k, v]) => [k, typeof v === "string" ? v : JSON.stringify(v)]),
+      ],
+    });
+  }
   return tabs;
 }
 
@@ -120,13 +191,15 @@ export async function exportXlsx(
   templates: DayTemplate[] = [],
 ): Promise<Blob> {
   const XLSX = await import("xlsx");
+  const settings = await collectSettings();
   const wb = XLSX.utils.book_new();
-  for (const tab of workbookTabs(workouts, bwHistory)) {
+  for (const tab of workbookTabs(workouts, bwHistory, settings)) {
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(tab.rows), tab.name.slice(0, 31));
   }
   // Lossless JSON, chunked across rows — a single cell can't exceed 32,767 chars.
-  // Templates ride along so a restore on a fresh phone brings the user's split back.
-  const json = JSON.stringify({ v: 2, workouts, bwHistory, templates });
+  // Templates + preferences ride along so a restore on a fresh phone brings the
+  // user's split AND their toggles/profile back (v3 added settings).
+  const json = JSON.stringify({ v: 3, workouts, bwHistory, templates, settings });
   const CHUNK = 30000;
   const dataRows: string[][] = [["NoBS – Workout Log backup — do not edit"]];
   for (let i = 0; i < json.length; i += CHUNK) dataRows.push([json.slice(i, i + CHUNK)]);
@@ -140,6 +213,7 @@ export type ImportedBackup = {
   workouts: Partial<StoredWorkout>[];
   bwHistory?: BwEntry[];
   templates?: DayTemplate[];
+  settings?: Record<string, unknown>;
 };
 
 // Read a backup. Prefers the lossless _data tab; falls back to parsing the visible
@@ -159,27 +233,34 @@ export async function importXlsx(buf: ArrayBuffer): Promise<ImportedBackup> {
           workouts?: StoredWorkout[];
           bwHistory?: BwEntry[];
           templates?: DayTemplate[];
+          settings?: Record<string, unknown>;
         };
         if (parsed.workouts)
-          return { workouts: parsed.workouts, bwHistory: parsed.bwHistory, templates: parsed.templates };
+          return {
+            workouts: parsed.workouts,
+            bwHistory: parsed.bwHistory,
+            templates: parsed.templates,
+            settings: parsed.settings,
+          };
       } catch {
         /* fall through to parsing visible tabs */
       }
     }
   }
 
-  const workouts = wb.SheetNames.filter((n) => n !== DATA_TAB && n !== "Bodyweight").flatMap((n) => parseSheet(aoa(n), n));
+  const workouts = wb.SheetNames.filter((n) => n !== DATA_TAB && n !== "Bodyweight" && n !== "Settings").flatMap((n) => parseSheet(aoa(n), n));
   const bwHistory = wb.SheetNames.includes("Bodyweight")
     ? parseBodyweightTab(aoa("Bodyweight")).map((e) => ({ year: e.year, kg: e.kg }))
     : undefined;
-  return { workouts, bwHistory };
+  const settings = wb.SheetNames.includes("Settings") ? parseSettingsTab(aoa("Settings")) : undefined;
+  return { workouts, bwHistory, settings };
 }
 
 // Apply a restore: add only workouts this device is missing (deduped by a
 // content-aware session key so two genuine same-day sessions both survive), plus
 // any templates the device doesn't have (matched by name), and merge bodyweight
 // years (imported wins per year). Never overwrites or deletes.
-export async function applyBackup(imported: ImportedBackup): Promise<{ added: number; bwYears: number }> {
+export async function applyBackup(imported: ImportedBackup): Promise<{ added: number; bwYears: number; settings: number }> {
   const existing = await db.workouts.toArray();
   const have = new Set(existing.map(sessionKey));
   const toAdd: StoredWorkout[] = [];
@@ -218,5 +299,10 @@ export async function applyBackup(imported: ImportedBackup): Promise<{ added: nu
     await setSetting("bwHistory", hist);
     bwYears = imported.bwHistory.length;
   }
-  return { added: toAdd.length, bwYears };
+
+  // Restore preferences (break toggles, profile, rest defaults, …). Overwrites the
+  // matching keys — the point is to bring a fresh install back to the user's setup.
+  const settings = await applySettings(imported.settings);
+
+  return { added: toAdd.length, bwYears, settings };
 }
