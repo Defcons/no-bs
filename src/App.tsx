@@ -14,7 +14,7 @@ import { isExtendedBuild } from "./lib/buildInfo";
 import { collectSettings } from "./lib/workbook";
 import { setKeepAwake } from "./lib/pip";
 import { saveFile } from "./lib/download";
-import { syncBodyweight } from "./lib/sheetSync";
+import { syncBodyweight, syncProfile } from "./lib/sheetSync";
 import type { BwEntry, Sex } from "./lib/standards";
 import { trainingDue } from "./lib/stats";
 import { History } from "./components/History";
@@ -268,11 +268,11 @@ export default function App() {
   };
   const persistAge = (v: number) => {
     setAge(v);
-    setSetting("age", v);
+    setSetting("age", v).then(() => syncProfile());
   };
   const persistSex = (v: Sex) => {
     setSex(v);
-    setSetting("sex", v);
+    setSetting("sex", v).then(() => syncProfile());
   };
   const persistUnits = (v: WeightUnit) => {
     setUnits(v);

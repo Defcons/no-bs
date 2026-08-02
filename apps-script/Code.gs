@@ -53,6 +53,9 @@ function doPost(e) {
     // Bodyweight: upsert year -> kg rows in a dedicated tab.
     if (body.action === "bodyweight") return writeBodyweight(body);
 
+    // Profile: upsert age/sex key->value rows in a dedicated tab.
+    if (body.action === "profile") return writeProfile(body);
+
     var ss = SpreadsheetApp.getActiveSpreadsheet();
     var sheet = ss.getSheetByName(String(body.year));
     if (!sheet) return json({ ok: false, error: "no tab named " + body.year });
@@ -275,6 +278,40 @@ function writeBodyweight(body) {
     }
   }
   return json({ ok: true, bodyweight: true, count: entries.length });
+}
+
+// Upsert the user's profile (age / sex) into a dedicated "Profile" tab (Key | Value),
+// so a reinstall can pull it back like bodyweight. Mirrors writeBodyweight.
+function writeProfile(body) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var name = body.tab || "Profile";
+  var sh = ss.getSheetByName(name);
+  if (!sh) {
+    sh = ss.insertSheet(name);
+    sh.getRange(1, 1, 1, 2).setValues([["Key", "Value"]]);
+  }
+  var vals = sh.getDataRange().getValues();
+  var rowByKey = {};
+  for (var r = 1; r < vals.length; r++) {
+    var k = String(vals[r][0]).trim().toLowerCase();
+    if (k) rowByKey[k] = r + 1; // 1-based sheet row
+  }
+  var entries = [];
+  if (body.age != null && body.age !== "") entries.push(["Age", body.age]);
+  if (body.sex) entries.push(["Sex", body.sex]);
+  for (var i = 0; i < entries.length; i++) {
+    var label = entries[i][0];
+    var key = label.toLowerCase();
+    if (rowByKey[key]) {
+      sh.getRange(rowByKey[key], 2).setValue(entries[i][1]);
+    } else {
+      var nr = sh.getLastRow() + 1;
+      sh.getRange(nr, 1).setValue(label);
+      sh.getRange(nr, 2).setValue(entries[i][1]);
+      rowByKey[key] = nr;
+    }
+  }
+  return json({ ok: true, profile: true, count: entries.length });
 }
 
 // ---------------------------------------------------------------------------

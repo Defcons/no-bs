@@ -15,6 +15,7 @@ import type { ExercisePerf } from "../types";
 import { APP_PUBLIC_URL } from "./syncConfig";
 
 const BODYWEIGHT_TAB = "Bodyweight";
+const PROFILE_TAB = "Profile";
 
 export type SyncResult = {
   ok: boolean;
@@ -252,6 +253,8 @@ export async function importFromSheet(): Promise<{ added: number; bwYears?: numb
 
     // Bodyweight lives in its own tab — parse it separately, not as a workout block.
     const bwYears = res.tabs[BODYWEIGHT_TAB] ? await mergeBodyweight(res.tabs[BODYWEIGHT_TAB]) : 0;
+    // Profile (age/sex) likewise — pull it back so a reinstall restores it.
+    if (res.tabs[PROFILE_TAB]) await mergeProfile(res.tabs[PROFILE_TAB]);
 
     const parsed = Object.entries(res.tabs)
       .filter(([name]) => name !== BODYWEIGHT_TAB)
@@ -319,5 +322,36 @@ export async function syncBodyweight(): Promise<SyncResult | null> {
     return await post(url, { secret, action: "bodyweight", tab: BODYWEIGHT_TAB, entries });
   } catch (e) {
     return { ok: false, error: (e as Error).message };
+  }
+}
+
+// Push the user's profile (age/sex) to its own sheet tab (upsert). Mirrors
+// syncBodyweight; call it whenever age/sex change.
+export async function syncProfile(): Promise<SyncResult | null> {
+  const { url, secret } = await config();
+  if (!url) return null;
+  const age = await getSetting<number>("age", 0);
+  const sex = await getSetting<string>("sex", "");
+  if (!age && !sex) return null;
+  try {
+    return await post(url, { secret, action: "profile", tab: PROFILE_TAB, age: age || "", sex });
+  } catch (e) {
+    return { ok: false, error: (e as Error).message };
+  }
+}
+
+// Read the Profile tab (Key | Value) and set age/sex locally (sheet wins).
+async function mergeProfile(rows: string[][]): Promise<void> {
+  for (const r of rows.slice(1)) {
+    const key = String(r?.[0] ?? "").trim().toLowerCase();
+    const val = String(r?.[1] ?? "").trim();
+    if (!val) continue;
+    if (key === "age") {
+      const n = parseInt(val, 10);
+      if (Number.isFinite(n) && n > 0) await setSetting("age", n);
+    } else if (key === "sex") {
+      const s = val.toLowerCase();
+      if (s === "male" || s === "female") await setSetting("sex", s);
+    }
   }
 }
