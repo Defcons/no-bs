@@ -129,7 +129,10 @@ export function Today({
   const lowHrWarn = useLiveQuery(() => getSetting("lowHrWarn", false), [], false);
   const lowHrWarnBpm = useLiveQuery(() => getSetting("lowHrWarnBpm", 100), [], 100);
   const lowHrSound = useLiveQuery(() => getSetting<string>("lowHrSound", "alarm"), [], "alarm");
-  const lowHrFiredRef = useRef(0);
+  const lowHrSoundRef = useRef(lowHrSound);
+  lowHrSoundRef.current = lowHrSound;
+  const lowHrArmedRef = useRef(false); // seen HR above the threshold since last fire/start
+  const lowHrBelowSinceRef = useRef<number | null>(null); // when it first dropped below
   // The button action: start a break, or skip/dismiss the one that's running.
   // Reassigned every render (below) so it sees the live draft.
   const hwBreakRef = useRef<() => void>(() => {});
@@ -307,20 +310,34 @@ export function Today({
     return () => window.clearInterval(id);
   }, [draft, draft?.custom, hr.connected, hrLowThreshold, hrPrompt]);
 
-  // Low heart-rate warning: while HR is connected during a workout, sound the
-  // chosen alert if BPM drops below the threshold — at most once a minute, and
-  // re-armed the moment it recovers above.
+  // Low heart-rate warning: only after HR has been ABOVE the threshold (so it never
+  // fires while HR is still ramping up at the start), then only if it STAYS below
+  // for ~20 s (so a momentary dip isn't a false alarm); re-arms once HR rises above
+  // again. Polled on an interval because BLE HR notifications don't re-fire when the
+  // value holds steady, so a react-to-bpm effect could miss a sustained low.
+  const lowHrActive = !!draft && lowHrWarn && lowHrWarnBpm > 0;
   useEffect(() => {
-    if (!draft || !lowHrWarn || !hr.connected || hr.bpm == null || lowHrWarnBpm <= 0) return;
-    if (hr.bpm < lowHrWarnBpm) {
-      if (Date.now() - lowHrFiredRef.current >= 60000) {
-        lowHrFiredRef.current = Date.now();
-        void playSoundChoice(lowHrSound);
+    lowHrArmedRef.current = false;
+    lowHrBelowSinceRef.current = null;
+    if (!lowHrActive || !hr.connected) return;
+    const id = window.setInterval(() => {
+      const bpm = bpmRef.current;
+      if (bpm == null) return;
+      if (bpm >= lowHrWarnBpm) {
+        lowHrArmedRef.current = true; // been active → arm
+        lowHrBelowSinceRef.current = null;
+        return;
       }
-    } else {
-      lowHrFiredRef.current = 0;
-    }
-  }, [hr.bpm, hr.connected, draft, lowHrWarn, lowHrWarnBpm, lowHrSound]);
+      if (!lowHrArmedRef.current) return; // never been above yet → ignore
+      if (lowHrBelowSinceRef.current == null) lowHrBelowSinceRef.current = Date.now();
+      else if (Date.now() - lowHrBelowSinceRef.current >= 20000) {
+        void playSoundChoice(lowHrSoundRef.current);
+        lowHrArmedRef.current = false; // require rising above again before it can fire again
+        lowHrBelowSinceRef.current = null;
+      }
+    }, 3000);
+    return () => window.clearInterval(id);
+  }, [lowHrActive, lowHrWarnBpm, hr.connected]);
 
   // Float as Picture-in-Picture whenever you leave the app during an active
   // workout; the minimal PiP view shows the break countdown (if resting) or the

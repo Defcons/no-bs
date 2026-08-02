@@ -642,8 +642,8 @@ export function Settings({
           }}
         >
           <p className="muted tiny">
-            Off by default. While HR is connected during a workout, play a sound if your heart rate drops below the
-            number below. Repeats at most once a minute while you stay below it.
+            Off by default. During a workout, once your heart rate has been above the number below, it plays a sound if
+            it then drops below and stays there ~20 s (so a brief dip won't false-alarm). Re-arms once HR rises back above.
           </p>
           {lowHrWarn && (
             <>
