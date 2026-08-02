@@ -30,6 +30,7 @@ import {
   playCountdownTick,
 } from "../lib/sounds";
 import { checkAndApplyUpdate, currentVersion, updatesSupported } from "../lib/update";
+import { feedbackMailtoUrl } from "../lib/feedback";
 import { applyBackup, exportXlsx, importXlsx, type ImportedBackup } from "../lib/workbook";
 import { Switch } from "./Switch";
 import { MoonIcon, SunIcon } from "./icons";
@@ -837,6 +838,19 @@ export function Settings({
           )}
         </div>
       </details>
+
+      <div className="setting settings-feedback">
+        <label>Feedback &amp; bugs</label>
+        <p className="muted tiny">
+          Hit a bug or have an idea? Email us directly — it reaches the developer, includes your version so we can
+          reproduce it, and we can actually reply and fix it (unlike a store review).
+        </p>
+        <div className="row">
+          <a className="mini linkbtn" href={feedbackMailtoUrl(appVersion ?? "")}>
+            Send feedback / report a bug
+          </a>
+        </div>
+      </div>
 
       {showSheetsGuide && <SheetsGuide onClose={() => setShowSheetsGuide(false)} />}
     </div>
