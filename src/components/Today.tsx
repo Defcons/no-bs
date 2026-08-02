@@ -14,7 +14,8 @@ import { startTracking, stopTracking } from "../lib/tracker";
 import { stepForExercise } from "../lib/steps";
 import { playBreakStart } from "../lib/sounds";
 import { uid } from "../lib/uid";
-import { Capacitor } from "@capacitor/core";
+import { Capacitor, type PluginListenerHandle } from "@capacitor/core";
+import { App as CapacitorApp } from "@capacitor/app";
 import { syncWorkout } from "../lib/sheetSync";
 import { cadenceStatus, trainingDue } from "../lib/stats";
 import { useActiveWorkout } from "../lib/useActiveWorkout";
@@ -41,6 +42,7 @@ type Props = {
   editWorkout?: StoredWorkout | null; // a past workout to load into the editor
   onEditConsumed?: () => void;
   floatMode: "pip" | "off"; // floating timer (PiP) on/off
+  activeTab: string; // which tab is showing — the back button only acts on "today"
 };
 
 export function Today({
@@ -57,6 +59,7 @@ export function Today({
   editWorkout,
   onEditConsumed,
   floatMode,
+  activeTab,
 }: Props) {
   const {
     draft,
@@ -157,6 +160,28 @@ export function Today({
       setMediaButtonCapture(false);
     };
   }, [draft == null, mediaBtnBreak]);
+
+  // Android hardware back: on the Today tab with a workout in progress, confirm
+  // discarding it and returning to the picker (instead of exiting the app).
+  // Registered ONCE (reads live state via a ref) so it doesn't re-bind per edit.
+  const backRef = useRef<{ activeTab: string; draft: typeof draft; cancel: typeof cancel }>({ activeTab, draft, cancel });
+  backRef.current = { activeTab, draft, cancel };
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return;
+    let handle: PluginListenerHandle | undefined;
+    CapacitorApp.addListener("backButton", () => {
+      const { activeTab: t, draft: d, cancel: c } = backRef.current;
+      if (t === "today" && d) {
+        const msg = d.editId != null ? "Discard your changes and go back?" : "Discard this workout and go back to selection?";
+        if (confirm(msg)) c();
+      } else {
+        void CapacitorApp.exitApp();
+      }
+    }).then((h) => (handle = h));
+    return () => {
+      handle?.remove();
+    };
+  }, []);
 
   // On the picker, load the last session of each day type (for "days ago").
   useEffect(() => {

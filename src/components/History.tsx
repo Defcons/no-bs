@@ -12,6 +12,21 @@ import { type WeightUnit, weightStr } from "../lib/units";
 const RunMap = lazy(() => import("./RunMap").then((m) => ({ default: m.RunMap })));
 
 type GroupBy = "week" | "month" | "year";
+
+// Custom/"Alternative" sessions often keep the generic "Alternative" name — surface
+// what the session actually was (a GPS run with its distance, or its exercises) so
+// History reads "5.2 km run" / "Burpees, Box jumps" instead of just "Alternative".
+function activityLabel(w: StoredWorkout): string {
+  const dn = (w.dayName ?? "").trim();
+  if (dn && dn.toLowerCase() !== "alternative") return dn;
+  if (w.track && w.track.length > 1) {
+    const run = computeRun(w.track);
+    if (run) return `${fmtDist(run.distanceM)} run`;
+  }
+  const names = w.exercises.map((e) => e.name.trim()).filter(Boolean);
+  if (names.length) return names.slice(0, 3).join(", ") + (names.length > 3 ? "…" : "");
+  return dn || "Alternative";
+}
 const GROUPS: GroupBy[] = ["week", "month", "year"];
 const MONTHS = [
   "January", "February", "March", "April", "May", "June",
@@ -189,7 +204,7 @@ function LogRow({
     <div className={`log-row ${open ? "open" : ""}`}>
       <button className="log-head" onClick={onToggle}>
         <span className="log-info">
-          <span className="log-day">{w.dayName}</span>
+          <span className="log-day">{activityLabel(w)}</span>
           <span className="tiny muted">
             {niceDate(w.date)}
             {clockTime(w.date) && ` · ${clockTime(w.date)}`} · {daysAgoLabel(w.date)}

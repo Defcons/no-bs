@@ -379,6 +379,7 @@ export default function App() {
           editWorkout={pendingEdit}
           onEditConsumed={() => setPendingEdit(null)}
           floatMode={floatMode}
+          activeTab={tab}
         />
       </div>
 
