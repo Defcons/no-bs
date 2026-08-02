@@ -3,7 +3,9 @@
 import { useMemo, useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db, type StoredWorkout } from "../db";
-import { mmss, niceDate } from "../lib/format";
+import { hhmmss, mmss, niceDate } from "../lib/format";
+import { fmtDist, fmtPace } from "../lib/runStats";
+import { paceLadder, paceMedals, runPBs, runsFrom } from "../lib/runStandards";
 import { type BwEntry, KEY_LIFTS, REF_BW, type Sex, adjustThresholds, bodyweightForYear, levelClass, rateLift } from "../lib/standards";
 import { type LiftRecord, hasRecord, liftRecords, progression, sessionsPerWeek, summarize, weekNumbersForLast } from "../lib/stats";
 import { MUSCLE_ORDER } from "../lib/exercises";
@@ -36,12 +38,16 @@ export function Records({
     for (const c of Object.keys(byCat)) byCat[c].sort((a, b) => b.count - a.count);
     return { summary, records, byCat, perWeek: sessionsPerWeek(workouts, 12) };
   }, [workouts]);
+  const runs = useMemo(() => runsFrom(workouts ?? []), [workouts]);
   if (!workouts) return <div className="pad">Loading…</div>;
   if (workouts.length === 0) return <div className="pad muted">No workouts yet — log your first one!</div>;
 
   const { summary, records, byCat, perWeek } = derived!;
   const maxWeek = Math.max(1, ...perWeek);
   const weekNums = weekNumbersForLast(perWeek.length);
+  const pbs = runPBs(runs);
+  const ladder = pbs ? paceLadder(pbs.fastestPace) : null;
+  const medals = pbs ? paceMedals(runs, pbs.fastestPace) : null;
 
   return (
     <div className="pad history">
@@ -122,6 +128,57 @@ export function Records({
           )}
         </div>
       </details>
+
+      {pbs && ladder && medals && (
+        <>
+          <h3 className="section">Running</h3>
+          <div className="stat-grid">
+            <Stat label="Runs" value={String(pbs.count)} />
+            <Stat label="Furthest" value={fmtDist(pbs.furthestM)} />
+            <Stat label="Fastest pace" value={fmtPace(pbs.fastestPace)} />
+            <Stat label="Longest run" value={hhmmss(pbs.longestSec)} />
+            <Stat label="Total distance" value={fmtDist(pbs.totalM)} />
+          </div>
+          <details className="cat rec-standards">
+            <summary>
+              <span className="cat-name">🏃 Pace standards</span>
+              <span className="tiny muted">best pace vs tiers</span>
+            </summary>
+            <div className="rec-standards-body">
+              <div className="standards">
+                <div className="std-row">
+                  <div className="std-top">
+                    <span className="std-name">Best pace (absolute)</span>
+                    <span className="lvl-badge">{ladder.tier}</span>
+                  </div>
+                  <div className="std-bar">
+                    <div className="std-fill" style={{ width: `${ladder.journeyPct}%` }} />
+                    {ladder.ticks.map((t, i) => (
+                      <span key={i} className="std-tick" style={{ left: `${t}%` }} />
+                    ))}
+                  </div>
+                  <div className="std-meta tiny muted">
+                    {fmtPace(pbs.fastestPace)} best ·{" "}
+                    {ladder.nextPace ? `${fmtPace(ladder.nextPace)} for next tier` : "top tier 🏆"}
+                  </div>
+                </div>
+                <div className="std-row">
+                  <div className="std-top">
+                    <span className="std-name">Personal-best medals</span>
+                    <span className="tiny muted">vs your fastest</span>
+                  </div>
+                  <div className="std-meta tiny muted">
+                    🥇 {medals.gold} · 🥈 {medals.silver} · 🥉 {medals.bronze} — runs within 3% / 8% / 15% of your best pace.
+                  </div>
+                </div>
+                <p className="muted tiny">
+                  Absolute tiers are fixed pace targets (same for everyone); medals rank your runs against your own best.
+                </p>
+              </div>
+            </div>
+          </details>
+        </>
+      )}
 
       <h3 className="section">Records by muscle</h3>
       {MUSCLE_ORDER.filter((cat) => byCat[cat]?.length).map((cat) => (
