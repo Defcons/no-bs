@@ -2,6 +2,7 @@
 // see live HR, and finish. This is the primary "as-easy-as-possible" surface.
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { useLiveQuery } from "dexie-react-hooks";
 import { distinctExerciseNames, getSetting, lastWorkoutForDay, type StoredWorkout } from "../db";
 import { resolveExercise } from "../lib/exercises";
 import { restForId } from "../lib/exerciseRest";
@@ -43,6 +44,7 @@ type Props = {
   onEditConsumed?: () => void;
   floatMode: "pip" | "off"; // floating timer (PiP) on/off
   activeTab: string; // which tab is showing — the back button only acts on "today"
+  goToday: () => void; // back on another tab switches here first (exit only from Today)
 };
 
 export function Today({
@@ -60,6 +62,7 @@ export function Today({
   onEditConsumed,
   floatMode,
   activeTab,
+  goToday,
 }: Props) {
   const {
     draft,
@@ -110,26 +113,20 @@ export function Today({
   }, [draft?.dayName]);
 
   // Optional: tapping a set's ✓ badge auto-starts the break timer (default off).
-  const [autoBreakOnDone, setAutoBreakOnDone] = useState(false);
-  useEffect(() => {
-    getSetting("autoBreakOnDone", false).then(setAutoBreakOnDone);
-  }, [draft == null]);
+  // All break-trigger toggles are read REACTIVELY (useLiveQuery), so flipping one in
+  // Settings takes effect immediately — even mid-workout (was mount/start-only).
+  const autoBreakOnDone = useLiveQuery(() => getSetting("autoBreakOnDone", false), [], false);
 
   // Optional hands-free break starts (both default off, armed ONLY while a
   // workout is active). Native only; older APKs without the plugin silently no-op.
   // - volumeUpBreak: volume-up key (phone or headphone volume buttons)
   // - mediaBtnBreak: headphone play/pause button (takes it over from music!)
-  const [volUpBreak, setVolUpBreak] = useState(false);
-  const [phoneVolBreak, setPhoneVolBreak] = useState(false);
-  const [mediaBtnBreak, setMediaBtnBreak] = useState(false);
+  const volUpBreak = useLiveQuery(() => getSetting("volumeUpBreak", false), [], false);
+  const phoneVolBreak = useLiveQuery(() => getSetting("phoneVolumeBreak", false), [], false);
+  const mediaBtnBreak = useLiveQuery(() => getSetting("mediaBtnBreak", false), [], false);
   // The button action: start a break, or skip/dismiss the one that's running.
   // Reassigned every render (below) so it sees the live draft.
   const hwBreakRef = useRef<() => void>(() => {});
-  useEffect(() => {
-    getSetting("volumeUpBreak", false).then(setVolUpBreak);
-    getSetting("phoneVolumeBreak", false).then(setPhoneVolBreak);
-    getSetting("mediaBtnBreak", false).then(setMediaBtnBreak);
-  }, [draft == null]);
   // Earbud volume rocker → break (AVRCP volume-observer path).
   useEffect(() => {
     setVolumeCapture(!!draft && volUpBreak);
@@ -164,19 +161,28 @@ export function Today({
   // Android hardware back: on the Today tab with a workout in progress, confirm
   // discarding it and returning to the picker (instead of exiting the app).
   // Registered ONCE (reads live state via a ref) so it doesn't re-bind per edit.
-  const backRef = useRef<{ activeTab: string; draft: typeof draft; cancel: typeof cancel }>({ activeTab, draft, cancel });
-  backRef.current = { activeTab, draft, cancel };
+  const backRef = useRef<{ activeTab: string; draft: typeof draft; cancel: typeof cancel; goToday: () => void }>({
+    activeTab,
+    draft,
+    cancel,
+    goToday,
+  });
+  backRef.current = { activeTab, draft, cancel, goToday };
   useEffect(() => {
     if (!Capacitor.isNativePlatform()) return;
     let handle: PluginListenerHandle | undefined;
     CapacitorApp.addListener("backButton", () => {
-      const { activeTab: t, draft: d, cancel: c } = backRef.current;
-      if (t === "today" && d) {
+      const { activeTab: t, draft: d, cancel: c, goToday: g } = backRef.current;
+      if (t !== "today") {
+        g(); // other tabs → land on Today first, don't exit
+        return;
+      }
+      if (d) {
         const msg = d.editId != null ? "Discard your changes and go back?" : "Discard this workout and go back to selection?";
         if (confirm(msg)) c();
-      } else {
-        void CapacitorApp.exitApp();
+        return;
       }
+      void CapacitorApp.exitApp(); // Today with no workout → exit
     }).then((h) => (handle = h));
     return () => {
       handle?.remove();

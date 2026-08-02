@@ -380,6 +380,7 @@ export default function App() {
           onEditConsumed={() => setPendingEdit(null)}
           floatMode={floatMode}
           activeTab={tab}
+          goToday={() => go("today")}
         />
       </div>
 
