@@ -19,6 +19,7 @@ export interface StoredWorkout {
   track?: TrackPoint[]; // GPS route for tracked cardio (e.g. a run)
   source: string; // "app" for new sessions, "sheet:2026" etc. for imports
   synced?: boolean; // written back to the Google Sheet
+  custom?: boolean; // logged as a free-form "Alternative" session (not a template)
 }
 
 export interface Setting {

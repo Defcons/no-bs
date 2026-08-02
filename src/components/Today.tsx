@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useLiveQuery } from "dexie-react-hooks";
-import { distinctExerciseNames, getSetting, lastWorkoutForDay, type StoredWorkout } from "../db";
+import { db, distinctExerciseNames, getSetting, lastWorkoutForDay, type StoredWorkout } from "../db";
 import { resolveExercise } from "../lib/exercises";
 import { restForId } from "../lib/exerciseRest";
 import { daysAgo, daysAgoLabel, hhmmss, mmss, niceDate } from "../lib/format";
@@ -13,7 +13,7 @@ import { exitPip, isInPip, onPipChange, setPipAutoEnter } from "../lib/pip";
 import { onMediaButton, onVolumeKey, setMediaButtonCapture, setPhoneKeyCapture, setVolumeCapture } from "../lib/hwButtons";
 import { startTracking, stopTracking } from "../lib/tracker";
 import { stepForExercise } from "../lib/steps";
-import { playBreakStart } from "../lib/sounds";
+import { playBreakStart, playSoundChoice } from "../lib/sounds";
 import { uid } from "../lib/uid";
 import { Capacitor, type PluginListenerHandle } from "@capacitor/core";
 import { App as CapacitorApp } from "@capacitor/app";
@@ -98,6 +98,7 @@ export function Today({
   const lastHrAt = useRef(0); // last time an HR reading arrived
   const [prev, setPrev] = useState<StoredWorkout | undefined>();
   const [lastByDay, setLastByDay] = useState<Record<string, StoredWorkout | undefined>>({});
+  const [lastAlt, setLastAlt] = useState<StoredWorkout | null>(null); // most recent Alternative session
   const [nameHistory, setNameHistory] = useState<string[]>([]);
 
   // Distinct past exercise names for the name autocomplete (custom sessions and
@@ -124,6 +125,11 @@ export function Today({
   const volUpBreak = useLiveQuery(() => getSetting("volumeUpBreak", false), [], false);
   const phoneVolBreak = useLiveQuery(() => getSetting("phoneVolumeBreak", false), [], false);
   const mediaBtnBreak = useLiveQuery(() => getSetting("mediaBtnBreak", false), [], false);
+  // Low heart-rate warning (default off): sound when live BPM dips below a threshold.
+  const lowHrWarn = useLiveQuery(() => getSetting("lowHrWarn", false), [], false);
+  const lowHrWarnBpm = useLiveQuery(() => getSetting("lowHrWarnBpm", 100), [], 100);
+  const lowHrSound = useLiveQuery(() => getSetting<string>("lowHrSound", "alarm"), [], "alarm");
+  const lowHrFiredRef = useRef(0);
   // The button action: start a break, or skip/dismiss the one that's running.
   // Reassigned every render (below) so it sees the live draft.
   const hwBreakRef = useRef<() => void>(() => {});
@@ -196,6 +202,15 @@ export function Today({
     Promise.all(templates.map((t) => lastWorkoutForDay(t.name).then((w) => [t.name, w] as const))).then((entries) => {
       if (!cancelled) setLastByDay(Object.fromEntries(entries));
     });
+    // Last Alternative session (flagged `custom`, or a GPS run) → "days ago" on the button.
+    db.workouts
+      .orderBy("date")
+      .reverse()
+      .filter((w) => !!w.custom || !!(w.track && w.track.length > 1))
+      .first()
+      .then((w) => {
+        if (!cancelled) setLastAlt(w ?? null);
+      });
     return () => {
       cancelled = true;
     };
@@ -291,6 +306,21 @@ export function Today({
     }, 20000);
     return () => window.clearInterval(id);
   }, [draft, draft?.custom, hr.connected, hrLowThreshold, hrPrompt]);
+
+  // Low heart-rate warning: while HR is connected during a workout, sound the
+  // chosen alert if BPM drops below the threshold — at most once a minute, and
+  // re-armed the moment it recovers above.
+  useEffect(() => {
+    if (!draft || !lowHrWarn || !hr.connected || hr.bpm == null || lowHrWarnBpm <= 0) return;
+    if (hr.bpm < lowHrWarnBpm) {
+      if (Date.now() - lowHrFiredRef.current >= 60000) {
+        lowHrFiredRef.current = Date.now();
+        void playSoundChoice(lowHrSound);
+      }
+    } else {
+      lowHrFiredRef.current = 0;
+    }
+  }, [hr.bpm, hr.connected, draft, lowHrWarn, lowHrWarnBpm, lowHrSound]);
 
   // Float as Picture-in-Picture whenever you leave the app during an active
   // workout; the minimal PiP view shows the break countdown (if resting) or the
@@ -464,7 +494,10 @@ export function Today({
           >
             <div className="day-body">
               <span className="day-name">＋ Alternative</span>
-              <span className="day-sub">Running, crossfit, or your own exercises</span>
+              <span className="day-sub">
+                Running, crossfit, or your own exercises
+                {lastAlt && <span className="day-alt-last"> · last {daysAgoLabel(lastAlt.date)}</span>}
+              </span>
             </div>
           </button>
           <button

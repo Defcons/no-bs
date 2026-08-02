@@ -2,7 +2,7 @@
 // against strength standards, and per-muscle collapsible personal records.
 import { useMemo, useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
-import { db, type StoredWorkout } from "../db";
+import { db, getSetting, type StoredWorkout } from "../db";
 import { hhmmss, mmss, niceDate } from "../lib/format";
 import { fmtDist, fmtPace } from "../lib/runStats";
 import { paceLadder, paceMedals, runPBs, runsFrom } from "../lib/runStandards";
@@ -27,6 +27,8 @@ export function Records({
 }) {
   const currentYear = new Date().getFullYear();
   const workouts = useLiveQuery(() => db.workouts.toArray(), []);
+  // Whether free-form "Alternative" sessions count toward the weekly bars (default off).
+  const includeAltInWeekly = useLiveQuery(() => getSetting("includeAltInWeekly", false), [], false);
   // Derived records are an O(n·exercises) scan — memoize so unrelated re-renders
   // (settings tweaks) don't recompute the whole history every time.
   const derived = useMemo(() => {
@@ -36,8 +38,9 @@ export function Records({
     const byCat: Record<string, LiftRecord[]> = {};
     for (const r of records) (byCat[r.muscle] ??= []).push(r);
     for (const c of Object.keys(byCat)) byCat[c].sort((a, b) => b.count - a.count);
-    return { summary, records, byCat, perWeek: sessionsPerWeek(workouts, 12) };
-  }, [workouts]);
+    const weekly = includeAltInWeekly ? workouts : workouts.filter((w) => !w.custom);
+    return { summary, records, byCat, perWeek: sessionsPerWeek(weekly, 12) };
+  }, [workouts, includeAltInWeekly]);
   const runs = useMemo(() => runsFrom(workouts ?? []), [workouts]);
   if (!workouts) return <div className="pad">Loading…</div>;
   if (workouts.length === 0) return <div className="pad muted">No workouts yet — log your first one!</div>;

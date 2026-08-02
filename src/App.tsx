@@ -438,7 +438,7 @@ export default function App() {
 
       <nav className="tabbar">
         <button className={tab === "today" ? "active" : ""} onClick={() => go("today")}>
-          <span className="ico"><DumbbellIcon /></span>Today
+          <span className="ico"><DumbbellIcon /></span>Workout
         </button>
         <button className={tab === "history" ? "active" : ""} onClick={() => go("history")}>
           <span className="ico"><CalendarCheckIcon /></span>History

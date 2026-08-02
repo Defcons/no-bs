@@ -349,6 +349,9 @@ export function useActiveWorkout() {
         moodBefore: draft.moodBefore,
         moodAfter: draft.moodAfter,
         source: "app",
+        // Flag free-form Alternative sessions so stats can optionally exclude them
+        // from the weekly count (undefined for template sessions → stays clean).
+        custom: draft.custom || undefined,
         // Alternative sessions sync too — the script auto-creates a named block.
         synced: undefined,
         ...extra,

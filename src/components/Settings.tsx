@@ -33,6 +33,7 @@ import { checkAndApplyUpdate, currentVersion, updatesSupported } from "../lib/up
 import { feedbackMailtoUrl } from "../lib/feedback";
 import { applyBackup, exportXlsx, importXlsx, type ImportedBackup } from "../lib/workbook";
 import { Switch } from "./Switch";
+import { SoundField } from "./SoundField";
 import { MoonIcon, SunIcon } from "./icons";
 import { SheetsGuide } from "./SheetsGuide";
 
@@ -137,6 +138,10 @@ export function Settings({
   // Break sound is a built-in id ("beep"…) OR "custom:<dbId>" (a user's file).
   const [breakSound, setBreakSound] = useState<string>("beep");
   const [breakCountdown, setBreakCountdown] = useState(false);
+  const [includeAltWeekly, setIncludeAltWeekly] = useState(false);
+  const [lowHrWarn, setLowHrWarn] = useState(false);
+  const [lowHrWarnBpm, setLowHrWarnBpm] = useState(100);
+  const [lowHrSound, setLowHrSound] = useState("alarm");
   const [customSounds, setCustomSounds] = useState<CustomSound[]>([]);
   const soundFileRef = useRef<HTMLInputElement>(null);
   const native = Capacitor.isNativePlatform();
@@ -193,6 +198,10 @@ export function Settings({
     getSetting("mediaBtnBreak", false).then(setMediaBtnBreak);
     getSetting<string>("breakSound", "beep").then(setBreakSound);
     getSetting("breakCountdown", false).then(setBreakCountdown);
+    getSetting<boolean>("includeAltInWeekly", false).then(setIncludeAltWeekly);
+    getSetting<boolean>("lowHrWarn", false).then(setLowHrWarn);
+    getSetting<number>("lowHrWarnBpm", 100).then(setLowHrWarnBpm);
+    getSetting<string>("lowHrSound", "alarm").then(setLowHrSound);
     refreshCustomSounds();
     pendingCount().then(setPending);
     currentVersion().then(setAppVersion);
@@ -507,6 +516,21 @@ export function Settings({
           <p className="muted tiny">Colors the “days since last workout” (green/orange/red) and drives reminders.</p>
         </div>
 
+        <ToggleRow
+          label="Count Alternative sessions in weekly total"
+          checked={includeAltWeekly}
+          onChange={() => {
+            const v = !includeAltWeekly;
+            setIncludeAltWeekly(v);
+            setSetting("includeAltInWeekly", v);
+          }}
+        >
+          <p className="muted tiny">
+            Off by default — the “workouts per week” bars in Records count only your planned template workouts. Turn on
+            to also include free-form Alternative sessions (runs, CrossFit, etc.).
+          </p>
+        </ToggleRow>
+
         {native && (
           <ToggleRow label="Earbud volume rocker starts the break" checked={volUpBreak} onChange={toggleVolUpBreak}>
             <p className="muted tiny">
@@ -607,6 +631,51 @@ export function Settings({
             auto-ends after 5 more min with no reply. Set to 0 to disable.
           </p>
         </div>
+
+        <ToggleRow
+          label="Low heart-rate warning"
+          checked={lowHrWarn}
+          onChange={() => {
+            const v = !lowHrWarn;
+            setLowHrWarn(v);
+            setSetting("lowHrWarn", v);
+          }}
+        >
+          <p className="muted tiny">
+            Off by default. While HR is connected during a workout, play a sound if your heart rate drops below the
+            number below. Repeats at most once a minute while you stay below it.
+          </p>
+          {lowHrWarn && (
+            <>
+              <div className="row" style={{ marginTop: 8 }}>
+                <span className="muted tiny">Warn below</span>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  className="bw-input"
+                  value={lowHrWarnBpm || ""}
+                  placeholder="bpm"
+                  onChange={(e) => {
+                    const n = parseInt(e.target.value, 10);
+                    const v = Number.isFinite(n) ? n : 0;
+                    setLowHrWarnBpm(v);
+                    setSetting("lowHrWarnBpm", v);
+                  }}
+                />
+                <span className="muted tiny">bpm</span>
+              </div>
+              <div style={{ marginTop: 8 }}>
+                <SoundField
+                  value={lowHrSound}
+                  onChange={(v) => {
+                    setLowHrSound(v);
+                    setSetting("lowHrSound", v);
+                  }}
+                />
+              </div>
+            </>
+          )}
+        </ToggleRow>
 
         {native && (
           <ToggleRow label="Auto-end when I leave" checked={autoEndLeave} onChange={toggleAutoEndLeave}>

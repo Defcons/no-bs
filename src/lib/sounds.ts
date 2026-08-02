@@ -1,6 +1,7 @@
 // Break-over alarm sounds — synthesized with Web Audio so there are no audio files
 // to bundle (and they play instantly, offline). Pick one in Settings.
 import { duckAudio } from "./hwButtons";
+import { getCustomSound } from "../db";
 
 // One shared AudioContext for the whole app — a fresh one per play leaks contexts
 // and hits the browser's ~6-per-page limit, after which alarms go silent.
@@ -223,5 +224,16 @@ export function playBreakSound(id: BreakSoundId): void {
     }
   } catch {
     /* audio blocked — vibration + notification still fire */
+  }
+}
+
+// Play a chosen sound — a preset id ("beep"…) or "custom:<dbId>" (loads the user's
+// blob). Shared by the Settings sound pickers and the low-heart-rate warning.
+export async function playSoundChoice(v: string): Promise<void> {
+  if (isCustom(v)) {
+    const rec = await getCustomSound(customIdOf(v));
+    if (rec) playBuffer(await decodeSound(rec.blob));
+  } else {
+    playBreakSound(v as BreakSoundId);
   }
 }
