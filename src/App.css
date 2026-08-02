@@ -20,6 +20,23 @@
 .tabpanel[hidden] {
   display: none;
 }
+/* ---- "Extended" build marker (native Extended flavour only) ---- */
+.ext-badge {
+  position: fixed;
+  top: calc(env(safe-area-inset-top) + 4px);
+  right: 8px;
+  z-index: 40;
+  pointer-events: none; /* purely informational — never intercept taps */
+  padding: 2px 7px;
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  color: var(--accent);
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
 /* ---- OTA update confirmation banner (shown once after an update reload) ---- */
 .update-banner {
   display: flex;

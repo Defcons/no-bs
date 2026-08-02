@@ -1,5 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <!-- Extended flavour is its own installable app (net.agentas.nobs.extended);
+         override the launcher + activity labels so it reads "NoBS Extended". -->
+    <string name="app_name">NoBS Extended</string>
+    <string name="title_activity_main">NoBS Extended</string>
     <string name="volume_key_service_label">NoBS break button</string>
     <string name="volume_key_service_desc">Keeps the phone\'s volume buttons working as volume while a workout is running, so only the earbud rocker starts the break. Only active during a workout, and only when the volume-button setting is on.</string>
 </resources>

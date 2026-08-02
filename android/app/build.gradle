@@ -51,7 +51,14 @@ android {
     flavorDimensions "distribution"
     productFlavors {
         standard { dimension "distribution" }
-        extended { dimension "distribution" }
+        extended {
+            dimension "distribution"
+            // Extended is a SEPARATE app (own applicationId) so it installs
+            // side-by-side with the Play build instead of colliding on package +
+            // signature. FileProvider authority (${applicationId}.fileprovider)
+            // and any ${applicationId} ref auto-adjust; namespace stays the same.
+            applicationIdSuffix ".extended"
+        }
     }
     signingConfigs {
         if (hasSigning) {

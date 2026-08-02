@@ -10,6 +10,7 @@ import { type HrMonitor, createHrMonitor, hrAvailable } from "./lib/hr";
 import { Capacitor } from "@capacitor/core";
 import { notificationsAllowed, onNotificationTap, requestNotifications, scheduleTrainingReminders, showReminder } from "./lib/notify";
 import { markAppReady } from "./lib/update";
+import { isExtendedBuild } from "./lib/buildInfo";
 import { setKeepAwake } from "./lib/pip";
 import { saveFile } from "./lib/download";
 import { syncBodyweight } from "./lib/sheetSync";
@@ -59,6 +60,7 @@ export default function App() {
   const [routeHash, setRouteHash] = useState<string | null>(() => readRouteHash());
   const [pendingEdit, setPendingEdit] = useState<StoredWorkout | null>(null); // History → edit in Today
   const [moodLogId, setMoodLogId] = useState<number | null>(null); // auto-end notification tap → log mood
+  const [extended, setExtended] = useState(false); // native Extended build → header badge
 
   // Feed the user's custom exercise catalog into the resolver (muscle/standard
   // lookups). Empty until the create-exercise UI (P1) writes entries.
@@ -66,6 +68,11 @@ export default function App() {
   useEffect(() => {
     if (customExercises) registerCustomExercises(customExercises);
   }, [customExercises]);
+
+  // Show the "Extended" badge only on the native Extended build.
+  useEffect(() => {
+    isExtendedBuild().then(setExtended);
+  }, []);
 
   // All four tab panels stay mounted (Today MUST, so its workout/PiP/HR logic keeps
   // running when you're on another tab); we just toggle visibility. That also lets
@@ -339,6 +346,7 @@ export default function App() {
 
   return (
     <div className="app">
+      {extended && <span className="ext-badge">Extended</span>}
       {showUpdated && (
         <div className="update-banner" role="status">
           <span>✓ Updated to v{updatedVersion?.split("+")[0]} — you're on the latest.</span>
