@@ -11,7 +11,7 @@
     - The stamp below is ONE line (NOT a changelog).
 -->
 
-_Last verified: 2026-08-03 @ 1c82fe0 — slimmed a 48 KB append-only CODE-MAP into this thin index; version changelog + rebrand/security/earbud/Code.gs sagas → ResearchJournal, on-device behaviour → KnowledgeBase; renamed CODE-MAP.md → CodeMap.md._
+_Last verified: 2026-08-03 @ 9b27c9b — verify pass: fixed the Data-flow bootstrap description (dropped the removed history-seed.json/parseWorkbook import; seeds GENERIC_TEMPLATES when empty) + corrected the db.ts template symbol name. (Pass 1 @1c82fe0 slimmed the 48 KB CODE-MAP into this thin index; sagas → ResearchJournal, on-device behaviour → KnowledgeBase.)_
 
 ## What this is
 **NoBS – Workout Log**: a No-BS gym app — installable PWA + native Android (Capacitor), local-first (IndexedDB via Dexie). Landing page at nobs.codecrafts.cc. Stack: Vite 8 + React 19 + TypeScript, Dexie 4, `vite-plugin-pwa`, Web Bluetooth (HR). Run `npm run dev`; typecheck `npx tsc --noEmit`.
@@ -28,14 +28,14 @@ _Last verified: 2026-08-03 @ 1c82fe0 — slimmed a 48 KB append-only CODE-MAP in
 - Migration/rebrand history (domains, appId) → `ResearchJournal.md`.
 
 ## Data flow
-`ensureBootstrapped()` (`db.ts`) runs once: seeds the 3-day split into `templates` + imports the bundled sheet snapshot (`src/data/history-seed.json`) via `parseWorkbook`. Guarded by a module promise + a `bootstrapped` setting (StrictMode double-mounts effects → would double-seed). Future-dated sessions (sheet year typos) dropped on import.
+`ensureBootstrapped()` (`db.ts`, `doBootstrap`) runs once: when `templates` is empty it seeds the generic starter split (`GENERIC_TEMPLATES`), then sets the `bootstrapped` setting. Guarded by a module promise + that flag (StrictMode double-mounts effects → would double-seed). **Ships no history** — since 1.47.0 the build imports nobody's data; workout history comes only from the user's own import/restore (see the SECURITY INVARIANT below).
 
 ## Subsystems (where things live)
 _Anchor to the symbol; grep the file. Behaviour numbers → KnowledgeBase; "how we found it" → ResearchJournal._
 
 ### Core data & types
 - **Types** → `src/types.ts` — `Workout`, `ExercisePerf`, `SetEntry`, `Scheme`, `DayTemplate`, `StoredWorkout` (`.track`, `.custom`).
-- **DB** → `src/db.ts` — Dexie `GymDB` (`workouts`, `templates`, `settings`, `customSounds` v2, `exercises` v3), `DEFAULT_TEMPLATES`, `ensureBootstrapped`, `lastWorkoutForDay`, `getSetting`/`setSetting`.
+- **DB** → `src/db.ts` — Dexie `GymDB` (`workouts`, `templates`, `settings`, `customSounds` v2, `exercises` v3), `GENERIC_TEMPLATES`, `ensureBootstrapped`, `lastWorkoutForDay`, `getSetting`/`setSetting`.
 
 ### Exercise model, stats, standards
 - **Exercise catalog / identity** → `lib/exercises.ts` — the smart-logic source of truth. `Exercise`, `LIBRARY` (~90, Norwegian aliases), `resolveExercise(name, exerciseId?)` (exact-normalised `norm()`, user catalog > built-ins, else regex), `MUSCLE_ORDER`, legacy fallback `canonName`/`canonKey`/`muscleGroup`/`CANON`, `standardKey`, `registerCustomExercises`, `searchExercises`. Classification is READ-TIME derived — see KnowledgeBase.
