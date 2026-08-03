@@ -5,6 +5,7 @@ import { db, getSetting, setSetting, type StoredWorkout } from "../db";
 import type { DayTemplate, ExercisePerf, SetEntry, WorkoutBreak } from "../types";
 import { uid } from "./uid";
 import { resolveExercise } from "./exercises";
+import { mmss } from "./format";
 
 export type Draft = {
   startedAt: number; // epoch ms (session start, for the date)
@@ -59,6 +60,31 @@ export function closeCurrentBreak(d: Pick<Draft, "restStartedAt" | "restEndsAt" 
   const sec = Math.round((end - d.restStartedAt) / 1000);
   if (sec <= 0) return null;
   return { at: d.restStartedAt, sec };
+}
+
+// Marker prefix for the auto-added interval line, so re-finishing/editing a session
+// never appends a second copy.
+export const INTERVAL_NOTE_PREFIX = "⏱ Intervals:";
+
+// A one-line interval breakdown from the recorded breaks — the rests split the
+// session into work efforts (start→1st break, between breaks, last break→end).
+// Returns null unless there are ≥2 rests AND ≥2 work efforts, so it only fires on
+// genuine interval/cardio sessions. `endMs` is the session end (start + duration).
+export function intervalSummary(startedAt: number, endMs: number, breaks: WorkoutBreak[] | undefined): string | null {
+  if (!breaks || breaks.length < 2) return null;
+  const sorted = [...breaks].sort((a, b) => a.at - b.at);
+  const work: number[] = [];
+  let cursor = startedAt;
+  for (const b of sorted) {
+    const w = Math.round((b.at - cursor) / 1000);
+    if (w > 0) work.push(w);
+    cursor = b.at + b.sec * 1000;
+  }
+  const tail = Math.round((endMs - cursor) / 1000);
+  if (tail > 0) work.push(tail);
+  if (work.length < 2) return null;
+  const avg = (xs: number[]) => Math.round(xs.reduce((a, c) => a + c, 0) / xs.length);
+  return `${INTERVAL_NOTE_PREFIX} ${work.length} × avg work ${mmss(avg(work))} / rest ${mmss(avg(sorted.map((b) => b.sec)))}`;
 }
 // Workout time: banked ms + the current running segment. Paused/not-started/edit
 // drafts show the banked total (wAccumMs); a running one adds the live segment.
@@ -345,6 +371,15 @@ export function useActiveWorkout() {
       // Bank a break still running at finish, then keep the session's breaks (if any).
       const lastBreak = closeCurrentBreak(draft);
       const breaks = lastBreak ? [...(draft.breaks ?? []), lastBreak] : draft.breaks;
+      // Interval/cardio sessions (custom, ≥2 rests) get a one-line interval breakdown
+      // auto-appended to the note — append-only + dedup-guarded, so a History edit or
+      // re-finish never duplicates it, and strength (template) sessions never get it
+      // even when they have many per-set breaks.
+      const ivLine = draft.custom ? intervalSummary(draft.startedAt, draft.startedAt + durationSec * 1000, breaks) : null;
+      const note =
+        ivLine && !(draft.note ?? "").includes(INTERVAL_NOTE_PREFIX)
+          ? `${draft.note ? draft.note + "\n" : ""}${ivLine}`
+          : draft.note;
       const row: StoredWorkout = {
         date: draft.date,
         dayName: draft.dayName,
@@ -360,7 +395,7 @@ export function useActiveWorkout() {
               // An alternative added mid-session must have a name to be kept.
               (!ex.added || ex.name.trim() !== ""),
         ),
-        note: draft.note,
+        note,
         durationSec,
         avgHr: hr?.avg,
         maxHr: hr?.max,
