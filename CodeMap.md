@@ -11,7 +11,7 @@
     - The stamp below is ONE line (NOT a changelog).
 -->
 
-_Last verified: 2026-08-03 @ 9b27c9b — verify pass: fixed the Data-flow bootstrap description (dropped the removed history-seed.json/parseWorkbook import; seeds GENERIC_TEMPLATES when empty) + corrected the db.ts template symbol name. (Pass 1 @1c82fe0 slimmed the 48 KB CODE-MAP into this thin index; sagas → ResearchJournal, on-device behaviour → KnowledgeBase.)_
+_Last verified: 2026-08-03 @ 1.54.0 — backlog feature batch (OTA): break-skip sound (`playBreakSkip`), PR badge + `playPr` (`--volt`), break recording (`WorkoutBreak`/`closeCurrentBreak` → History `⏸` stats + amber RunMap markers), active-exercise cue. Prior: @9b27c9b bootstrap-desc fix; @1c82fe0 slimmed the 48 KB CODE-MAP into this thin index._
 
 ## What this is
 **NoBS – Workout Log**: a No-BS gym app — installable PWA + native Android (Capacitor), local-first (IndexedDB via Dexie). Landing page at nobs.codecrafts.cc. Stack: Vite 8 + React 19 + TypeScript, Dexie 4, `vite-plugin-pwa`, Web Bluetooth (HR). Run `npm run dev`; typecheck `npx tsc --noEmit`.
@@ -34,7 +34,7 @@ _Last verified: 2026-08-03 @ 9b27c9b — verify pass: fixed the Data-flow bootst
 _Anchor to the symbol; grep the file. Behaviour numbers → KnowledgeBase; "how we found it" → ResearchJournal._
 
 ### Core data & types
-- **Types** → `src/types.ts` — `Workout`, `ExercisePerf`, `SetEntry`, `Scheme`, `DayTemplate`, `StoredWorkout` (`.track`, `.custom`).
+- **Types** → `src/types.ts` — `Workout`, `ExercisePerf`, `SetEntry`, `Scheme`, `DayTemplate`, `TrackPoint`, `WorkoutBreak` (recorded rest; `StoredWorkout.breaks`). `StoredWorkout` (`.track`, `.breaks`, `.custom`) lives in `db.ts`.
 - **DB** → `src/db.ts` — Dexie `GymDB` (`workouts`, `templates`, `settings`, `customSounds` v2, `exercises` v3), `GENERIC_TEMPLATES`, `ensureBootstrapped`, `lastWorkoutForDay`, `getSetting`/`setSetting`.
 
 ### Exercise model, stats, standards
@@ -47,15 +47,15 @@ _Anchor to the symbol; grep the file. Behaviour numbers → KnowledgeBase; "how 
 - **Per-exercise rest** → `lib/exerciseRest.ts` — singleton `Record<exerciseId, seconds>` in settings (`exerciseRest`), keyed by RESOLVED id. `loadExerciseRest`/`restForId`/`setRestForId` (copy-rewrites the shared map → persist SEQUENTIALLY, not `Promise.all`). Edited only in `TemplateEditor` (⏱ select), NOT the live card.
 
 ### Workout session (the Today orchestrator)
-- **Active-workout hook** → `lib/useActiveWorkout.ts` — persists a `Draft` to the `activeDraft` setting on every change (survives reload); `buildExercises` prefills weight from the most recent session that logged a weight + reps from scheme.
+- **Active-workout hook** → `lib/useActiveWorkout.ts` — persists a `Draft` to the `activeDraft` setting on every change (survives reload); `buildExercises` prefills weight from the most recent session that logged a weight + reps from scheme. **Break recording** (1.54.0): `closeCurrentBreak(d)` banks the running break (`restStartedAt`→now, capped at planned `restEndsAt`) into `Draft.breaks`/`StoredWorkout.breaks` as a `WorkoutBreak {at, sec}`; called from Today's `startRest`/`setRest(null)` and once more at `finish`.
 - **Today** → `components/Today.tsx` — day picker → logging → timers → finish. `finishNow(auto, reason?)` (manual=false wall-clock; watchdog=true geofence/HR-dropout, silent, exitPip); `finish()` sets `StoredWorkout.custom` for Alternative sessions; `showAutoEndNotification`. Header tool sheets (stopwatch + mood, `.hr-modal`); `MoodSlider` shared with finish-prompt + `MoodLogModal`.
-- **Set logging** → `components/ExerciseCard.tsx`, `components/SetInput.tsx` — thumb weight entry; `defaultReps` cue (`.reps-over`/`.reps-under` border); swipe-right / ↺ = "Last time" panel (`fmtPrevSet`). `ExerciseNameField.tsx` = autocomplete + inline create-custom.
+- **Set logging** → `components/ExerciseCard.tsx`, `components/SetInput.tsx` — thumb weight entry; `defaultReps` cue (`.reps-over`/`.reps-under` border); swipe-right / ↺ = "Last time" panel (`fmtPrevSet`). `ExerciseNameField.tsx` = autocomplete + inline create-custom. **PR badge** (1.54.0): `ExerciseCard` picks the top DONE set whose `epley` beats the pre-session best (`bestE1rm` prop, from Today's `prBest` map) → `SetInput isPr` → gold `.setrow.pr` + `playPr()` once on transition. **Active-exercise cue** (1.54.0): Today's `activeExIdx` (first exercise with a set to log) → `ExerciseCard isActive` → `.exercise-card.active` accent + "▶ Current · Set N/M · aim R reps" (scheme data only; last-time stays behind the swipe by design).
 - **Templates** → `components/TemplateEditor.tsx` — create/edit reusable workouts → `db.templates`; per-row ±kg step (`DayTemplate.exercises[].step`) + ⏱ break select.
 - **Timer** → PAUSABLE (1.48.0): `wElapsedMs = wAccumMs + (wRunning ? now-wSegStart : 0)`; `toggleWorkoutTimer` banks/resumes; `startWorkoutTimer` skips when `wAccumMs>0` (pause sticks) and when `editId` is set (History-edit never restarts the clock). Manual finish honors paused total; auto-end uses `lastActivityAt`.
 
 ### Timers / PiP / break sounds
 - **PiP** → `lib/pip.ts`, `components/PipView.tsx`, `PipPlugin.java` — floating timer (native). Rendered as an OVERLAY portaled to `document.body` (not by unmounting Today) so per-card state survives; live timer + current/avg HR. `floatMode` setting ("pip"|"off"). Only PiP shows live HR — see KnowledgeBase.
-- **Break sounds** → `lib/sounds.ts` — all Web Audio synth (`tone`/`strike` + a `drum()` engine for war-drum patterns); `playBreakSound(id)` / `playBuffer`+`decodeSound` (uploads) / `playBreakStart()` / `playSoundChoice`. `components/SoundField.tsx` = reusable presets+upload+preview picker. Custom sounds: Dexie `customSounds` v2 (blobs on-device); `breakSound` = built-in id or `custom:<id>`.
+- **Break sounds** → `lib/sounds.ts` — all Web Audio synth (`tone`/`strike` + a `drum()` engine for war-drum patterns); `playBreakSound(id)` / `playBuffer`+`decodeSound` (uploads) / `playBreakStart()` (rising, break start) / `playBreakSkip()` (falling, break cut short — 1.54.0) / `playPr()` (PR flourish — 1.54.0) / `playSoundChoice`. `components/SoundField.tsx` = reusable presets+upload+preview picker. Custom sounds: Dexie `customSounds` v2 (blobs on-device); `breakSound` = built-in id or `custom:<id>`.
 - **Rest timer** → `components/RestTimer.tsx` — beep+vibrate; `restForId(id) ?? restDefaultSec`. `keepScreenOn` setting → native `setKeepAwake` + web WakeLock.
 
 ### Hardware buttons & audio (native)
@@ -63,7 +63,7 @@ _Anchor to the symbol; grep the file. Behaviour numbers → KnowledgeBase; "how 
 - **Reactive toggles** (1.53.0): `autoBreakOnDone`/`volumeUpBreak`/`phoneVolumeBreak`/`mediaBtnBreak` read via `useLiveQuery(getSetting…)` so flipping a Settings toggle arms/disarms MID-workout (was mount-only).
 
 ### GPS / geofence / running
-- **GPS track** → `lib/tracker.ts` + `lib/runStats.ts` + `components/RunMap.tsx` — `startTracking(getBpm)`/`stopTracking` record `TrackPoint[]`; DRAINS a native fix buffer (`getBufferedLocations`, **patch-package** in `patches/`, reapplied by `postinstall`) on a 4 s timer, falling back to the JS callback on un-patched APKs (screen-off JS suspension → KnowledgeBase). `computeRun`/`fmtPace`/`fmtDist`; `RunMap` draws the route with **Leaflet** over OSM tiles (`TILE_URL` swappable). Shown in `History` `RunDetail`.
+- **GPS track** → `lib/tracker.ts` + `lib/runStats.ts` + `components/RunMap.tsx` — `startTracking(getBpm)`/`stopTracking` record `TrackPoint[]`; DRAINS a native fix buffer (`getBufferedLocations`, **patch-package** in `patches/`, reapplied by `postinstall`) on a 4 s timer, falling back to the JS callback on un-patched APKs (screen-off JS suspension → KnowledgeBase). `computeRun`/`fmtPace`/`fmtDist`; `RunMap` draws the route with **Leaflet** over OSM tiles (`TILE_URL` swappable) + amber markers at long rests (≥60s `WorkoutBreak`s, placed at the nearest track point BY TIME — 1.54.0). Shown in `History` `RunDetail`.
 - **Shareable routes** → `lib/polyline.ts` + `components/RouteViewer.tsx` — `sheetSync` writes a `Route` cell `${APP_PUBLIC_URL}/#route=<polyline>` (thinned to 250 pts); `App.readRouteHash` (before the bootstrap gate) → full-screen `RouteViewer`. `SKIP_LABELS` in `sheet.ts` keeps Route/Distance/Pace/Speed from importing as fake exercises.
 - **Geofence** → `lib/geofence.ts` — leave-area auto-end (native). `startGeofence(onLeave)` anchors to the first fix, fires after >100 m for 5 min; `autoEndOnLeave` setting. ARMED only near the end (`geoArmed` latches at ≥60% sets done OR 12 min idle) to cut the persistent FGS notification. Mutually exclusive with the tracker.
 
@@ -81,7 +81,7 @@ _Anchor to the symbol; grep the file. Behaviour numbers → KnowledgeBase; "how 
 - **Type** → `--display` = Archivo Variable (self-hosted via `@fontsource-variable/archivo`, imported in `main.tsx`; needs `src/fontsource.d.ts`). **USER PREFERENCE: display font on NUMBERS ONLY** (`.wb-timer`/`.stat-value`/weight+reps inputs/`.num`, `tabular-nums`) — do NOT re-apply to text.
 - **Buttons** → **USER PREFERENCE: keep the existing palette** (`.primary` = green `--accent-2`, `.ghost` transparent, `.mini`/`.seg`). Do NOT recolour (a molten-accent unify was reverted — see ResearchJournal).
 - **Primitives / structure** → `components/Switch.tsx` (real `role="switch"`, controlled), `components/icons.tsx` (inline SVG, `currentColor` — tab bar tints via `.tabbar button.active`; muscle PNGs tinted via CSS `mask-image`). Settings = 7 accordion groups (`<details>`), user prefers FEWER combined categories.
-- **Other UI** → `components/`: `History` (+ `RunDetail`), `Settings`, `Records.tsx` (`ActivityHeatmap`, running section), `ProgressChart` (dep-free SVG est-1RM line), `SheetsGuide.tsx` (bundles `Code.gs` via `?raw`).
+- **Other UI** → `components/`: `History` (+ `RunDetail`; per-session `log-meta` shows `⏸ N breaks (M:SS)` — 1.54.0), `Settings`, `Records.tsx` (`ActivityHeatmap`, running section), `ProgressChart` (dep-free SVG est-1RM line), `SheetsGuide.tsx` (bundles `Code.gs` via `?raw`).
 - **App shell** → `src/App.tsx` — bootstrap, tab nav (all four `.tabpanel` divs stay MOUNTED — Today must, for its effects; per-tab scroll memory via `go(tab)`), owns HR monitor + settings, export/reset. Tab label "Today"→"Workout" (1.53.0) but the tab **id stays `"today"`**. Android hardware back: ONE `@capacitor/app` `backButton` listener in Today (live tab/draft via ref) — never register a second (all fire).
 
 ### Native (Capacitor / Android) & build flavours
@@ -108,4 +108,4 @@ _Rule only; the discovery saga is in ResearchJournal, the behaviour model in Kno
 - **`src/data/history-seed.json` in git history** — real user data; purge before any public/AGPL showcase (see `feedback_private_to_public_migration_audit` + ResearchJournal 2026-07-12).
 - **PENDING on-device verification** (`docs/TESTING-FEEDBACK.md`): GPS screen-off fix (bug #2), cardio sheet-sync `metaRow` (bug #1), the 1.52.0/1.53.0 OTA batches.
 - **Residual earbud-break MISSES** — low priority, behaviour acceptable (KnowledgeBase, open issue).
-- **Not built yet:** P4 copy polish + PR/GO `--volt` moments. (Google Sheets read+write-back, in-app template/exercise editing, and per-lift charts ARE built.)
+- **Not built yet:** the **GO** half of the `--volt` moments (weekly-goal-hit celebration — the **PR** half shipped 1.54.0); backlog #5 (auto-note break intervals, now cheap — breaks are recorded) + #8 (Wear OS). P4 copy polish is effectively done (History renders "March 2021"; only a heatmap tooltip shows raw `YYYY-MM`). (Google Sheets read+write-back, in-app template/exercise editing, and per-lift charts ARE built.)

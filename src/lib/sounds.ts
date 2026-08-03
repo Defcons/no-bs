@@ -170,6 +170,38 @@ export function playBreakStart(): void {
   }
 }
 
+// A short descending blip confirming a break was SKIPPED / cut short — the falling
+// counterpart to playBreakStart's rising blip, so a hardware/earbud skip is audibly
+// distinct from a start when there's nothing on screen to see.
+export function playBreakSkip(): void {
+  try {
+    const c = ctx();
+    if (c.state === "suspended") void c.resume();
+    void duckAudio(800);
+    const t = c.currentTime;
+    tone(c, "sine", 720, t, 0.08, 0.22);
+    tone(c, "sine", 440, t + 0.07, 0.1, 0.22);
+  } catch {
+    /* audio blocked */
+  }
+}
+
+// A short, bright ascending flourish for a new personal record — the celebratory
+// "volt" moment. A quick major arpeggio + an octave-up sparkle; triangle for a
+// warm-but-bright tone distinct from the break/skip blips and the alarms.
+export function playPr(): void {
+  try {
+    const c = ctx();
+    if (c.state === "suspended") void c.resume();
+    void duckAudio(1400);
+    const t = c.currentTime;
+    [523.25, 659.25, 783.99, 1046.5].forEach((f, i) => tone(c, "triangle", f, t + i * 0.09, 0.16, 0.3));
+    tone(c, "triangle", 1318.5, t + 0.4, 0.24, 0.26); // final sparkle
+  } catch {
+    /* audio blocked */
+  }
+}
+
 export function playBreakSound(id: BreakSoundId): void {
   try {
     const c = ctx();

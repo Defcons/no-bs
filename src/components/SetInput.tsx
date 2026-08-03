@@ -18,6 +18,7 @@ type Props = {
   units?: WeightUnit; // weight display/entry unit (kg default)
   defaultReps?: number | null; // scheme's target reps — border greens if you beat it, reds if under
   active?: boolean; // the next set to log (first not-done) — subtle outline
+  isPr?: boolean; // this set is a new all-time est-1RM PR — gold celebratory badge
   prevWeight?: number | null; // last session's weight (kg), shown as ghost hint
   onChange: (patch: Partial<SetEntry>) => void;
 };
@@ -42,7 +43,7 @@ type NumField = "weight" | "reps" | "assist" | "seconds" | "distanceM";
 // Trim trailing zeros: 5.20 → "5.2", 5.00 → "5".
 const tidy = (n: number, digits: number) => String(Number(n.toFixed(digits)));
 
-export function SetInput({ index, set, step, unit = "weight", units = "kg", defaultReps, active, prevWeight, onChange }: Props) {
+export function SetInput({ index, set, step, unit = "weight", units = "kg", defaultReps, active, isPr, prevWeight, onChange }: Props) {
   const hasExtra = !!set.note || set.assist != null;
   const [showMore, setShowMore] = useState(hasExtra);
   const done = !!set.done;
@@ -72,10 +73,15 @@ export function SetInput({ index, set, step, unit = "weight", units = "kg", defa
   };
 
   return (
-    <div className={`setrow ${done ? "done" : ""} ${active && !done ? "active" : ""}`}>
+    <div className={`setrow ${done ? "done" : ""} ${active && !done ? "active" : ""} ${isPr ? "pr" : ""}`}>
       <button className="set-badge" aria-label="toggle set done" onClick={() => onChange({ done: !done })}>
         {index + 1}
       </button>
+      {isPr && (
+        <span className="pr-badge" title="Personal record — best estimated 1-rep max">
+          PR
+        </span>
+      )}
 
       {timed ? (
         <div className="field time-field">

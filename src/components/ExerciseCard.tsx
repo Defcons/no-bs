@@ -1,6 +1,6 @@
 // A single exercise within the active workout: header (name + scheme), its set
 // rows, add/remove set, and an optional per-exercise note.
-import { type TouchEvent, useRef, useState } from "react";
+import { type TouchEvent, useEffect, useMemo, useRef, useState } from "react";
 import type { ExercisePerf, SetEntry } from "../types";
 import { uid } from "../lib/uid";
 import { SetInput } from "./SetInput";
@@ -8,6 +8,8 @@ import { ExerciseNameField } from "./ExerciseNameField";
 import { resolveExercise } from "../lib/exercises";
 import { type WeightUnit, weightStr } from "../lib/units";
 import { daysAgoLabel, niceDate } from "../lib/format";
+import { epley } from "../lib/stats";
+import { playPr } from "../lib/sounds";
 
 type Props = {
   exercise: ExercisePerf;
@@ -16,6 +18,8 @@ type Props = {
   prevDate?: string; // ISO date of that last session (for the swipe-in "last time" panel)
   onChange: (ex: ExercisePerf) => void;
   onSetDone?: () => void; // set explicitly marked done via its badge (not weight edits)
+  bestE1rm?: number; // all-time best est-1RM for this lift (drives the live PR badge)
+  isActive?: boolean; // this is the current exercise (its next set is up) — highlight + cue
   editableName?: boolean; // custom sessions: let the user name the exercise
   units?: WeightUnit; // weight display/entry unit
   nameHistory?: string[]; // distinct past exercise names (autocomplete)
@@ -24,10 +28,42 @@ type Props = {
   onMoveDown?: () => void;
 };
 
-export function ExerciseCard({ exercise, step, prev, prevDate, onChange, onSetDone, editableName, units, nameHistory, onRemove, onMoveUp, onMoveDown }: Props) {
+export function ExerciseCard({ exercise, step, prev, prevDate, onChange, onSetDone, bestE1rm, isActive, editableName, units, nameHistory, onRemove, onMoveUp, onMoveDown }: Props) {
   const [showNote, setShowNote] = useState(!!exercise.note);
   const resolved = resolveExercise(exercise.name, exercise.exerciseId);
   const unit = resolved.unit;
+
+  // Live PR: among the sets you've MARKED DONE (tapping the badge is the "I did it"
+  // signal — so this never fires mid-typing), the one whose est-1RM beats your
+  // all-time best for this lift. Weight exercises only; needs prior history to beat.
+  const prIndex = useMemo(() => {
+    if (unit !== "weight" || !bestE1rm || bestE1rm <= 0) return -1;
+    let idx = -1;
+    let top = bestE1rm;
+    exercise.sets.forEach((s, i) => {
+      // MAX_PLAUSIBLE_KG guard (mirrors lib/stats): ignore typo weights like 40-4040.
+      if (!s.done || s.weight == null || s.weight <= 0 || s.weight > 500 || !s.reps || s.reps <= 0) return;
+      const e = epley(s.weight, s.reps);
+      if (e > top) {
+        top = e;
+        idx = i;
+      }
+    });
+    return idx;
+  }, [exercise.sets, bestE1rm, unit]);
+
+  // Play the celebratory flourish once, when a set first BECOMES the PR (id flips in).
+  // Skip the initial mount so reopening the app on an already-set PR doesn't replay it.
+  const prSetId = prIndex >= 0 ? exercise.sets[prIndex]?.id ?? null : null;
+  const prevPr = useRef<string | null | undefined>(undefined);
+  useEffect(() => {
+    if (prevPr.current === undefined) {
+      prevPr.current = prSetId;
+      return;
+    }
+    if (prSetId && prSetId !== prevPr.current) playPr();
+    prevPr.current = prSetId;
+  }, [prSetId]);
 
   // Swipe RIGHT (or the ↺ header button) reveals last time's numbers, read-only.
   const [showPrev, setShowPrev] = useState(false);
@@ -65,6 +101,10 @@ export function ExerciseCard({ exercise, step, prev, prevDate, onChange, onSetDo
   };
   // Scheme's target reps (null for "Max"): the rep-vs-target border cue + new-set default.
   const defReps = typeof exercise.scheme.reps === "number" ? exercise.scheme.reps : null;
+  // "What's next" cue on the current exercise: the first set still to log + its target.
+  const nextSetIdx = exercise.sets.findIndex((s) => !s.done);
+  const repTarget = exercise.scheme.reps === "Max" ? "Max" : defReps != null ? String(defReps) : null;
+  const repBased = unit !== "time" && unit !== "distance";
   const addSet = () => {
     const last = exercise.sets.at(-1);
     // Carry the previous set's weight, but reset reps to the exercise's scheme default.
@@ -75,7 +115,7 @@ export function ExerciseCard({ exercise, step, prev, prevDate, onChange, onSetDo
   };
 
   return (
-    <section className="exercise-card" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
+    <section className={`exercise-card ${isActive ? "active" : ""}`} onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
       <header className="exercise-head">
         {editableName ? (
           <ExerciseNameField
@@ -133,6 +173,16 @@ export function ExerciseCard({ exercise, step, prev, prevDate, onChange, onSetDo
         </div>
       </header>
 
+      {isActive && nextSetIdx >= 0 && (
+        <div className="active-hint tiny">
+          <span className="active-now">▶ Current</span>
+          <span className="muted">
+            Set {nextSetIdx + 1}/{exercise.sets.length}
+            {repBased && repTarget ? ` · aim ${repTarget} reps` : ""}
+          </span>
+        </div>
+      )}
+
       {showNote && (
         <input
           className="exercise-note"
@@ -183,6 +233,7 @@ export function ExerciseCard({ exercise, step, prev, prevDate, onChange, onSetDo
               units={units}
               defaultReps={defReps}
               active={i === exercise.sets.findIndex((x) => !x.done)}
+              isPr={i === prIndex}
               prevWeight={prev?.sets[i]?.weight ?? prev?.sets.at(-1)?.weight ?? null}
               onChange={(p) => patchSet(i, p)}
             />

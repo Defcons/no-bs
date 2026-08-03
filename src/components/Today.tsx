@@ -13,13 +13,13 @@ import { exitPip, isInPip, onPipChange, setPipAutoEnter } from "../lib/pip";
 import { onMediaButton, onVolumeKey, setMediaButtonCapture, setPhoneKeyCapture, setVolumeCapture } from "../lib/hwButtons";
 import { startTracking, stopTracking } from "../lib/tracker";
 import { stepForExercise } from "../lib/steps";
-import { playBreakStart, playSoundChoice } from "../lib/sounds";
+import { playBreakSkip, playBreakStart, playSoundChoice } from "../lib/sounds";
 import { uid } from "../lib/uid";
 import { Capacitor, type PluginListenerHandle } from "@capacitor/core";
 import { App as CapacitorApp } from "@capacitor/app";
 import { syncWorkout } from "../lib/sheetSync";
-import { cadenceStatus, trainingDue } from "../lib/stats";
-import { useActiveWorkout } from "../lib/useActiveWorkout";
+import { cadenceStatus, liftRecords, trainingDue } from "../lib/stats";
+import { closeCurrentBreak, useActiveWorkout } from "../lib/useActiveWorkout";
 import type { DayTemplate, ExercisePerf } from "../types";
 import { ExerciseCard } from "./ExerciseCard";
 import { MoodSlider } from "./MoodSlider";
@@ -97,6 +97,7 @@ export function Today({
   const hrEver = useRef(false); // did HR ever connect this session?
   const lastHrAt = useRef(0); // last time an HR reading arrived
   const [prev, setPrev] = useState<StoredWorkout | undefined>();
+  const [prBest, setPrBest] = useState<Map<string, number>>(new Map()); // lift id → all-time best est-1RM (live PR badge)
   const [lastByDay, setLastByDay] = useState<Record<string, StoredWorkout | undefined>>({});
   const [lastAlt, setLastAlt] = useState<StoredWorkout | null>(null); // most recent Alternative session
   const [nameHistory, setNameHistory] = useState<string[]>([]);
@@ -112,6 +113,26 @@ export function Today({
     if (draft) lastWorkoutForDay(draft.dayName).then(setPrev);
     else setPrev(undefined);
   }, [draft?.dayName]);
+
+  // All-time best est-1RM per lift for the live "PR" badge. Computed once when a
+  // session starts (history doesn't change mid-session), so a PR is measured against
+  // where you STARTED. Excludes the workout being edited so a History-edit compares
+  // against the rest of your history, not itself.
+  useEffect(() => {
+    if (!draft) {
+      setPrBest(new Map());
+      return;
+    }
+    let cancelled = false;
+    db.workouts.toArray().then((all) => {
+      if (cancelled) return;
+      const hist = draft.editId != null ? all.filter((w) => w.id !== draft.editId) : all;
+      setPrBest(new Map(liftRecords(hist).map((r) => [r.key, r.bestE1rm.est])));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [draft == null, draft?.editId]);
 
   // Optional: tapping a set's ✓ badge auto-starts the break timer (default off).
   // All break-trigger toggles are read REACTIVELY (useLiveQuery), so flipping one in
@@ -548,10 +569,21 @@ export function Today({
     return restForId(id) ?? restDefaultSec;
   };
   const startRest = (ex?: ExercisePerf) => {
-    const at = Date.now() + restSecFor(ex) * 1000;
+    const now = Date.now();
+    const at = now + restSecFor(ex) * 1000;
     scheduleBreakNotification(at); // native: fires even if app is backgrounded
     playBreakStart(); // audible confirmation (matters for volume/headset-button starts)
-    update((d) => ({ ...d, restEndsAt: at, lastActivityAt: Date.now() }));
+    update((d) => {
+      // If the break button restarts an already-running break, bank the old one first.
+      const prior = closeCurrentBreak(d);
+      return {
+        ...d,
+        restEndsAt: at,
+        restStartedAt: now,
+        breaks: prior ? [...(d.breaks ?? []), prior] : d.breaks,
+        lastActivityAt: now,
+      };
+    });
   };
   // Auto-start on "set done": only when nothing is already counting down, so
   // finishing sets back-to-back doesn't keep resetting a running break.
@@ -560,9 +592,22 @@ export function Today({
     if (!running) startRest(ex);
   };
   const setRest = (endsAt: number | null) => {
-    if (endsAt == null) cancelBreakNotification();
-    else scheduleBreakNotification(endsAt);
-    update((d) => ({ ...d, restEndsAt: endsAt ?? undefined }));
+    if (endsAt == null) {
+      cancelBreakNotification();
+      // Distinct "skip" tone when a still-running break is cut short (Skip button or
+      // hardware/earbud). Not on the post-alarm auto-dismiss/"Dismiss" — the break has
+      // already expired then, so restEndsAt is in the past and the alarm just played.
+      if (draft?.restEndsAt != null && draft.restEndsAt > Date.now()) playBreakSkip();
+      // Bank the finished/skipped break for the session's break stats.
+      update((d) => {
+        const rec = closeCurrentBreak(d);
+        return { ...d, restEndsAt: undefined, restStartedAt: undefined, breaks: rec ? [...(d.breaks ?? []), rec] : d.breaks };
+      });
+    } else {
+      // Extending/shortening (+30s/−30s) just moves the planned end; the break keeps running.
+      scheduleBreakNotification(endsAt);
+      update((d) => ({ ...d, restEndsAt: endsAt }));
+    }
   };
   // Hardware button (volume / headset): if a break is set, skip/dismiss it;
   // otherwise start one. Reassigned each render so it sees the current draft.
@@ -589,6 +634,9 @@ export function Today({
       ],
     }));
   const removeExercise = (i: number) => update((d) => ({ ...d, exercises: d.exercises.filter((_, idx) => idx !== i) }));
+  // The current exercise = the first one with a set still to log — highlighted + given
+  // a "what's next" cue so you can see at a glance where you are in the session.
+  const activeExIdx = draft?.exercises.findIndex((ex) => !ex.skipped && ex.sets.some((s) => !s.done)) ?? -1;
 
   return (
     <div className="today">
@@ -688,6 +736,8 @@ export function Today({
               (p) => resolveExercise(p.name, p.exerciseId).id === resolveExercise(ex.name, ex.exerciseId).id,
             )}
             prevDate={prev?.date}
+            bestE1rm={prBest.get(resolveExercise(ex.name, ex.exerciseId).id)}
+            isActive={i === activeExIdx}
             onChange={(e) => setExercise(i, e)}
             onSetDone={autoBreakOnDone ? () => autoStartRest(ex) : undefined}
             editableName={draft.custom || !!ex.added}

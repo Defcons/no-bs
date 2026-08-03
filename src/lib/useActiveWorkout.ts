@@ -2,7 +2,7 @@
 // every change so a phone refresh / accidental close mid-workout loses nothing.
 import { useCallback, useEffect, useRef, useState } from "react";
 import { db, getSetting, setSetting, type StoredWorkout } from "../db";
-import type { DayTemplate, ExercisePerf, SetEntry } from "../types";
+import type { DayTemplate, ExercisePerf, SetEntry, WorkoutBreak } from "../types";
 import { uid } from "./uid";
 import { resolveExercise } from "./exercises";
 
@@ -14,6 +14,8 @@ export type Draft = {
   exercises: ExercisePerf[];
   note?: string;
   restEndsAt?: number; // epoch ms; running rest timer survives reload
+  restStartedAt?: number; // epoch ms the current break began (to record its actual length)
+  breaks?: WorkoutBreak[]; // rest periods taken this session (banked as each break ends)
   custom?: boolean; // "Alternative" free-form session (editable name/exercises)
   trackGps?: boolean; // record a GPS route for this (cardio) session
   editId?: number; // when set, finishing UPDATES this existing workout (History edit)
@@ -45,6 +47,18 @@ function isoNow(): string {
 
 function swElapsedMs(d: Draft): number {
   return d.swAccumMs + (d.swRunning ? Date.now() - d.swSegStart : 0);
+}
+
+// Bank the currently-running break (if any) as a WorkoutBreak record. The rest is
+// capped at its planned length (restEndsAt) so a late auto-dismiss or a finish taken
+// mid-break can't inflate it; an early skip records the actual short rest. Returns
+// null when no break is running (restStartedAt unset) or the rest rounds to 0s.
+export function closeCurrentBreak(d: Pick<Draft, "restStartedAt" | "restEndsAt" | "breaks">): WorkoutBreak | null {
+  if (d.restStartedAt == null) return null;
+  const end = d.restEndsAt != null ? Math.min(Date.now(), d.restEndsAt) : Date.now();
+  const sec = Math.round((end - d.restStartedAt) / 1000);
+  if (sec <= 0) return null;
+  return { at: d.restStartedAt, sec };
 }
 // Workout time: banked ms + the current running segment. Paused/not-started/edit
 // drafts show the banked total (wAccumMs); a running one adds the live segment.
@@ -215,6 +229,7 @@ export function useActiveWorkout() {
       note: w.note,
       moodBefore: w.moodBefore,
       moodAfter: w.moodAfter,
+      breaks: w.breaks, // preserve recorded breaks across a History edit
       wRunning: false,
       wAccumMs: (w.durationSec ?? 0) * 1000, // keep the recorded duration editable
       wSegStart: now,
@@ -327,6 +342,9 @@ export function useActiveWorkout() {
         opts?.endedAt != null
           ? Math.max(60, Math.floor((opts.endedAt - draft.startedAt) / 1000))
           : Math.floor(wElapsedMs(draft) / 1000);
+      // Bank a break still running at finish, then keep the session's breaks (if any).
+      const lastBreak = closeCurrentBreak(draft);
+      const breaks = lastBreak ? [...(draft.breaks ?? []), lastBreak] : draft.breaks;
       const row: StoredWorkout = {
         date: draft.date,
         dayName: draft.dayName,
@@ -348,6 +366,7 @@ export function useActiveWorkout() {
         maxHr: hr?.max,
         moodBefore: draft.moodBefore,
         moodAfter: draft.moodAfter,
+        breaks,
         source: "app",
         // Flag free-form Alternative sessions so stats can optionally exclude them
         // from the weekly count (undefined for template sessions → stays clean).
@@ -365,6 +384,7 @@ export function useActiveWorkout() {
           note: row.note,
           moodBefore: row.moodBefore,
           moodAfter: row.moodAfter,
+          breaks: row.breaks,
           durationSec: row.durationSec,
         });
       } else {

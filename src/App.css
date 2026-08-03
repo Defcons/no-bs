@@ -676,6 +676,23 @@
   border-radius: var(--radius);
   padding: 10px 10px 12px;
 }
+/* The current exercise (its next set is up) — a subtle accent so the eye lands on
+   where you are without recolouring the card. */
+.exercise-card.active {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 13%, transparent);
+}
+.active-hint {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 2px 2px;
+}
+.active-now {
+  color: var(--accent);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
 .exercise-head {
   display: flex;
   align-items: center;
@@ -1144,6 +1161,41 @@
 .setrow.done .set-badge {
   background: var(--accent-2);
   color: #04120c;
+}
+/* New personal-record set — celebratory gold (the reserved --volt token). A
+   box-shadow-only pulse so it layers over the green "done" background cleanly. */
+.setrow.pr {
+  border-color: color-mix(in srgb, var(--volt) 60%, var(--line));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--volt) 22%, transparent);
+  animation: pr-flash 0.9s ease-out 1;
+}
+.setrow.pr .set-badge {
+  background: var(--volt);
+  color: #1a1200;
+}
+.pr-badge {
+  flex: none;
+  align-self: center;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--volt);
+  color: #1a1200;
+  font-family: var(--display);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  font-variant-numeric: tabular-nums;
+}
+@keyframes pr-flash {
+  0% {
+    box-shadow: 0 0 0 6px color-mix(in srgb, var(--volt) 45%, transparent);
+  }
+  60% {
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--volt) 30%, transparent);
+  }
+  100% {
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--volt) 22%, transparent);
+  }
 }
 .weight-group {
   display: flex;

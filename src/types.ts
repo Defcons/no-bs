@@ -51,6 +51,14 @@ export type TrackPoint = {
   hr?: number; // heart rate at this point, if a monitor was connected
 };
 
+// One recorded rest/break taken during a session — for break stats in History and
+// long-rest markers on the GPS route map. Its map location is derived by matching
+// `at` to the nearest track point in time, so no location is stored here.
+export type WorkoutBreak = {
+  at: number; // epoch ms the break started
+  sec: number; // actual rest taken, capped at the planned break length
+};
+
 // A reusable day definition (the split): what exercises, in what order, with schemes.
 export type DayTemplate = {
   id?: number;

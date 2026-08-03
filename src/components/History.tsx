@@ -217,7 +217,7 @@ function LogRow({
 
       {open && (
         <div className="log-detail">
-          {w.track && w.track.length >= 2 && <RunDetail track={w.track} />}
+          {w.track && w.track.length >= 2 && <RunDetail track={w.track} breaks={w.breaks} />}
           {w.note && <div className="log-note">📝 {w.note}</div>}
           {w.exercises.map((e, i) => {
             const unit = resolveExercise(e.name, e.exerciseId).unit;
@@ -251,10 +251,13 @@ function LogRow({
               </div>
             );
           })}
-          {(w.durationSec || w.moodBefore || w.moodAfter) && (
+          {(w.durationSec || w.moodBefore || w.moodAfter || w.breaks?.length) && (
             <div className="tiny muted log-meta">
               {w.durationSec ? `⏱ ${Math.round(w.durationSec / 60)} min` : ""}
               {w.avgHr ? ` · ♥ ${w.avgHr} avg${w.maxHr ? ` / ${w.maxHr} max` : ""}` : ""}
+              {w.breaks?.length
+                ? ` · ⏸ ${w.breaks.length} break${w.breaks.length === 1 ? "" : "s"} (${mmss(w.breaks.reduce((a, b) => a + b.sec, 0))})`
+                : ""}
               {w.moodBefore || w.moodAfter ? ` · 🙂 ${w.moodBefore ?? "–"}→${w.moodAfter ?? "–"}/10` : ""}
             </div>
           )}
@@ -278,13 +281,13 @@ function LogRow({
   );
 }
 
-function RunDetail({ track }: { track: NonNullable<StoredWorkout["track"]> }) {
+function RunDetail({ track, breaks }: { track: NonNullable<StoredWorkout["track"]>; breaks?: StoredWorkout["breaks"] }) {
   const s = computeRun(track);
   if (!s) return null;
   return (
     <div className="run-detail">
       <Suspense fallback={<div className="run-map" />}>
-        <RunMap track={track} />
+        <RunMap track={track} breaks={breaks} />
       </Suspense>
       <div className="run-stats">
         <div className="run-stat">
