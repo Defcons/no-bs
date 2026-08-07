@@ -47,7 +47,13 @@ android {
     //               and music playing — the only reliable way to do that. Play rejects
     //               non-accessibility uses of that API, which is the whole reason it
     //               can't be one build.
-    // Same applicationId + debug keystore, so either upgrades the other in place.
+    // Since 1.51.3 `extended` is its OWN app (applicationIdSuffix ".extended") that
+    // installs side-by-side with the Play build. It is sideload-only, so it must be
+    // release-signed with the upload key: an unsigned release APK can't be installed
+    // ("problem parsing the package"), and a build signed with a DIFFERENT key than the
+    // one already on the device is refused as a signature clash ("App not installed").
+    // Both are why the guard below fails a release build that would come out unsigned,
+    // instead of silently emitting app-extended-release-unsigned.apk.
     flavorDimensions "distribution"
     productFlavors {
         standard { dimension "distribution" }
@@ -97,6 +103,28 @@ dependencies {
     androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
     androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
     implementation project(':capacitor-cordova-android-plugins')
+}
+
+// Fail LOUD instead of shipping an uninstallable APK. Without keystore.properties the
+// release buildType leaves the APK unsigned; `assembleExtendedRelease` then produces
+// app-extended-release-unsigned.apk, which Android refuses to install. Guard only the
+// release *assemble* tasks (checked against the resolved task graph) so debug builds and
+// the web-only CI deploy — which never run these tasks — are unaffected.
+gradle.taskGraph.whenReady { graph ->
+    if (!hasSigning) {
+        def unsignedRelease = graph.allTasks.find { t ->
+            t.project == project && t.name ==~ /assemble.*Release/
+        }
+        if (unsignedRelease != null) {
+            throw new GradleException(
+                "Refusing to build ${unsignedRelease.name}: no android/keystore.properties, " +
+                "so the APK would be unsigned and cannot be installed. Copy " +
+                "keystore.properties.example to keystore.properties and fill in the upload " +
+                "key (see keystore.properties.example). The extended sideload APK must be " +
+                "signed with that SAME key every time, or an already-installed copy will " +
+                "reject the update as a signature mismatch.")
+        }
+    }
 }
 
 apply from: 'capacitor.build.gradle'
