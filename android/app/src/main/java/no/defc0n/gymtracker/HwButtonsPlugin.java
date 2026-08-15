@@ -173,9 +173,21 @@ public class HwButtonsPlugin extends Plugin {
                 if (captureVolume) {
                     // An earbud rocker change (no key event preceded it): treat it as a
                     // break trigger and restore the level so music volume doesn't drift.
-                    final int restore = lastMusicVol;
-                    log("  -> EARBUD BREAK fire; restoring vol to " + restore);
-                    doSuppress("snap-back"); // guard the snap-back write below
+                    //
+                    // Two fixes for the intermittent MISSES (2026-08-03):
+                    //  (1) Restore NEAR the baseline but never AT an extreme. A press when
+                    //      the level is already at min/max nets zero movement, so the
+                    //      observer never sees it — leaving one step of headroom means
+                    //      every earbud press produces an observable change.
+                    //  (2) Update lastMusicVol to the restored value and DON'T arm a timed
+                    //      suppress for our own snap-back: the write's onChange then hits
+                    //      the `now == lastMusicVol` no-op path above. The old 400 ms
+                    //      snap-back suppress swallowed a fast SECOND press ("double-tap
+                    //      did nothing"); without it, a quick second press fires normally.
+                    int max = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
+                    final int restore = Math.max(1, Math.min(max - 1, lastMusicVol));
+                    log("  -> EARBUD BREAK fire; restoring vol to " + restore + " (was " + lastMusicVol + ")");
+                    lastMusicVol = restore;
                     audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, restore, 0);
                     notifyVolumeKey();
                 } else {

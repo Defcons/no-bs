@@ -157,6 +157,20 @@ export default function App() {
   // that saved session (native; best-effort on a cold start).
   useEffect(() => onNotificationTap(setMoodLogId), []);
 
+  // Global tap haptics (default on): a short vibration on any button/link tap, like
+  // the OS keyboard/nav. navigator.vibrate works in the Android WebView + PWA, so this
+  // ships OTA (no native Haptics plugin). Capture-phase → fires even if a handler
+  // stops propagation. Text fields aren't buttons, so typing never buzzes.
+  const haptics = useLiveQuery(() => getSetting("haptics", true), [], true);
+  useEffect(() => {
+    if (!haptics || typeof navigator.vibrate !== "function") return;
+    const onTap = (e: MouseEvent) => {
+      if ((e.target as HTMLElement | null)?.closest("button, a[href]")) navigator.vibrate!(8);
+    };
+    document.addEventListener("click", onTap, true);
+    return () => document.removeEventListener("click", onTap, true);
+  }, [haptics]);
+
   useEffect(() => {
     (async () => {
       markAppReady(); // commit the running OTA bundle (native only)
@@ -366,6 +380,9 @@ export default function App() {
           daysPerWeek={daysPerWeek}
           hrLowThreshold={hrLowThreshold}
           hr={hr}
+          bodyweightKg={bodyweightKg}
+          age={age}
+          sex={sex}
           onWorkoutStart={() => {
             hrAgg.current = { sum: 0, count: 0, max: 0 };
             setHrAvg(null);
@@ -398,6 +415,9 @@ export default function App() {
             go("today");
           }}
           units={units}
+          bodyweightKg={bodyweightKg}
+          age={age}
+          sex={sex}
         />
       </div>
 

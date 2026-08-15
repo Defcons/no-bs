@@ -3,6 +3,7 @@
 // we fall back to the service-worker notification (best-effort in background).
 import { Capacitor } from "@capacitor/core";
 import { LocalNotifications } from "@capacitor/local-notifications";
+import { getSetting } from "../db";
 
 const native = () => Capacitor.isNativePlatform();
 
@@ -154,6 +155,7 @@ export function onNotificationTap(cb: (workoutId: number) => void): () => void {
 const BREAK_NOTIF_ID = 7001;
 export async function scheduleBreakNotification(at: number): Promise<void> {
   if (!native()) return;
+  if (!(await getSetting("breakNotify", false))) return; // opt-in (default off) — see Settings "Break-over notification"
   try {
     await ensureRestChannel();
     await LocalNotifications.schedule({

@@ -19,6 +19,8 @@ import { Capacitor, type PluginListenerHandle } from "@capacitor/core";
 import { App as CapacitorApp } from "@capacitor/app";
 import { syncWorkout } from "../lib/sheetSync";
 import { cadenceStatus, liftRecords, trainingDue } from "../lib/stats";
+import { sessionKcal } from "../lib/calories";
+import type { Sex } from "../lib/standards";
 import { closeCurrentBreak, useActiveWorkout } from "../lib/useActiveWorkout";
 import type { DayTemplate, ExercisePerf } from "../types";
 import { ExerciseCard } from "./ExerciseCard";
@@ -37,6 +39,9 @@ type Props = {
   daysPerWeek: number;
   hrLowThreshold: number;
   hr: { bpm: number | null; avg: number | null; connected: boolean; connect: () => void; supported: boolean };
+  bodyweightKg: number;
+  age: number;
+  sex: Sex;
   onWorkoutStart: () => void;
   getHrStats: () => { avg?: number; max?: number };
   onFinished: () => void;
@@ -55,6 +60,9 @@ export function Today({
   daysPerWeek,
   hrLowThreshold,
   hr,
+  bodyweightKg,
+  age,
+  sex,
   onWorkoutStart,
   getHrStats,
   onFinished,
@@ -91,6 +99,13 @@ export function Today({
   const native = Capacitor.isNativePlatform();
   const bpmRef = useRef<number | null>(null);
   bpmRef.current = hr.bpm; // always-fresh HR for the GPS track stamps
+  // Fresh mirrors for the polled low-HR warning (which reads via refs, not deps).
+  const avgRef = useRef<number | null>(null);
+  avgRef.current = hr.avg;
+  const restEndsAtRef = useRef(0);
+  restEndsAtRef.current = draft?.restEndsAt ?? 0; // suppress the warning during a rest break
+  const startedAtRef = useRef(0);
+  startedAtRef.current = draft?.startedAt ?? 0; // warm-up grace window
   const finishingRef = useRef(false); // in-flight guard so we never double-save
   const lowSince = useRef<number | null>(null);
   const promptDeadline = useRef<number>(0);
@@ -149,6 +164,8 @@ export function Today({
   // Low heart-rate warning (default off): sound when live BPM dips below a threshold.
   const lowHrWarn = useLiveQuery(() => getSetting("lowHrWarn", false), [], false);
   const lowHrWarnBpm = useLiveQuery(() => getSetting("lowHrWarnBpm", 100), [], 100);
+  const lowHrMode = useLiveQuery(() => getSetting<string>("lowHrMode", "absolute"), [], "absolute");
+  const lowHrRelDelta = useLiveQuery(() => getSetting<number>("lowHrRelDelta", 10), [], 10);
   const lowHrSound = useLiveQuery(() => getSetting<string>("lowHrSound", "alarm"), [], "alarm");
   const lowHrSoundRef = useRef(lowHrSound);
   lowHrSoundRef.current = lowHrSound;
@@ -331,34 +348,59 @@ export function Today({
     return () => window.clearInterval(id);
   }, [draft, draft?.custom, hr.connected, hrLowThreshold, hrPrompt]);
 
-  // Low heart-rate warning: only after HR has been ABOVE the threshold (so it never
-  // fires while HR is still ramping up at the start), then only if it STAYS below
-  // for ~20 s (so a momentary dip isn't a false alarm); re-arms once HR rises above
-  // again. Polled on an interval because BLE HR notifications don't re-fire when the
-  // value holds steady, so a react-to-bpm effect could miss a sustained low.
-  const lowHrActive = !!draft && lowHrWarn && lowHrWarnBpm > 0;
+  // Low heart-rate warning. Fires only when HR has been at/above the target, then
+  // STAYS below it for ~20 s (a momentary dip isn't a false alarm); re-arms once it
+  // rises back. Polled because BLE HR notifications stop re-firing on a steady value.
+  // Smart interlocks (2026-08-03): two modes — "absolute" (below a fixed BPM, and only
+  // once the session AVG has cleared that BPM, so a light day never warns) or
+  // "relative" (below session avg − X). Both also: suppress during a rest break (HR
+  // naturally drops when you rest), a warm-up grace before it can fire, and ignore
+  // dropout/0 reads (a strap disconnect flips hr.connected → the effect tears down).
+  const lowHrActive = !!draft && lowHrWarn;
   useEffect(() => {
     lowHrArmedRef.current = false;
     lowHrBelowSinceRef.current = null;
     if (!lowHrActive || !hr.connected) return;
+    const WARMUP_MS = 180000; // 3-min warm-up grace before it can fire
     const id = window.setInterval(() => {
       const bpm = bpmRef.current;
-      if (bpm == null) return;
-      if (bpm >= lowHrWarnBpm) {
-        lowHrArmedRef.current = true; // been active → arm
+      const avg = avgRef.current;
+      if (bpm == null || bpm <= 0) return; // ignore dropouts / implausible reads
+      let target: number;
+      if (lowHrMode === "relative") {
+        if (avg == null) {
+          lowHrBelowSinceRef.current = null; // avg not established yet
+          return;
+        }
+        target = avg - lowHrRelDelta;
+      } else {
+        // Absolute: interlock on the session average actually having cleared the limit.
+        if (avg == null || avg <= lowHrWarnBpm) {
+          lowHrBelowSinceRef.current = null;
+          return;
+        }
+        target = lowHrWarnBpm;
+      }
+      if (bpm >= target) {
+        lowHrArmedRef.current = true; // been at/above → arm
         lowHrBelowSinceRef.current = null;
         return;
       }
-      if (!lowHrArmedRef.current) return; // never been above yet → ignore
+      if (!lowHrArmedRef.current) return; // never been at/above yet → ignore
+      // Don't count rest-break time or the warm-up window toward the sustained-low timer.
+      if (restEndsAtRef.current > Date.now() || Date.now() - startedAtRef.current < WARMUP_MS) {
+        lowHrBelowSinceRef.current = null;
+        return;
+      }
       if (lowHrBelowSinceRef.current == null) lowHrBelowSinceRef.current = Date.now();
       else if (Date.now() - lowHrBelowSinceRef.current >= 20000) {
         void playSoundChoice(lowHrSoundRef.current);
-        lowHrArmedRef.current = false; // require rising above again before it can fire again
+        lowHrArmedRef.current = false; // require rising back to target before it can fire again
         lowHrBelowSinceRef.current = null;
       }
     }, 3000);
     return () => window.clearInterval(id);
-  }, [lowHrActive, lowHrWarnBpm, hr.connected]);
+  }, [lowHrActive, lowHrWarnBpm, lowHrMode, lowHrRelDelta, hr.connected]);
 
   // Float as Picture-in-Picture whenever you leave the app during an active
   // workout; the minimal PiP view shows the break countdown (if resting) or the
@@ -637,6 +679,8 @@ export function Today({
   // The current exercise = the first one with a set still to log — highlighted + given
   // a "what's next" cue so you can see at a glance where you are in the session.
   const activeExIdx = draft?.exercises.findIndex((ex) => !ex.skipped && ex.sets.some((s) => !s.done)) ?? -1;
+  // Live calorie estimate (avg HR × elapsed). null when HR/profile missing → hidden.
+  const liveKcal = sessionKcal(hr.avg, elapsed, bodyweightKg, age, sex);
 
   return (
     <div className="today">
@@ -680,6 +724,15 @@ export function Today({
               {hr.avg != null && <span className="hr-avg">avg {hr.avg}</span>}
             </span>
           </button>
+          {liveKcal != null && liveKcal > 0 && (
+            <div className="kcal-badge" title="Estimated calories burned (from heart rate)">
+              <span className="kcal-flame">🔥</span>
+              <span className="hr-col">
+                <span className="hr-val num">{liveKcal}</span>
+                <span className="hr-avg">kcal</span>
+              </span>
+            </div>
+          )}
           <button className="tool-btn" onClick={() => setSheet("stopwatch")} aria-label="Stopwatch" title="Stopwatch">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
               <path d="M9.5 2.5h5" />
@@ -881,6 +934,7 @@ export function Today({
             timer={{ wAccumMs: draft.wAccumMs, wRunning: draft.wRunning, wSegStart: draft.wSegStart }}
             bpm={hr.bpm}
             avg={hr.avg}
+            kcal={liveKcal}
           />,
           document.body,
         )}

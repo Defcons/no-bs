@@ -195,16 +195,17 @@ export function SetInput({ index, set, step, unit = "weight", units = "kg", defa
       {showMore && (
         <div className="set-extra">
           {!timed && !distance && (
-            <label className="extra-field" title="assisted or extra reps — shown as (n) in the sheet">
-              <span className="extra-lbl">Assist / extra reps</span>
+            <label className="extra-field" title="assisted reps — shown as (n) in the sheet">
+              <span className="extra-lbl">Assisted reps</span>
               <div className="field assist-field">
+                {/* Plain input (no clear-on-focus/restore-on-blur): this optional field
+                    must edit and CLEAR normally — the tap-to-retype pattern used for
+                    weight/reps would restore the old value and block blanking it. */}
                 <input
                   type="text"
                   inputMode="numeric"
                   value={set.assist ?? ""}
                   placeholder="—"
-                  onFocus={clearOnFocus("assist")}
-                  onBlur={restoreOnBlur("assist")}
                   onKeyDown={blurOnEnter}
                   onChange={(e) => onChange({ assist: parseInt10(e.target.value) })}
                 />

@@ -46,7 +46,13 @@ export function distanceM(a: LatLng, b: LatLng): number {
 
 const RADIUS_M = 100; // how far counts as "left the area"
 const EXIT_GRACE_MS = 5 * 60 * 1000; // ...sustained for this long
-const ANCHOR_MAX_ACCURACY_M = 75; // ignore junk fixes when anchoring
+const REFINE_BY_M = 15; // upgrade the anchor to a fix at least this much more accurate
+// Flip to true + rebuild the OTA bundle to trace anchor/distance/accuracy in logcat
+// (Capacitor forwards console.log). This feature fails SILENTLY, so it needs a trace.
+const DEBUG_GEO = false;
+const glog = (m: string): void => {
+  if (DEBUG_GEO) console.log("[geofence] " + m);
+};
 
 let watcherId: string | null = null;
 let starting = false; // a start() is mid-await (addWatcher not yet resolved)
@@ -58,9 +64,14 @@ export async function startGeofence(onLeave: () => void): Promise<boolean> {
   if (!Capacitor.isNativePlatform() || watcherId || starting) return false;
   starting = true;
   try {
-    if (!(await getSetting<boolean>("autoEndOnLeave", false))) return false;
+    if (!(await getSetting<boolean>("autoEndOnLeave", false))) {
+      glog("not started — 'Auto-end when I leave' is OFF");
+      return false;
+    }
+    glog("starting leave-area watcher");
 
     let anchor: LatLng | null = null;
+    let anchorAcc = Infinity;
     let outsideSince: number | null = null;
     let fired = false;
 
@@ -75,13 +86,27 @@ export async function startGeofence(onLeave: () => void): Promise<boolean> {
       (position, error) => {
         if (error || !position || fired) return;
         const here = { lat: position.latitude, lng: position.longitude };
+        glog(`fix acc=${Math.round(position.accuracy)} anchor=${anchor ? `acc${Math.round(anchorAcc)}` : "none"}`);
+        // Anchor to the FIRST fix. (The old ≤75 m accuracy gate meant an indoor gym
+        // — where fixes are routinely 100 m+ — often never anchored, so the watcher
+        // silently never fired, or anchored at the exit once you got a clean fix.)
+        // Poor accuracy is handled by the accuracy-aware exit test below; and while
+        // we're still inside, upgrade the anchor to any clearly-better fix so it
+        // converges on the true start spot.
         if (!anchor) {
-          if (position.accuracy <= ANCHOR_MAX_ACCURACY_M) anchor = here; // lock the start spot
+          anchor = here;
+          anchorAcc = position.accuracy;
+          return;
+        }
+        if (outsideSince == null && position.accuracy + REFINE_BY_M < anchorAcc && distanceM(anchor, here) < RADIUS_M) {
+          anchor = here;
+          anchorAcc = position.accuracy;
           return;
         }
         const d = distanceM(anchor, here);
         const outside = d - position.accuracy > RADIUS_M;
         const inside = d + position.accuracy < RADIUS_M;
+        glog(`  d=${Math.round(d)} outside=${outside} inside=${inside} out=${outsideSince ? Math.round((Date.now() - outsideSince) / 1000) + "s" : "-"}`);
         if (inside) {
           outsideSince = null;
         } else if (outside) {

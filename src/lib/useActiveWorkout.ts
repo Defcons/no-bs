@@ -384,17 +384,27 @@ export function useActiveWorkout() {
         date: draft.date,
         dayName: draft.dayName,
         templateId: draft.templateId,
-        // Custom sessions: keep any named exercise (a run may have no weights).
-        // Template sessions: keep an exercise if ANY set was actually logged —
-        // weight OR reps OR a done/note flag (bodyweight moves like Crunches log
-        // reps only, no weight, and must not be dropped) — or it has a note.
-        exercises: draft.exercises.filter((ex) =>
-          draft.custom
-            ? ex.name.trim() !== ""
-            : (ex.sets.some((s) => s.weight != null || s.reps != null || s.done || s.note) || ex.note) &&
-              // An alternative added mid-session must have a name to be kept.
-              (!ex.added || ex.name.trim() !== ""),
-        ),
+        // Custom sessions: keep any named exercise as typed (free-form, no prefill).
+        // Template sessions: a set counts ONLY if it was marked DONE — an unfinished
+        // set means skipped, so its (usually prefilled) numbers are NOT logged, and an
+        // exercise with no done set + no note is dropped. This reverses the 2026-07-12
+        // "prefill saves" rule: the Today prefill still SHOWS last week's weights for
+        // guidance, but only what you tick off is recorded.
+        exercises: draft.custom
+          ? draft.exercises.filter((ex) => ex.name.trim() !== "")
+          : draft.exercises
+              .filter(
+                (ex) =>
+                  (ex.sets.some((s) => s.done || s.note) || ex.note) &&
+                  // An alternative added mid-session must have a name to be kept.
+                  (!ex.added || ex.name.trim() !== ""),
+              )
+              .map((ex) => ({
+                ...ex,
+                sets: ex.sets.map((s) =>
+                  s.done ? s : { ...s, weight: null, reps: null, seconds: null, distanceM: null, assist: null },
+                ),
+              })),
         note,
         durationSec,
         avgHr: hr?.avg,

@@ -383,15 +383,27 @@
 /* ---- History log ---- */
 .log {
   display: grid;
-  gap: 8px;
+  gap: 10px;
 }
-.log-row {
+/* One session = one card with a split colour-stripe (--split set inline per row). */
+.sess {
+  position: relative;
+  overflow: hidden;
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: 12px;
-  overflow: hidden;
+  border-radius: var(--radius);
 }
-.log-head {
+.sess::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: var(--split, var(--accent));
+}
+/* Compact (default) session row — the tidy one-line look, colour-coded by split. */
+.sess-compact {
   width: 100%;
   display: flex;
   justify-content: space-between;
@@ -399,20 +411,157 @@
   gap: 10px;
   background: none;
   border: none;
-  border-radius: 0;
   text-align: left;
-  padding: 12px;
+  padding: 12px 12px 12px 14px;
+  cursor: pointer;
 }
-.log-info {
+.sc-info {
   display: flex;
   flex-direction: column;
   gap: 2px;
+  min-width: 0;
 }
-.log-day {
-  font-weight: 600;
-}
-.log-count {
+.sc-day {
+  font-weight: 700;
+  color: var(--split, var(--text));
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sc-count {
+  white-space: nowrap;
+  flex: none;
+}
+.sess-head {
+  width: 100%;
+  display: block;
+  text-align: left;
+  background: none;
+  border: none;
+  border-radius: 0;
+  padding: 11px 12px 4px 14px;
+  cursor: pointer;
+}
+.sess-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.split-title {
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: var(--split, var(--text));
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+.when {
+  margin-left: auto;
+  text-align: right;
+  display: flex;
+  flex-direction: column;
+  flex: none;
+}
+.when .rel {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text);
+}
+.when .abs {
+  font-size: 11px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+/* Chips stay on ONE row — scroll horizontally rather than wrapping to a 2nd line. */
+.chips {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 6px;
+  margin-top: 8px;
+  padding: 0 12px 0 14px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.chips::-webkit-scrollbar {
+  display: none;
+}
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex: none;
+  white-space: nowrap;
+  font-size: 12px;
+  padding: 4px 9px;
+  border-radius: 9px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  color: var(--muted);
+}
+.chip .num {
+  color: var(--text);
+  font-size: 13px;
+}
+button.chip {
+  cursor: pointer;
+}
+.chip.pr {
+  color: #1a1200;
+  background: var(--volt);
+  border-color: var(--volt);
+  font-weight: 800;
+}
+.chip.pr .num {
+  color: #1a1200;
+}
+/* HR + calories read as a pair: red heart, warm-orange flame. */
+.chip.hr,
+.chip.hr .num {
+  color: var(--hr);
+}
+.chip.kcal,
+.chip.kcal .num {
+  color: var(--kcal);
+}
+/* Tapping the PR chip reveals which lift(s) it was in, on its own line (never clipped
+   by the scrolling chips row). */
+.pr-tip-line {
+  margin: 7px 12px 0 14px;
+  font-size: 12px;
+  font-weight: 700;
+  color: color-mix(in srgb, var(--volt) 55%, var(--text));
+}
+.volbar {
+  display: block;
+  height: 4px;
+  border-radius: 3px;
+  background: var(--surface-2);
+  margin: 11px 12px 0 14px;
+  overflow: hidden;
+}
+.volbar > i {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--split, var(--accent)) 50%, var(--surface)), var(--split, var(--accent)));
+}
+/* 3rd-level disclosure: reveal the full exercise/set detail below the card. */
+.sess-expand {
+  width: 100%;
+  background: none;
+  border: none;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 8px 12px;
+  margin-top: 10px;
+  cursor: pointer;
+  text-align: center;
+}
+.sess-expand:hover {
+  color: var(--text);
 }
 .log-detail {
   padding: 10px 12px 12px;
@@ -532,6 +681,22 @@
 .hr-badge.on .hr-heart {
   color: var(--danger);
   animation: beat 1s infinite;
+}
+/* Calorie badge — mirrors the HR badge (reuses .hr-col/.hr-val/.hr-avg), in the
+   calorie orange so it reads as a pair with the red heart beside it. */
+.kcal-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 56px;
+  justify-content: center;
+  color: var(--kcal);
+}
+.kcal-badge .hr-val {
+  color: var(--kcal);
+}
+.kcal-badge .hr-avg {
+  color: color-mix(in srgb, var(--kcal) 70%, var(--muted));
 }
 .hr-val {
   font-variant-numeric: tabular-nums;
@@ -701,14 +866,20 @@
   border-bottom: 1px solid var(--line);
 }
 .exercise-head h3 {
-  font-size: 16px;
+  font-size: 13px;
+  line-height: 1.15;
   font-weight: 700;
   color: var(--text);
   flex: 1;
   min-width: 0;
-  white-space: nowrap;
+  /* Wrap long names to 2 lines instead of truncating. The smaller font keeps two
+     lines within the header height the control buttons already set, so the card
+     doesn't grow; a 3rd line still clips. */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
   overflow: hidden;
-  text-overflow: ellipsis;
 }
 .ex-controls {
   display: flex;
@@ -890,71 +1061,95 @@
 /* "Last time" READ-ONLY panel (swipe right on the card, or the ↺ header button).
    Deliberately archival — dashed border + muted, desaturated palette — so it never
    reads as an editable current-week card. */
+/* ── "Last week" read-only panel (swipe on an exercise) ─────────────────────
+   Mirrors the live set-row layout so last week reads as the SAME thing, in a calm
+   cool-slate read-only treatment: orange = live, green = done, slate = the past. */
 .prev-panel {
   margin-top: 8px;
-  padding: 10px 12px 12px;
-  border: 1px dashed color-mix(in srgb, var(--muted) 55%, var(--line));
-  border-radius: var(--radius-sm);
-  background: color-mix(in srgb, var(--muted) 8%, var(--bg));
+  padding: 10px 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--lastweek) 45%, var(--line));
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--lastweek) 7%, var(--surface));
 }
-.prev-panel-head {
+.lw-ribbon {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: 6px 10px;
   margin-bottom: 10px;
 }
-/* Prominent "LAST TIME" badge so it's unmistakable which week you're looking at. */
-.prev-badge {
-  font-size: 11px;
+.lw-tag {
+  font-size: 10px;
   font-weight: 800;
   text-transform: uppercase;
-  letter-spacing: 0.07em;
-  color: var(--bg);
-  background: var(--muted);
+  letter-spacing: 0.1em;
+  color: var(--lastweek);
+  background: color-mix(in srgb, var(--lastweek) 18%, var(--surface-2));
+  border: 1px solid color-mix(in srgb, var(--lastweek) 40%, var(--line));
   padding: 2px 8px;
   border-radius: 999px;
 }
-.prev-panel-date {
+.lw-date {
   font-size: 12px;
   color: var(--muted);
   font-variant-numeric: tabular-nums;
 }
-.prev-ro {
+.lw-lock {
   margin-left: auto;
   font-size: 11px;
   font-weight: 600;
-  color: var(--muted);
+  color: var(--faint);
 }
-.prev-sets {
-  list-style: none;
-  margin: 0;
-  padding: 0;
+.prev-rows {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 8px;
 }
-.prev-sets li {
+/* Read-only set row: inherits the live .setrow layout, slate-tinted + static. */
+.setrow.ro {
+  background: color-mix(in srgb, var(--lastweek) 8%, var(--surface-2));
+  border-color: color-mix(in srgb, var(--lastweek) 22%, var(--line));
+}
+.ro-badge {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  flex: none;
+  font-size: 13px;
+  color: var(--lastweek);
+  background: var(--surface);
+  border: 1px solid color-mix(in srgb, var(--lastweek) 40%, var(--line));
+}
+.ro-val {
   display: flex;
   align-items: baseline;
-  gap: 10px;
+  gap: 3px;
 }
-.prev-set-n {
-  width: 18px;
-  text-align: center;
-  font-size: 12px;
-  font-weight: 700;
+.ro-val .num {
+  font-size: 17px;
+  color: color-mix(in srgb, var(--text) 84%, var(--lastweek));
+}
+.ro-u {
+  font-size: 11px;
   color: var(--muted);
 }
-/* Muted (not full-contrast) numbers reinforce "this is old, not your live entry". */
-.prev-set-v {
-  font-family: var(--display);
-  font-variant-numeric: tabular-nums;
-  font-size: 16px;
-  font-weight: 700;
-  color: var(--text-dim, var(--muted));
+/* reps vs the scheme target — over = green, under = red (after .ro-val .num so these win) */
+.ro-val .repnum.over {
+  color: var(--accent-2);
 }
-.prev-note {
+.ro-val .repnum.under {
+  color: var(--danger);
+}
+/* assisted reps — a plain orange "(n)" so they never read as clean reps */
+.assist-n {
+  align-self: center;
+  font-size: 16px;
+  color: var(--accent);
+}
+.lw-note {
+  margin: 4px 2px 0;
   color: var(--muted);
   font-style: italic;
   font-size: 13px;
@@ -1107,6 +1302,9 @@
   font-size: 0.45em;
   color: var(--muted);
   font-weight: 600;
+}
+.pip-kcal {
+  color: var(--kcal);
 }
 
 /* ---- Set rows (Phase 2: clean line, 44px targets, extras behind ⋯) ---- */
@@ -1757,20 +1955,18 @@ input[type="range"] {
   outline: 2px solid var(--accent);
   outline-offset: -1px;
 }
+/* The month/week/year group is a header BAR (not a card), with its own session
+   cards stacked underneath. */
 .hist-group {
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  margin-bottom: 8px;
-  overflow: hidden;
+  margin-bottom: 18px;
 }
 .hist-group > summary {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   gap: 10px;
-  padding: 12px 14px;
+  padding: 2px 2px 8px;
   cursor: pointer;
-  font-weight: 600;
+  border-bottom: 1px solid var(--line);
   list-style: none;
 }
 .hist-group > summary::-webkit-details-marker {
@@ -1778,31 +1974,22 @@ input[type="range"] {
 }
 .hist-group-label {
   margin-right: auto;
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
 }
 .hist-group > summary::after {
   content: "▸";
   color: var(--muted);
   transition: transform 0.15s;
+  align-self: center;
 }
 .hist-group[open] > summary::after {
   transform: rotate(90deg);
 }
 .hist-group .log {
-  padding: 0 10px 8px;
-  gap: 0;
-}
-/* Flatten rows inside a group card — dividers instead of nested cards. */
-.hist-group .log-row {
-  background: transparent;
-  border: none;
-  border-top: 1px solid var(--line);
-  border-radius: 0;
-}
-.hist-group .log-row:first-child {
-  border-top: none;
-}
-.hist-group .log-head {
-  padding: 12px 4px;
+  padding: 10px 0 0;
+  gap: 10px;
 }
 
 /* ---- Activity heatmap (Records: year × month) ---- */

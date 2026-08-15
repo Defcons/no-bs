@@ -7,7 +7,7 @@ import { SetInput } from "./SetInput";
 import { ExerciseNameField } from "./ExerciseNameField";
 import { resolveExercise } from "../lib/exercises";
 import { type WeightUnit, weightStr } from "../lib/units";
-import { daysAgoLabel, niceDate } from "../lib/format";
+import { daysAgoLabel, mmss, niceDate } from "../lib/format";
 import { epley } from "../lib/stats";
 import { playPr } from "../lib/sounds";
 
@@ -69,6 +69,12 @@ export function ExerciseCard({ exercise, step, prev, prevDate, onChange, onSetDo
   const [showPrev, setShowPrev] = useState(false);
   const touch = useRef<{ x: number; y: number } | null>(null);
   const onTouchStart = (e: TouchEvent) => {
+    // Don't begin a swipe from inside a field/control — editing weight/reps (or a
+    // stepper drag) must not flip the card to the last-time panel.
+    if ((e.target as HTMLElement).closest("input, textarea, select, button")) {
+      touch.current = null;
+      return;
+    }
     const t = e.touches[0];
     touch.current = { x: t.clientX, y: t.clientY };
   };
@@ -82,15 +88,6 @@ export function ExerciseCard({ exercise, step, prev, prevDate, onChange, onSetDo
     // Only a clearly-horizontal swipe (so vertical scrolling is unaffected).
     if (Math.abs(dx) < 55 || Math.abs(dx) < Math.abs(dy) * 1.4) return;
     setShowPrev(dx > 0);
-  };
-  // Read-only label for one previous set, matching the exercise's unit.
-  const fmtPrevSet = (s: SetEntry): string => {
-    if (unit === "time") return s.seconds != null ? `${s.seconds}s` : "—";
-    if (unit === "distance") return s.distanceM != null ? `${Number((s.distanceM / 1000).toFixed(2))} km` : "—";
-    const u = units ?? "kg";
-    const reps = s.reps != null ? `${s.reps}` : "—";
-    if (unit === "bodyweight") return s.weight ? `+${weightStr(s.weight, u)}${u} × ${reps}` : `BW × ${reps}`;
-    return s.weight != null ? `${weightStr(s.weight, u)}${u} × ${reps}` : `× ${reps}`;
   };
   const patchSet = (i: number, patch: Partial<SetEntry>) => {
     const sets = exercise.sets.map((s, idx) => (idx === i ? { ...s, ...patch } : s));
@@ -194,26 +191,75 @@ export function ExerciseCard({ exercise, step, prev, prevDate, onChange, onSetDo
       )}
 
       {showPrev ? (
-        <div className="prev-panel" aria-readonly="true">
-          <div className="prev-panel-head">
-            <span className="prev-badge">↺ Last time</span>
+        <div className="prev-panel lastweek" aria-readonly="true">
+          <div className="lw-ribbon">
+            <span className="lw-tag">Last week</span>
             {prevDate && (
-              <span className="prev-panel-date">
+              <span className="lw-date">
                 {niceDate(prevDate)} · {daysAgoLabel(prevDate)}
               </span>
             )}
-            <span className="prev-ro">🔒 read-only</span>
+            <span className="lw-lock">🔒 read-only</span>
           </div>
           {prev && prev.sets.length ? (
-            <ol className="prev-sets">
-              {prev.sets.map((s, i) => (
-                <li key={s.id ?? i}>
-                  <span className="prev-set-n">{i + 1}</span>
-                  <span className="prev-set-v">{fmtPrevSet(s)}</span>
-                </li>
-              ))}
-              {prev.note && <li className="prev-note">“{prev.note}”</li>}
-            </ol>
+            <div className="prev-rows">
+              {prev.sets.map((s, i) => {
+                const u = units ?? "kg";
+                // Reps vs the scheme target: over = green, under = red (mirrors the live cue).
+                const over = s.reps != null && defReps != null && s.reps > defReps;
+                const under = s.reps != null && defReps != null && s.reps < defReps;
+                return (
+                  <div className="setrow ro" key={s.id ?? i}>
+                    <span className="ro-badge num">{i + 1}</span>
+                    {unit === "time" ? (
+                      <span className="ro-val">
+                        <span className="num">{s.seconds ?? "—"}</span>
+                        <span className="ro-u">sec</span>
+                      </span>
+                    ) : unit === "distance" ? (
+                      <>
+                        <span className="ro-val">
+                          <span className="num">{s.distanceM != null ? Number((s.distanceM / 1000).toFixed(2)) : "—"}</span>
+                          <span className="ro-u">km</span>
+                        </span>
+                        {s.seconds != null && (
+                          <span className="ro-val">
+                            <span className="num">{mmss(s.seconds)}</span>
+                          </span>
+                        )}
+                      </>
+                    ) : (
+                      <>
+                        <span className="ro-val">
+                          {unit === "bodyweight" ? (
+                            s.weight ? (
+                              <>
+                                <span className="num">+{weightStr(s.weight, u)}</span>
+                                <span className="ro-u">{u}</span>
+                              </>
+                            ) : (
+                              <span className="ro-u">BW</span>
+                            )
+                          ) : s.weight != null ? (
+                            <>
+                              <span className="num">{weightStr(s.weight, u)}</span>
+                              <span className="ro-u">{u}</span>
+                            </>
+                          ) : (
+                            <span className="ro-u">—</span>
+                          )}
+                        </span>
+                        <span className="ro-val">
+                          <span className={`num repnum ${over ? "over" : under ? "under" : ""}`}>× {s.reps ?? "—"}</span>
+                        </span>
+                        {s.assist != null && s.assist > 0 && <span className="assist-n num">({s.assist})</span>}
+                      </>
+                    )}
+                  </div>
+                );
+              })}
+              {prev.note && <p className="lw-note">“{prev.note}”</p>}
+            </div>
           ) : (
             <p className="muted tiny">No previous session logged for this exercise yet.</p>
           )}
@@ -232,7 +278,7 @@ export function ExerciseCard({ exercise, step, prev, prevDate, onChange, onSetDo
               unit={unit}
               units={units}
               defaultReps={defReps}
-              active={i === exercise.sets.findIndex((x) => !x.done)}
+              active={isActive && i === exercise.sets.findIndex((x) => !x.done)}
               isPr={i === prIndex}
               prevWeight={prev?.sets[i]?.weight ?? prev?.sets.at(-1)?.weight ?? null}
               onChange={(p) => patchSet(i, p)}

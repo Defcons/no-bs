@@ -7,6 +7,9 @@ import { db, type StoredWorkout } from "../db";
 import { clockTime, daysAgoLabel, hhmmss, mmss, niceDate } from "../lib/format";
 import { computeRun, fmtDist, fmtPace } from "../lib/runStats";
 import { resolveExercise } from "../lib/exercises";
+import { liftRecords, workoutVolume } from "../lib/stats";
+import { sessionKcal } from "../lib/calories";
+import type { Sex } from "../lib/standards";
 import { type WeightUnit, weightStr } from "../lib/units";
 // Lazy so Leaflet (+CSS) only loads when a run's map is actually shown.
 const RunMap = lazy(() => import("./RunMap").then((m) => ({ default: m.RunMap })));
@@ -39,6 +42,19 @@ const setsOf = (w: StoredWorkout) =>
     0,
   );
 
+// A stable colour per split/activity so Push/Pull/Legs (or any custom split) are
+// findable by colour when scrolling. Curated hues that read on the dark ground —
+// picked by hashing the name, so the same split always gets the same colour.
+const SPLIT_COLORS = ["#ff5a2c", "#2fbf71", "#6f86c9", "#c77dff", "#38bdf8", "#f5a623", "#ff6b9d", "#4ade80"];
+function splitColor(name: string): string {
+  let h = 0;
+  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0;
+  return SPLIT_COLORS[h % SPLIT_COLORS.length];
+}
+
+// Capitalise the first letter ("today" → "Today") for the session's relative date.
+const capFirst = (s: string) => (s ? s[0].toUpperCase() + s.slice(1) : s);
+
 // Monday-anchored key ("YYYY-MM-DD") for the week a date falls in — built from
 // local Y/M/D parts to avoid UTC-parse drift.
 function weekMondayKey(iso: string): string {
@@ -62,9 +78,22 @@ function groupLabel(key: string, by: GroupBy): string {
   return `Week of ${niceDate(key)}`;
 }
 
-export function History({ onEdit, units }: { onEdit: (w: StoredWorkout) => void; units: WeightUnit }) {
+export function History({
+  onEdit,
+  units,
+  bodyweightKg,
+  age,
+  sex,
+}: {
+  onEdit: (w: StoredWorkout) => void;
+  units: WeightUnit;
+  bodyweightKg: number;
+  age: number;
+  sex: Sex;
+}) {
   const workouts = useLiveQuery(() => db.workouts.orderBy("date").reverse().toArray(), []);
-  const [openId, setOpenId] = useState<number | null>(null);
+  const [openId, setOpenId] = useState<number | null>(null); // expanded to the card view
+  const [fullOpen, setFullOpen] = useState(false); // the open card is further expanded to its full detail
   const [groupBy, setGroupBy] = useState<GroupBy>("month");
   const [type, setType] = useState("all");
   const [query, setQuery] = useState("");
@@ -73,6 +102,14 @@ export function History({ onEdit, units }: { onEdit: (w: StoredWorkout) => void;
     () => (workouts ? [...new Set(workouts.map((w) => w.dayName))].sort() : []),
     [workouts],
   );
+  // Assign each distinct split a colour by its position in the (sorted) list, so
+  // splits are always DISTINCT from each other (a name hash can collide — e.g.
+  // Pull and Legs landing on the same colour).
+  const splitColorMap = useMemo(() => {
+    const m = new Map<string, string>();
+    types.forEach((t, i) => m.set(t, SPLIT_COLORS[i % SPLIT_COLORS.length]));
+    return m;
+  }, [types]);
 
   const filtered = useMemo(() => {
     if (!workouts) return [];
@@ -105,6 +142,22 @@ export function History({ onEdit, units }: { onEdit: (w: StoredWorkout) => void;
       sets: items.reduce((a, w) => a + setsOf(w), 0),
     }));
   }, [filtered, groupBy]);
+
+  // Largest session by volume (kg lifted) — scales each card's volume bar.
+  const maxVol = useMemo(() => Math.max(1, ...filtered.map(workoutVolume)), [filtered]);
+  // Days that currently hold an all-time-best est-1RM → which lift(s), for the PR chip
+  // + its tap-tooltip ("PR: Bench Press").
+  const prByDay = useMemo(() => {
+    const m = new Map<string, string[]>();
+    if (workouts?.length) {
+      for (const r of liftRecords(workouts)) {
+        if (r.bestE1rm.est <= 0) continue;
+        const d = r.bestE1rm.date.slice(0, 10);
+        m.set(d, [...(m.get(d) ?? []), r.name]);
+      }
+    }
+    return m;
+  }, [workouts]);
 
   if (!workouts) return <div className="pad">Loading…</div>;
   if (workouts.length === 0) return <div className="pad muted">No workouts yet — log your first one!</div>;
@@ -173,9 +226,19 @@ export function History({ onEdit, units }: { onEdit: (w: StoredWorkout) => void;
                   key={w.id}
                   w={w}
                   open={openId === w.id}
-                  onToggle={() => setOpenId(openId === w.id ? null : w.id!)}
+                  full={openId === w.id && fullOpen}
+                  onToggleCard={() => {
+                    const isOpen = openId === w.id;
+                    setOpenId(isOpen ? null : w.id!);
+                    setFullOpen(false);
+                  }}
+                  onToggleFull={() => setFullOpen((v) => !v)}
                   onEdit={onEdit}
                   units={units}
+                  color={splitColorMap.get(w.dayName) ?? splitColor(w.dayName)}
+                  volPct={Math.round((workoutVolume(w) / maxVol) * 100)}
+                  prLifts={prByDay.get(w.date.slice(0, 10)) ?? []}
+                  kcal={sessionKcal(w.avgHr, w.durationSec, bodyweightKg, age, sex)}
                 />
               ))}
             </div>
@@ -189,33 +252,120 @@ export function History({ onEdit, units }: { onEdit: (w: StoredWorkout) => void;
 function LogRow({
   w,
   open,
-  onToggle,
+  full,
+  onToggleCard,
+  onToggleFull,
   onEdit,
   units,
+  color,
+  volPct,
+  prLifts,
+  kcal,
 }: {
   w: StoredWorkout;
   open: boolean;
-  onToggle: () => void;
+  full: boolean;
+  onToggleCard: () => void;
+  onToggleFull: () => void;
   onEdit: (w: StoredWorkout) => void;
   units: WeightUnit;
+  color: string;
+  volPct: number;
+  prLifts: string[];
+  kcal: number | null;
 }) {
   const nSets = setsOf(w);
+  const [prTip, setPrTip] = useState(false); // reveal which lift the PR was in
   return (
-    <div className={`log-row ${open ? "open" : ""}`}>
-      <button className="log-head" onClick={onToggle}>
-        <span className="log-info">
-          <span className="log-day">{activityLabel(w)}</span>
-          <span className="tiny muted">
-            {niceDate(w.date)}
-            {clockTime(w.date) && ` · ${clockTime(w.date)}`} · {daysAgoLabel(w.date)}
+    <div className={`sess ${open ? "open" : ""}`} style={{ ["--split" as string]: color }}>
+      {!open ? (
+        // Compact (default, tidy) — the old one-line look, now colour-coded by split.
+        <button className="sess-compact" onClick={onToggleCard}>
+          <span className="sc-info">
+            <span className="sc-day">{activityLabel(w)}</span>
+            <span className="tiny muted">
+              {niceDate(w.date)}
+              {clockTime(w.date) && ` · ${clockTime(w.date)}`} · {daysAgoLabel(w.date)}
+            </span>
           </span>
-        </span>
-        <span className="tiny muted log-count">
-          {w.exercises.length} ex · {nSets} sets
-        </span>
-      </button>
+          <span className="tiny muted sc-count">
+            {w.exercises.length} ex · {nSets} sets
+          </span>
+        </button>
+      ) : (
+        // Card — stat chips + volume bar; tap the header again to collapse.
+        <>
+          <button className="sess-head" onClick={onToggleCard}>
+            <span className="sess-top">
+              <span className="split-title">{activityLabel(w)}</span>
+              <span className="when">
+                <span className="rel">{capFirst(daysAgoLabel(w.date))}</span>
+                <span className="abs">
+                  {niceDate(w.date)}
+                  {clockTime(w.date) && ` · ${clockTime(w.date)}`}
+                </span>
+              </span>
+            </span>
+          </button>
+          <div className="chips">
+            <span className="chip">
+              <span className="num">{w.exercises.length}</span> ex
+            </span>
+            <span className="chip">
+              <span className="num">{nSets}</span> sets
+            </span>
+            {w.durationSec ? (
+              <span className="chip">
+                ⏱ <span className="num">{Math.round(w.durationSec / 60)}</span> min
+              </span>
+            ) : null}
+            {prLifts.length ? (
+              <button
+                type="button"
+                className="chip pr"
+                title={`PR: ${prLifts.join(", ")}`}
+                onClick={() => setPrTip((v) => !v)}
+              >
+                ★ PR
+              </button>
+            ) : null}
+            {w.avgHr ? (
+              <span className="chip hr">
+                ♥ <span className="num">{w.avgHr}</span>
+              </span>
+            ) : null}
+            {kcal != null && kcal > 0 ? (
+              <span className="chip kcal">
+                🔥 <span className="num">{kcal}</span> kcal
+              </span>
+            ) : null}
+            {w.moodBefore || w.moodAfter ? (
+              <span className="chip">
+                🙂{" "}
+                <span className="num">
+                  {w.moodBefore ?? "–"}→{w.moodAfter ?? "–"}
+                </span>
+              </span>
+            ) : null}
+            {w.breaks?.length ? (
+              <span className="chip">
+                ⏸ <span className="num">{w.breaks.length}</span>
+              </span>
+            ) : null}
+          </div>
+          {prTip && prLifts.length > 0 && <div className="pr-tip-line">★ PR in {prLifts.join(", ")}</div>}
+          {volPct > 0 && (
+            <div className="volbar">
+              <i style={{ width: `${volPct}%` }} />
+            </div>
+          )}
+          <button className="sess-expand" onClick={onToggleFull}>
+            {full ? "⌃ Hide exercises" : "⌄ Show exercises"}
+          </button>
+        </>
+      )}
 
-      {open && (
+      {full && (
         <div className="log-detail">
           {w.track && w.track.length >= 2 && <RunDetail track={w.track} breaks={w.breaks} />}
           {w.note && <div className="log-note">📝 {w.note}</div>}

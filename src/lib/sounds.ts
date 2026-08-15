@@ -140,8 +140,9 @@ export function playBuffer(buffer: AudioBuffer): void {
   }
 }
 
-// A very faint short tick for the optional "3..2..1" pre-end countdown. The final
-// tick (isFinal) is a touch higher/brighter so "1 → go" reads clearly.
+// A short tick for the optional "3..2..1" pre-end countdown. Triangle (richer than
+// a sine) at a healthy gain so it cuts through ducked music — the old faint sine was
+// getting buried. The final tick (isFinal) is higher/louder so "1 → go" reads clearly.
 export function playCountdownTick(isFinal = false): void {
   try {
     const c = ctx();
@@ -149,7 +150,7 @@ export function playCountdownTick(isFinal = false): void {
     // Duck a bit past one second so music stays dimmed across the 3-2-1 ticks
     // instead of bobbing back up between them.
     void duckAudio(1200);
-    tone(c, "sine", isFinal ? 1320 : 880, c.currentTime, 0.09, isFinal ? 0.18 : 0.12);
+    tone(c, "triangle", isFinal ? 1320 : 880, c.currentTime, 0.11, isFinal ? 0.42 : 0.32);
   } catch {
     /* audio blocked */
   }

@@ -90,6 +90,8 @@ export function RestTimer({ endsAt, onChange }: Props) {
 
   if (endsAt == null) return null;
   const over = remaining <= 0;
+  // Nudge the running break by ±15/±30s (never below 0).
+  const adjust = (delta: number) => onChange(Date.now() + Math.max(0, remaining + delta) * 1000);
 
   return (
     <div className={`rest-timer ${over ? "over" : ""}`} role="timer">
@@ -98,8 +100,10 @@ export function RestTimer({ endsAt, onChange }: Props) {
         <span className="rest-time">{over ? "0:00" : mmss(remaining)}</span>
       </div>
       <div className="rest-controls">
-        <button onClick={() => onChange(Date.now() + Math.max(0, remaining) * 1000 + 30000)}>+30s</button>
-        <button onClick={() => onChange(Date.now() + Math.max(0, remaining - 30) * 1000)}>−30s</button>
+        <button onClick={() => adjust(-30)}>−30s</button>
+        <button onClick={() => adjust(-15)}>−15s</button>
+        <button onClick={() => adjust(15)}>+15s</button>
+        <button onClick={() => adjust(30)}>+30s</button>
         <button className="rest-skip" onClick={() => onChange(null)}>
           {over ? "Dismiss" : "Skip"}
         </button>

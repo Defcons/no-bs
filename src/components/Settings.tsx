@@ -138,9 +138,13 @@ export function Settings({
   // Break sound is a built-in id ("beep"…) OR "custom:<dbId>" (a user's file).
   const [breakSound, setBreakSound] = useState<string>("beep");
   const [breakCountdown, setBreakCountdown] = useState(false);
+  const [breakNotify, setBreakNotify] = useState(false);
   const [includeAltWeekly, setIncludeAltWeekly] = useState(false);
+  const [haptics, setHaptics] = useState(true);
   const [lowHrWarn, setLowHrWarn] = useState(false);
   const [lowHrWarnBpm, setLowHrWarnBpm] = useState(100);
+  const [lowHrMode, setLowHrMode] = useState<string>("absolute");
+  const [lowHrRelDelta, setLowHrRelDelta] = useState(10);
   const [lowHrSound, setLowHrSound] = useState("alarm");
   const [customSounds, setCustomSounds] = useState<CustomSound[]>([]);
   const soundFileRef = useRef<HTMLInputElement>(null);
@@ -198,9 +202,13 @@ export function Settings({
     getSetting("mediaBtnBreak", false).then(setMediaBtnBreak);
     getSetting<string>("breakSound", "beep").then(setBreakSound);
     getSetting("breakCountdown", false).then(setBreakCountdown);
+    getSetting<boolean>("breakNotify", false).then(setBreakNotify);
     getSetting<boolean>("includeAltInWeekly", false).then(setIncludeAltWeekly);
+    getSetting<boolean>("haptics", true).then(setHaptics);
     getSetting<boolean>("lowHrWarn", false).then(setLowHrWarn);
     getSetting<number>("lowHrWarnBpm", 100).then(setLowHrWarnBpm);
+    getSetting<string>("lowHrMode", "absolute").then(setLowHrMode);
+    getSetting<number>("lowHrRelDelta", 10).then(setLowHrRelDelta);
     getSetting<string>("lowHrSound", "alarm").then(setLowHrSound);
     refreshCustomSounds();
     pendingCount().then(setPending);
@@ -390,6 +398,18 @@ export function Settings({
             ))}
           </div>
         </div>
+
+        <ToggleRow
+          label="Vibrate on taps"
+          checked={haptics}
+          onChange={() => {
+            const v = !haptics;
+            setHaptics(v);
+            setSetting("haptics", v);
+          }}
+        >
+          <p className="muted tiny">A short haptic buzz when you tap buttons, like the system keyboard. On by default.</p>
+        </ToggleRow>
       </details>
 
       <details className="settings-group">
@@ -398,7 +418,7 @@ export function Settings({
         <div className="setting">
           <label>Default rest timer</label>
           <div className="seg">
-            {[60, 90, 120, 150, 180].map((s) => (
+            {[30, 45, 60, 90, 120, 150, 180].map((s) => (
               <button key={s} className={restDefaultSec === s ? "active" : ""} onClick={() => setRestDefaultSec(s)}>
                 {s}s
               </button>
@@ -475,6 +495,22 @@ export function Settings({
         <ToggleRow label="Auto-start break when a set is marked done" checked={autoBreak} onChange={toggleAutoBreak}>
           <p className="muted tiny">Tap a set's number badge (✓) and the break timer starts by itself.</p>
         </ToggleRow>
+
+        {native && (
+          <ToggleRow
+            label="Break-over notification"
+            checked={breakNotify}
+            onChange={(v) => {
+              setBreakNotify(v);
+              setSetting("breakNotify", v);
+            }}
+          >
+            <p className="muted tiny">
+              A phone notification when the break ends — handy if the app is backgrounded / screen off, where the in-app
+              sound won't reach you. Off by default.
+            </p>
+          </ToggleRow>
+        )}
       </details>
 
       <details className="settings-group">
@@ -642,28 +678,69 @@ export function Settings({
           }}
         >
           <p className="muted tiny">
-            Off by default. During a workout, once your heart rate has been above the number below, it plays a sound if
-            it then drops below and stays there ~20 s (so a brief dip won't false-alarm). Re-arms once HR rises back above.
+            Off by default. Plays a sound if your heart rate drops and stays low ~20 s during a workout — but only once
+            you've genuinely been working, never during a rest break, and not in the first few minutes. Re-arms after HR
+            recovers.
           </p>
           {lowHrWarn && (
             <>
-              <div className="row" style={{ marginTop: 8 }}>
-                <span className="muted tiny">Warn below</span>
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  className="bw-input"
-                  value={lowHrWarnBpm || ""}
-                  placeholder="bpm"
-                  onChange={(e) => {
-                    const n = parseInt(e.target.value, 10);
-                    const v = Number.isFinite(n) ? n : 0;
-                    setLowHrWarnBpm(v);
-                    setSetting("lowHrWarnBpm", v);
+              <div className="seg" style={{ marginTop: 8 }}>
+                <button
+                  className={lowHrMode === "absolute" ? "active" : ""}
+                  onClick={() => {
+                    setLowHrMode("absolute");
+                    setSetting("lowHrMode", "absolute");
                   }}
-                />
-                <span className="muted tiny">bpm</span>
+                >
+                  Below a fixed BPM
+                </button>
+                <button
+                  className={lowHrMode === "relative" ? "active" : ""}
+                  onClick={() => {
+                    setLowHrMode("relative");
+                    setSetting("lowHrMode", "relative");
+                  }}
+                >
+                  Below my average
+                </button>
               </div>
+              {lowHrMode === "relative" ? (
+                <div className="row" style={{ marginTop: 8 }}>
+                  <span className="muted tiny">Warn when HR is</span>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    className="bw-input"
+                    value={lowHrRelDelta || ""}
+                    placeholder="10"
+                    onChange={(e) => {
+                      const n = parseInt(e.target.value, 10);
+                      const v = Number.isFinite(n) ? n : 0;
+                      setLowHrRelDelta(v);
+                      setSetting("lowHrRelDelta", v);
+                    }}
+                  />
+                  <span className="muted tiny">bpm below your session average</span>
+                </div>
+              ) : (
+                <div className="row" style={{ marginTop: 8 }}>
+                  <span className="muted tiny">Warn below</span>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    className="bw-input"
+                    value={lowHrWarnBpm || ""}
+                    placeholder="bpm"
+                    onChange={(e) => {
+                      const n = parseInt(e.target.value, 10);
+                      const v = Number.isFinite(n) ? n : 0;
+                      setLowHrWarnBpm(v);
+                      setSetting("lowHrWarnBpm", v);
+                    }}
+                  />
+                  <span className="muted tiny">bpm — only once your average has cleared it</span>
+                </div>
+              )}
               <div style={{ marginTop: 8 }}>
                 <SoundField
                   value={lowHrSound}

@@ -16,6 +16,9 @@
   --volt: #ffd23f; /* gold — celebratory only (PR/GO) */
   --danger: #f0555c;
   --warn: #f5a623;
+  --lastweek: #6f86c9; /* cool slate — read-only "last week" history (deliberately outside the semantic set) */
+  --hr: #f0555c; /* heart-rate red */
+  --kcal: #ff8a3d; /* calorie orange — reads as a pair with --hr, without blending */
 
   /* spacing scale (4px base) */
   --s1: 4px;
@@ -52,6 +55,9 @@
   --volt: #e0a400;
   --danger: #d63a44;
   --warn: #b6791a;
+  --lastweek: #4f68a8; /* deeper cool slate for light-theme contrast */
+  --hr: #d63a44;
+  --kcal: #d9661a;
 
   color-scheme: light;
 }

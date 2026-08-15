@@ -12,9 +12,10 @@ type Props = {
   timer: { wAccumMs: number; wRunning: boolean; wSegStart: number };
   bpm: number | null;
   avg: number | null;
+  kcal: number | null;
 };
 
-export function PipView({ restEndsAt, timer, bpm, avg }: Props) {
+export function PipView({ restEndsAt, timer, bpm, avg, kcal }: Props) {
   const [, tick] = useState(0);
   useEffect(() => {
     const id = window.setInterval(() => tick((n) => n + 1), 500);
@@ -34,10 +35,15 @@ export function PipView({ restEndsAt, timer, bpm, avg }: Props) {
         <span className="pip-label">{resting ? "BREAK" : <>WORK&#8209;<br />OUT</>}</span>
         <span className={`pip-time ${long ? "long" : ""}`}>{timeStr}</span>
       </span>
-      {bpm != null && (
+      {(bpm != null || (kcal != null && kcal > 0)) && (
         <span className="pip-hr">
-          ♥ {bpm}
-          {avg != null && <span className="pip-hr-avg"> (avg {avg})</span>}
+          {bpm != null && (
+            <>
+              ♥ {bpm}
+              {avg != null && <span className="pip-hr-avg"> (avg {avg})</span>}
+            </>
+          )}
+          {kcal != null && kcal > 0 && <span className="pip-kcal"> 🔥 {kcal}</span>}
         </span>
       )}
     </div>
