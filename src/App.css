@@ -24,17 +24,17 @@
 .ext-badge {
   position: fixed;
   top: calc(env(safe-area-inset-top) + 4px);
-  right: 8px;
+  right: 10px;
   z-index: 40;
   pointer-events: none; /* purely informational — never intercept taps */
-  padding: 2px 7px;
+  padding: 1px 6px;
   border: 1px solid var(--accent);
   border-radius: 999px;
   background: color-mix(in srgb, var(--accent) 16%, transparent);
   color: var(--accent);
-  font-size: 0.62rem;
+  font-size: 0.55rem;
   font-weight: 700;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.05em;
   text-transform: uppercase;
 }
 /* ---- OTA update confirmation banner (shown once after an update reload) ---- */
@@ -614,23 +614,46 @@ button.chip {
 }
 .workout-bar {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 12px 16px;
+  flex-direction: column; /* title on its own line, timer + tools below — title never truncates */
+  align-items: stretch;
+  gap: 8px;
+  padding: 10px 16px;
   background: var(--surface);
   border-bottom: 1px solid var(--line);
-}
-.wb-left {
-  flex: 1;
-  min-width: 0;
 }
 .wb-day {
   font-weight: 700;
   font-size: 17px;
   color: var(--accent);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  line-height: 1.2;
+}
+.wb-row2 {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+/* Vitals strip: HR + calories get a roomy line under the bar (was cramped by the tools). */
+.vitals-strip {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 7px 16px;
+  background: color-mix(in srgb, var(--surface) 55%, var(--bg));
+  border-bottom: 1px solid var(--line);
+}
+.vitals-strip .hr-badge,
+.vitals-strip .kcal-badge {
+  min-width: 0;
+  justify-content: flex-start;
+}
+.vitals-strip .hr-col {
+  flex-direction: row;
+  align-items: baseline;
+  gap: 5px;
+}
+.vitals-strip .hr-val {
+  font-size: 17px;
 }
 .wb-timer {
   font-family: var(--display);
@@ -729,12 +752,6 @@ button.chip {
 .break-btn:active {
   background: color-mix(in srgb, var(--accent) 28%, var(--surface));
 }
-.wb-time-row {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-top: 3px;
-}
 .sw-btn {
   width: 28px;
   height: 28px;
@@ -773,6 +790,41 @@ button.chip {
 .tool-btn.set {
   color: var(--accent);
   border-color: color-mix(in srgb, var(--accent) 40%, var(--line));
+}
+/* "Rate your feeling" nudge after the first set: pulse the mood button + a hint pill. */
+.tool-btn.nudge {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+  animation: moodPulse 1.2s ease-in-out infinite;
+}
+@keyframes moodPulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 45%, transparent);
+  }
+  70% {
+    box-shadow: 0 0 0 6px color-mix(in srgb, var(--accent) 0%, transparent);
+  }
+}
+.mood-nudge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: calc(100% - 32px);
+  margin: 8px 16px 0;
+  padding: 9px 12px;
+  border-radius: var(--radius);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--line));
+}
+@media (prefers-reduced-motion: reduce) {
+  .tool-btn.nudge {
+    animation: none;
+  }
 }
 /* Big stopwatch readout inside its sheet. */
 .sw-modal-time {
@@ -819,12 +871,24 @@ button.chip {
 }
 .rest-controls {
   display: flex;
+  gap: 8px;
+  align-items: stretch;
+}
+.rest-adjust {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr); /* +15 +30 on top, −15 −30 below */
   gap: 6px;
 }
-.rest-controls button {
-  padding: 8px 10px;
+.rest-adjust button {
+  padding: 7px 10px;
+}
+.rest-adjust button.plus {
+  border-color: color-mix(in srgb, var(--accent-2) 40%, var(--line));
 }
 .rest-skip {
+  display: flex;
+  align-items: center;
+  padding: 8px 12px;
   background: var(--surface);
 }
 
@@ -1278,7 +1342,7 @@ button.chip {
   text-align: right;
 }
 .pip-time {
-  font-size: min(22vw, 34vh);
+  font-size: min(20vw, 30vh);
   line-height: 1;
   font-weight: 800;
   font-variant-numeric: tabular-nums;
@@ -1286,20 +1350,20 @@ button.chip {
 }
 /* h:mm:ss is ~40% wider than m:ss — shrink so an hour-plus workout still fits. */
 .pip-time.long {
-  font-size: min(15vw, 24vh);
+  font-size: min(14vw, 22vh);
 }
 .pip-view.resting .pip-time {
   color: var(--accent);
 }
 .pip-hr {
-  font-size: min(14vw, 22vh);
+  font-size: min(11vw, 15vh);
   color: var(--danger);
   font-weight: 700;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 .pip-hr-avg {
-  font-size: 0.45em;
+  font-size: 0.55em;
   color: var(--muted);
   font-weight: 600;
 }
@@ -1511,6 +1575,17 @@ button.chip {
 .more-toggle.open {
   background: var(--surface-2);
 }
+/* Faint "last week" (slate) hints: last time you left a note on this set, or beat
+   the scheme's target reps here. Slate = the app's read-only "last week" colour. */
+.more-toggle.hint-prev {
+  color: var(--lastweek);
+  border-color: color-mix(in srgb, var(--lastweek) 45%, var(--line));
+  background: color-mix(in srgb, var(--lastweek) 12%, var(--surface));
+}
+.reps-field.prev-beat {
+  border-color: color-mix(in srgb, var(--lastweek) 45%, var(--line));
+  background: color-mix(in srgb, var(--lastweek) 12%, var(--surface));
+}
 /* Extras reveal: assist/extra reps + a per-set note, full-width under the row. */
 .set-extra {
   flex-basis: 100%;
@@ -1593,6 +1668,16 @@ input[type="range"] {
   padding: 0;
   accent-color: var(--accent);
 }
+/* Untouched mood: handle rests at 5 but reads muted, so it's clearly not-yet-rated. */
+.mood-val.unset {
+  color: var(--muted);
+  font-weight: 600;
+  opacity: 0.65;
+}
+input[type="range"].unset {
+  opacity: 0.7;
+  accent-color: var(--muted);
+}
 .finish-bar {
   display: flex;
   gap: 10px;
@@ -1643,6 +1728,78 @@ input[type="range"] {
   color: var(--muted);
   font-size: 12px;
   margin-top: 2px;
+}
+/* Keep a standards panel that follows a stat grid (e.g. Pace standards under the
+   running stats) from crowding the last stat card above it. */
+.stat-grid + .cat {
+  margin-top: 12px;
+}
+/* "Current form" status card (Records): recent best vs all-time best. Tone tints the %. */
+.form-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 14px 16px;
+  margin: 12px 0 4px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+}
+.form-eyebrow {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-weight: 700;
+  color: var(--muted);
+}
+.form-title {
+  font-family: var(--display);
+  font-weight: 800;
+  font-size: 19px;
+  letter-spacing: -0.01em;
+  margin-top: 2px;
+}
+.form-sub {
+  color: var(--muted);
+  font-size: 12.5px;
+  margin-top: 3px;
+}
+.form-ring {
+  flex: none;
+  font-family: var(--display);
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  font-size: 30px;
+  line-height: 1;
+  padding: 12px 14px;
+  border-radius: 12px;
+  color: var(--muted);
+  background: var(--surface-2);
+}
+.form-ring span {
+  font-size: 0.5em;
+  font-weight: 700;
+}
+.form-card.tone-peak {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
+  background: color-mix(in srgb, var(--accent) 9%, var(--surface));
+}
+.form-card.tone-peak .form-ring {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 16%, var(--surface));
+}
+.form-card.tone-high .form-ring {
+  color: var(--accent-2);
+  background: color-mix(in srgb, var(--accent-2) 15%, var(--surface));
+}
+.form-card.tone-mid .form-ring {
+  color: var(--warn);
+  background: color-mix(in srgb, var(--warn) 15%, var(--surface));
+}
+.form-card.tone-low .form-ring {
+  color: var(--lastweek);
+  background: color-mix(in srgb, var(--lastweek) 15%, var(--surface));
 }
 .section {
   margin: 22px 0 10px;

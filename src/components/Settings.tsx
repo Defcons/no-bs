@@ -821,7 +821,11 @@ export function Settings({
             <span className="muted">{units}</span>
             <span className="tiny muted">now</span>
           </div>
-          {bwHistory.map((e, i) => (
+          {/* Show earlier years newest-first (just under "now"); edit by the real index. */}
+          {bwHistory
+            .map((e, i) => ({ e, i }))
+            .sort((a, b) => (b.e.year || 0) - (a.e.year || 0))
+            .map(({ e, i }) => (
             <div className="row" key={i} style={{ marginTop: 8 }}>
               <input
                 type="text"

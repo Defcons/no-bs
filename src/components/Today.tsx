@@ -93,6 +93,8 @@ export function Today({
   const [hrPromptLeft, setHrPromptLeft] = useState(0);
   const [sheet, setSheet] = useState<null | "stopwatch" | "mood">(null); // header tool sheets
   const [finishAsk, setFinishAsk] = useState(false);
+  const [moodNudge, setMoodNudge] = useState(false); // after 1st set, nudge to rate "before"
+  const moodNudgedRef = useRef(false); // once-per-session guard for that nudge
   const [pipMode, setPipMode] = useState(false);
   const [geoArmed, setGeoArmed] = useState(false); // leave-gym watcher armed (only near end of workout)
   const [editTpl, setEditTpl] = useState<DayTemplate | null>(null); // workout being created/edited
@@ -513,6 +515,25 @@ export function Today({
     return () => window.clearInterval(id);
   }, [hrPrompt]);
 
+  // Rate-your-feeling nudge: you log "before" at the start, but it's easy to just
+  // start lifting. Once the first set is marked done, if "before" is still unset,
+  // pulse the mood button + show a one-line hint (once per session).
+  useEffect(() => {
+    moodNudgedRef.current = false;
+    setMoodNudge(false);
+  }, [draft?.startedAt]);
+  useEffect(() => {
+    if (!draft || moodNudgedRef.current || draft.moodBefore != null) return;
+    if (!draft.exercises.some((e) => e.sets.some((s) => s.done))) return;
+    moodNudgedRef.current = true;
+    setMoodNudge(true);
+  }, [draft?.exercises, draft?.moodBefore]);
+  useEffect(() => {
+    if (!moodNudge) return;
+    const id = window.setTimeout(() => setMoodNudge(false), 8000);
+    return () => window.clearTimeout(id);
+  }, [moodNudge]);
+
   if (!loaded) return <div className="pad">Loading…</div>;
 
   // ---- No active workout: choose a day -----------------------------------
@@ -685,87 +706,105 @@ export function Today({
   return (
     <div className="today">
       <div className="wb-sticky">
+      {/* Day title gets its own full line (never truncated); timer + tools sit below it. */}
       <header className="workout-bar">
-        <div className="wb-left">
-          {draft.custom ? (
-            <input
-              className="wb-day-input"
-              type="text"
-              value={draft.dayName}
-              placeholder="Session name"
-              onChange={(e) => update((d) => ({ ...d, dayName: e.target.value }))}
-            />
-          ) : (
-            <div className="wb-day">{draft.dayName}</div>
-          )}
-          <div className="wb-time-row">
-            {/* Tap to pause/resume the total workout time; paused shows a yellow ring. */}
+        {draft.custom ? (
+          <input
+            className="wb-day-input"
+            type="text"
+            value={draft.dayName}
+            placeholder="Session name"
+            onChange={(e) => update((d) => ({ ...d, dayName: e.target.value }))}
+          />
+        ) : (
+          <div className="wb-day">{draft.dayName}</div>
+        )}
+        <div className="wb-row2">
+          {/* Tap to pause/resume the total workout time; paused shows a yellow ring. */}
+          <button
+            type="button"
+            className={`wb-timer ${draft.wRunning ? "" : "paused"}`}
+            onClick={toggleWorkoutTimer}
+            title={draft.wRunning ? "Tap to pause the workout timer" : "Tap to resume the workout timer"}
+            aria-label={draft.wRunning ? "Pause workout timer" : "Resume workout timer"}
+          >
+            {hhmmss(elapsed)}
+            {!draft.wRunning && <span className="wb-paused-tag">paused</span>}
+          </button>
+          <div className="wb-right">
+            <button className="tool-btn" onClick={() => setSheet("stopwatch")} aria-label="Stopwatch" title="Stopwatch">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M9.5 2.5h5" />
+                <path d="M12 2.5V5" />
+                <circle cx="12" cy="13.5" r="7.5" />
+                <path d="M12 13.5V9.5" />
+              </svg>
+            </button>
             <button
-              type="button"
-              className={`wb-timer ${draft.wRunning ? "" : "paused"}`}
-              onClick={toggleWorkoutTimer}
-              title={draft.wRunning ? "Tap to pause the workout timer" : "Tap to resume the workout timer"}
-              aria-label={draft.wRunning ? "Pause workout timer" : "Resume workout timer"}
+              className={`tool-btn ${draft.moodBefore != null && draft.moodAfter != null ? "set" : ""} ${moodNudge ? "nudge" : ""}`}
+              onClick={() => {
+                setSheet("mood");
+                setMoodNudge(false);
+              }}
+              aria-label="Rate how you feel"
+              title="How you feel"
             >
-              {hhmmss(elapsed)}
-              {!draft.wRunning && <span className="wb-paused-tag">paused</span>}
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="9" />
+                <path d="M8.5 14.5s1.3 1.7 3.5 1.7 3.5-1.7 3.5-1.7" />
+                <path d="M9 9.5h.01M15 9.5h.01" />
+              </svg>
+            </button>
+            <button className="break-btn" onClick={() => startRest()} aria-label="Start rest timer" title="Rest timer">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M6 3.4h12M6 20.6h12" />
+                <path d="M7.6 4c0 4.7 4.4 6 4.4 8s-4.4 3.3-4.4 8" />
+                <path d="M16.4 4c0 4.7-4.4 6-4.4 8s4.4 3.3 4.4 8" />
+                <path d="M9.7 6.6h4.6" opacity="0.5" />
+              </svg>
             </button>
           </div>
         </div>
-        <div className="wb-right">
-          <button
-            className={`hr-badge ${hr.connected ? "on" : ""}`}
-            onClick={hr.connect}
-            title={hr.supported ? "Connect heart rate" : "Web Bluetooth not supported here"}
-          >
-            <span className="hr-heart">♥</span>
-            <span className="hr-col">
-              <span className="hr-val">{hr.bpm ?? (hr.connected ? "…" : "HR")}</span>
-              {hr.avg != null && <span className="hr-avg">avg {hr.avg}</span>}
-            </span>
-          </button>
-          {liveKcal != null && liveKcal > 0 && (
-            <div className="kcal-badge" title="Estimated calories burned (from heart rate)">
-              <span className="kcal-flame">🔥</span>
-              <span className="hr-col">
-                <span className="hr-val num">{liveKcal}</span>
-                <span className="hr-avg">kcal</span>
-              </span>
-            </div>
-          )}
-          <button className="tool-btn" onClick={() => setSheet("stopwatch")} aria-label="Stopwatch" title="Stopwatch">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M9.5 2.5h5" />
-              <path d="M12 2.5V5" />
-              <circle cx="12" cy="13.5" r="7.5" />
-              <path d="M12 13.5V9.5" />
-            </svg>
-          </button>
-          <button
-            className={`tool-btn ${draft.moodBefore != null && draft.moodAfter != null ? "set" : ""}`}
-            onClick={() => setSheet("mood")}
-            aria-label="Rate how you feel"
-            title="How you feel"
-          >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="12" cy="12" r="9" />
-              <path d="M8.5 14.5s1.3 1.7 3.5 1.7 3.5-1.7 3.5-1.7" />
-              <path d="M9 9.5h.01M15 9.5h.01" />
-            </svg>
-          </button>
-          <button className="break-btn" onClick={() => startRest()} aria-label="Start rest timer" title="Rest timer">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M6 3.4h12M6 20.6h12" />
-              <path d="M7.6 4c0 4.7 4.4 6 4.4 8s-4.4 3.3-4.4 8" />
-              <path d="M16.4 4c0 4.7-4.4 6-4.4 8s4.4 3.3 4.4 8" />
-              <path d="M9.7 6.6h4.6" opacity="0.5" />
-            </svg>
-          </button>
-        </div>
       </header>
+
+      {/* Vitals strip: HR + calories get a roomy line under the bar (was cramped beside the tools). */}
+      <div className="vitals-strip">
+        <button
+          className={`hr-badge ${hr.connected ? "on" : ""}`}
+          onClick={hr.connect}
+          title={hr.supported ? "Connect heart rate" : "Web Bluetooth not supported here"}
+        >
+          <span className="hr-heart">♥</span>
+          <span className="hr-col">
+            <span className="hr-val">{hr.bpm ?? (hr.connected ? "…" : "HR")}</span>
+            {hr.avg != null && <span className="hr-avg">avg {hr.avg}</span>}
+          </span>
+        </button>
+        {liveKcal != null && liveKcal > 0 && (
+          <div className="kcal-badge" title="Estimated calories burned (from heart rate)">
+            <span className="kcal-flame">🔥</span>
+            <span className="hr-col">
+              <span className="hr-val num">{liveKcal}</span>
+              <span className="hr-avg">kcal</span>
+            </span>
+          </div>
+        )}
+      </div>
 
       <RestTimer endsAt={draft.restEndsAt ?? null} onChange={setRest} />
       </div>
+
+      {moodNudge && (
+        <button
+          className="mood-nudge"
+          onClick={() => {
+            setSheet("mood");
+            setMoodNudge(false);
+          }}
+        >
+          🙂 How are you feeling? Tap to log it →
+        </button>
+      )}
 
       {draft.custom && native && (
         <div className="pad gps-toggle-row">

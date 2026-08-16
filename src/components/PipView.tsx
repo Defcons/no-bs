@@ -1,6 +1,6 @@
 // The stripped-down view rendered while the window is in Picture-in-Picture. Unlike
 // the overlay bubble, PiP keeps the WebView alive, so timer AND HR update live here.
-// Two rows: "WORK 12:30" / "BREAK 1:12" on top, "♥ 128 (131)" below.
+// Three rows: "WORK 12:30" / "BREAK 1:12" on top, then "♥ 128 avg 131", then "🔥 546 kcal".
 import { useEffect, useState } from "react";
 import { hhmmss, mmss } from "../lib/format";
 import { wElapsedMs } from "../lib/useActiveWorkout";
@@ -35,17 +35,13 @@ export function PipView({ restEndsAt, timer, bpm, avg, kcal }: Props) {
         <span className="pip-label">{resting ? "BREAK" : <>WORK&#8209;<br />OUT</>}</span>
         <span className={`pip-time ${long ? "long" : ""}`}>{timeStr}</span>
       </span>
-      {(bpm != null || (kcal != null && kcal > 0)) && (
+      {bpm != null && (
         <span className="pip-hr">
-          {bpm != null && (
-            <>
-              ♥ {bpm}
-              {avg != null && <span className="pip-hr-avg"> (avg {avg})</span>}
-            </>
-          )}
-          {kcal != null && kcal > 0 && <span className="pip-kcal"> 🔥 {kcal}</span>}
+          ♥ {bpm}
+          {avg != null && <span className="pip-hr-avg"> avg {avg}</span>}
         </span>
       )}
+      {kcal != null && kcal > 0 && <span className="pip-hr pip-kcal">🔥 {kcal} kcal</span>}
     </div>
   );
 }

@@ -8,6 +8,7 @@ import type { WeightUnit } from "./lib/units";
 import { daysAgo } from "./lib/format";
 import { type HrMonitor, createHrMonitor, hrAvailable } from "./lib/hr";
 import { Capacitor } from "@capacitor/core";
+import { Haptics, ImpactStyle } from "@capacitor/haptics";
 import { notificationsAllowed, onNotificationTap, requestNotifications, scheduleTrainingReminders, showReminder } from "./lib/notify";
 import { markAppReady } from "./lib/update";
 import { isExtendedBuild } from "./lib/buildInfo";
@@ -157,15 +158,23 @@ export default function App() {
   // that saved session (native; best-effort on a cold start).
   useEffect(() => onNotificationTap(setMoodLogId), []);
 
-  // Global tap haptics (default on): a short vibration on any button/link tap, like
-  // the OS keyboard/nav. navigator.vibrate works in the Android WebView + PWA, so this
-  // ships OTA (no native Haptics plugin). Capture-phase → fires even if a handler
-  // stops propagation. Text fields aren't buttons, so typing never buzzes.
+  // Global tap haptics (default on): a short buzz on any button/link tap, like the OS
+  // keyboard. Prefers the NATIVE Haptics plugin — it uses the phone's real haptic
+  // engine (same path as the keyboard), whereas the WebView's navigator.vibrate is
+  // routinely ignored on Android. Falls back to navigator.vibrate on web + PWA, and
+  // on older native shells that predate the plugin (isPluginAvailable → false there,
+  // so the new JS never calls a plugin the installed APK doesn't have). Capture-phase
+  // → fires even if a handler stops propagation. Text fields aren't buttons, so typing
+  // never buzzes.
   const haptics = useLiveQuery(() => getSetting("haptics", true), [], true);
   useEffect(() => {
-    if (!haptics || typeof navigator.vibrate !== "function") return;
+    if (!haptics) return;
+    const nativeHaptics = Capacitor.isNativePlatform() && Capacitor.isPluginAvailable("Haptics");
+    if (!nativeHaptics && typeof navigator.vibrate !== "function") return;
     const onTap = (e: MouseEvent) => {
-      if ((e.target as HTMLElement | null)?.closest("button, a[href]")) navigator.vibrate!(8);
+      if (!(e.target as HTMLElement | null)?.closest("button, a[href]")) return;
+      if (nativeHaptics) void Haptics.impact({ style: ImpactStyle.Light });
+      else navigator.vibrate!(8);
     };
     document.addEventListener("click", onTap, true);
     return () => document.removeEventListener("click", onTap, true);

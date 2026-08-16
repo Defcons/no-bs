@@ -100,10 +100,13 @@ export function RestTimer({ endsAt, onChange }: Props) {
         <span className="rest-time">{over ? "0:00" : mmss(remaining)}</span>
       </div>
       <div className="rest-controls">
-        <button onClick={() => adjust(-30)}>−30s</button>
-        <button onClick={() => adjust(-15)}>−15s</button>
-        <button onClick={() => adjust(15)}>+15s</button>
-        <button onClick={() => adjust(30)}>+30s</button>
+        {/* Two rows: add on top, subtract below, aligned by size (15 | 30). */}
+        <div className="rest-adjust">
+          <button className="radj plus" onClick={() => adjust(15)}>+15s</button>
+          <button className="radj plus" onClick={() => adjust(30)}>+30s</button>
+          <button className="radj" onClick={() => adjust(-15)}>−15s</button>
+          <button className="radj" onClick={() => adjust(-30)}>−30s</button>
+        </div>
         <button className="rest-skip" onClick={() => onChange(null)}>
           {over ? "Dismiss" : "Skip"}
         </button>

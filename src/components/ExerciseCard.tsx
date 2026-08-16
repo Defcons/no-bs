@@ -281,6 +281,8 @@ export function ExerciseCard({ exercise, step, prev, prevDate, onChange, onSetDo
               active={isActive && i === exercise.sets.findIndex((x) => !x.done)}
               isPr={i === prIndex}
               prevWeight={prev?.sets[i]?.weight ?? prev?.sets.at(-1)?.weight ?? null}
+              prevNote={prev?.sets[i]?.note ?? null}
+              prevReps={prev?.sets[i]?.reps ?? null}
               onChange={(p) => patchSet(i, p)}
             />
           ))}

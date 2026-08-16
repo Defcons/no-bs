@@ -5,7 +5,7 @@
 //  - time: a single duration field (seconds) for planks/holds.
 //  - distance: km + minutes, what runners/swimmers/cyclists actually log.
 // The rare extras (assist reps + note) live behind a ⋯ reveal. (Phase 2 + P2 units.)
-import { type KeyboardEvent, useRef, useState } from "react";
+import { type KeyboardEvent, useEffect, useRef, useState } from "react";
 import type { ExerciseUnit } from "../lib/exercises";
 import { type WeightUnit, displayStep, fromDisplayWeight, toDisplayWeight, weightStr } from "../lib/units";
 import type { SetEntry } from "../types";
@@ -20,6 +20,8 @@ type Props = {
   active?: boolean; // the next set to log (first not-done) — subtle outline
   isPr?: boolean; // this set is a new all-time est-1RM PR — gold celebratory badge
   prevWeight?: number | null; // last session's weight (kg), shown as ghost hint
+  prevNote?: string | null; // last session's note on this set → hint the ⋯ + prefill its placeholder
+  prevReps?: number | null; // last session's reps on this set → faint hint if it beat the target
   onChange: (patch: Partial<SetEntry>) => void;
 };
 
@@ -43,7 +45,61 @@ type NumField = "weight" | "reps" | "assist" | "seconds" | "distanceM";
 // Trim trailing zeros: 5.20 → "5.2", 5.00 → "5".
 const tidy = (n: number, digits: number) => String(Number(n.toFixed(digits)));
 
-export function SetInput({ index, set, step, unit = "weight", units = "kg", defaultReps, active, isPr, prevWeight, onChange }: Props) {
+// A decimal number field that keeps what you TYPE while you're typing. The value is
+// parsed to a number live (so "done"/PR logic sees it), but the raw string — with a
+// half-finished "5." or "5," — stays on screen instead of being reformatted away, so
+// the decimal separator is no longer eaten before you can type the next digit.
+// Tap-to-retype: clears on focus; restores the old value if you blur without a new one.
+function DecField({
+  value,
+  format,
+  parse,
+  onCommit,
+  placeholder,
+  unit,
+  fieldClass,
+  extraClass,
+}: {
+  value: number | null;
+  format: (n: number) => string;
+  parse: (s: string) => number | null;
+  onCommit: (n: number | null) => void;
+  placeholder: string;
+  unit: string;
+  fieldClass: string;
+  extraClass?: string;
+}) {
+  const [raw, setRaw] = useState<string | null>(null); // non-null while the user is editing
+  const stash = useRef<number | null>(null);
+  const display = raw != null ? raw : value == null ? "" : format(value);
+  return (
+    <div className={`field ${fieldClass}${extraClass ? ` ${extraClass}` : ""}`}>
+      <input
+        type="text"
+        inputMode="decimal"
+        value={display}
+        placeholder={placeholder}
+        onFocus={() => {
+          stash.current = value;
+          setRaw("");
+          if (value != null) onCommit(null);
+        }}
+        onBlur={() => {
+          if ((raw ?? "").trim() === "" && value == null && stash.current != null) onCommit(stash.current);
+          setRaw(null);
+        }}
+        onKeyDown={blurOnEnter}
+        onChange={(e) => {
+          setRaw(e.target.value);
+          onCommit(parse(e.target.value));
+        }}
+      />
+      <span className="unit">{unit}</span>
+    </div>
+  );
+}
+
+export function SetInput({ index, set, step, unit = "weight", units = "kg", defaultReps, active, isPr, prevWeight, prevNote, prevReps, onChange }: Props) {
   const hasExtra = !!set.note || set.assist != null;
   const [showMore, setShowMore] = useState(hasExtra);
   const done = !!set.done;
@@ -52,6 +108,18 @@ export function SetInput({ index, set, step, unit = "weight", units = "kg", defa
   const distance = unit === "distance";
   // Weight is stored in kg; display + entry happen in the user's unit.
   const dispStep = displayStep(step, units);
+
+  // Auto-collapse the ⋯ panel a few seconds after you finish writing a note, so the
+  // set row tidies itself back up. Rescheduled on each keystroke → fires 3s after the
+  // last one; cancelled while you're in the assist field.
+  const collapseRef = useRef<number | undefined>(undefined);
+  const scheduleCollapse = () => {
+    window.clearTimeout(collapseRef.current);
+    collapseRef.current = window.setTimeout(() => setShowMore(false), 3000);
+  };
+  const cancelCollapse = () => window.clearTimeout(collapseRef.current);
+  useEffect(() => () => window.clearTimeout(collapseRef.current), []);
+
   // Only the number badge marks a set done — value edits deliberately do NOT
   // (user decision 2026-07-12): prefilled weights would otherwise green-flag
   // sets you never performed.
@@ -60,9 +128,9 @@ export function SetInput({ index, set, step, unit = "weight", units = "kg", defa
     onChange({ weight: fromDisplayWeight(Math.max(0, curDisp + dir * dispStep), units) });
   };
 
-  // Tap-to-edit: clear the field on focus (so there's no highlighted text and thus
-  // no Android copy/paste toolbar — just start typing the new value). If the user
-  // taps away without typing, the previous value is restored. (user decision 2026-07-12)
+  // Tap-to-edit for the INTEGER fields (reps/seconds): clear on focus (no highlighted
+  // text → no Android copy/paste toolbar), restore the old value if you tap away
+  // without typing. (Decimal fields use DecField, which owns the same pattern.)
   const stash = useRef<Partial<Record<NumField, number | null>>>({});
   const clearOnFocus = (f: NumField) => () => {
     stash.current[f] = set[f] as number | null;
@@ -71,6 +139,10 @@ export function SetInput({ index, set, step, unit = "weight", units = "kg", defa
   const restoreOnBlur = (f: NumField) => () => {
     if (set[f] == null && stash.current[f] != null) onChange({ [f]: stash.current[f] });
   };
+
+  // Last time you beat the scheme's target reps on this set → a faint "last week"
+  // tint on the reps field (only until you log this set's reps).
+  const repsPrevBeat = set.reps == null && prevReps != null && defaultReps != null && prevReps > defaultReps;
 
   return (
     <div className={`setrow ${done ? "done" : ""} ${active && !done ? "active" : ""} ${isPr ? "pr" : ""}`}>
@@ -99,38 +171,30 @@ export function SetInput({ index, set, step, unit = "weight", units = "kg", defa
         </div>
       ) : distance ? (
         <>
-          <div className="field dist-field">
-            <input
-              type="text"
-              inputMode="decimal"
-              value={set.distanceM == null ? "" : tidy(set.distanceM / 1000, 2)}
-              placeholder="—"
-              onFocus={clearOnFocus("distanceM")}
-              onBlur={restoreOnBlur("distanceM")}
-              onKeyDown={blurOnEnter}
-              onChange={(e) => {
-                const km = parseWeight(e.target.value);
-                onChange({ distanceM: km == null ? null : Math.round(km * 1000) });
-              }}
-            />
-            <span className="unit">km</span>
-          </div>
-          <div className="field dist-field">
-            <input
-              type="text"
-              inputMode="decimal"
-              value={set.seconds == null ? "" : tidy(set.seconds / 60, 1)}
-              placeholder="—"
-              onFocus={clearOnFocus("seconds")}
-              onBlur={restoreOnBlur("seconds")}
-              onKeyDown={blurOnEnter}
-              onChange={(e) => {
-                const min = parseWeight(e.target.value);
-                onChange({ seconds: min == null ? null : Math.round(min * 60) });
-              }}
-            />
-            <span className="unit">min</span>
-          </div>
+          <DecField
+            value={set.distanceM ?? null}
+            format={(m) => tidy(m / 1000, 2)}
+            parse={(s) => {
+              const km = parseWeight(s);
+              return km == null ? null : Math.round(km * 1000);
+            }}
+            onCommit={(v) => onChange({ distanceM: v })}
+            placeholder="—"
+            unit="km"
+            fieldClass="dist-field"
+          />
+          <DecField
+            value={set.seconds ?? null}
+            format={(s) => tidy(s / 60, 1)}
+            parse={(s) => {
+              const min = parseWeight(s);
+              return min == null ? null : Math.round(min * 60);
+            }}
+            onCommit={(v) => onChange({ seconds: v })}
+            placeholder="—"
+            unit="min"
+            fieldClass="dist-field"
+          />
         </>
       ) : (
         <>
@@ -138,22 +202,18 @@ export function SetInput({ index, set, step, unit = "weight", units = "kg", defa
             <button className="stepper" aria-label="decrease" onClick={() => bump(-1)}>
               −
             </button>
-            <div className="field weight-field">
-              <input
-                type="text"
-                inputMode="decimal"
-                value={set.weight == null ? "" : weightStr(set.weight, units)}
-                placeholder={bodyweight ? "BW" : prevWeight != null ? weightStr(prevWeight, units) : "—"}
-                onFocus={clearOnFocus("weight")}
-                onBlur={restoreOnBlur("weight")}
-                onKeyDown={blurOnEnter}
-                onChange={(e) => {
-                  const d = parseWeight(e.target.value);
-                  onChange({ weight: d == null ? null : fromDisplayWeight(d, units) });
-                }}
-              />
-              <span className="unit">{bodyweight ? `+${units}` : units}</span>
-            </div>
+            <DecField
+              value={set.weight ?? null}
+              format={(kg) => weightStr(kg, units)}
+              parse={(s) => {
+                const d = parseWeight(s);
+                return d == null ? null : fromDisplayWeight(d, units);
+              }}
+              onCommit={(v) => onChange({ weight: v })}
+              placeholder={bodyweight ? "BW" : prevWeight != null ? weightStr(prevWeight, units) : "—"}
+              unit={bodyweight ? `+${units}` : units}
+              fieldClass="weight-field"
+            />
             <button className="stepper" aria-label="increase" onClick={() => bump(1)}>
               +
             </button>
@@ -166,7 +226,7 @@ export function SetInput({ index, set, step, unit = "weight", units = "kg", defa
                   ? "reps-over"
                   : "reps-under"
                 : ""
-            }`}
+            } ${repsPrevBeat ? "prev-beat" : ""}`}
           >
             <input
               type="text"
@@ -184,7 +244,7 @@ export function SetInput({ index, set, step, unit = "weight", units = "kg", defa
       )}
 
       <button
-        className={`more-toggle ${hasExtra ? "has-extra" : ""} ${showMore ? "open" : ""}`}
+        className={`more-toggle ${hasExtra ? "has-extra" : ""} ${showMore ? "open" : ""} ${prevNote && !set.note ? "hint-prev" : ""}`}
         aria-label="assist reps & note"
         aria-expanded={showMore}
         onClick={() => setShowMore((v) => !v)}
@@ -206,6 +266,7 @@ export function SetInput({ index, set, step, unit = "weight", units = "kg", defa
                   inputMode="numeric"
                   value={set.assist ?? ""}
                   placeholder="—"
+                  onFocus={cancelCollapse}
                   onKeyDown={blurOnEnter}
                   onChange={(e) => onChange({ assist: parseInt10(e.target.value) })}
                 />
@@ -216,9 +277,13 @@ export function SetInput({ index, set, step, unit = "weight", units = "kg", defa
             className="set-note"
             type="text"
             value={set.note ?? ""}
+            onFocus={cancelCollapse}
             onKeyDown={blurOnEnter}
-            placeholder="Note for this set…"
-            onChange={(e) => onChange({ note: e.target.value || undefined })}
+            placeholder={prevNote ? `Last time: "${prevNote}"` : "Note for this set…"}
+            onChange={(e) => {
+              onChange({ note: e.target.value || undefined });
+              scheduleCollapse();
+            }}
           />
         </div>
       )}

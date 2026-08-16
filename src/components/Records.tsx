@@ -7,7 +7,7 @@ import { hhmmss, mmss, niceDate } from "../lib/format";
 import { fmtDist, fmtPace } from "../lib/runStats";
 import { paceLadder, paceMedals, runPBs, runsFrom } from "../lib/runStandards";
 import { type BwEntry, KEY_LIFTS, REF_BW, type Sex, adjustThresholds, bodyweightForYear, levelClass, rateLift } from "../lib/standards";
-import { type LiftRecord, hasRecord, liftRecords, progression, sessionsPerWeek, summarize, weekNumbersForLast } from "../lib/stats";
+import { type LiftRecord, currentForm, hasRecord, liftRecords, progression, sessionsPerWeek, summarize, weekNumbersForLast } from "../lib/stats";
 import { MUSCLE_ORDER } from "../lib/exercises";
 import { type WeightUnit, fmtWeight, toDisplayWeight, weightStr } from "../lib/units";
 import { ProgressChart } from "./ProgressChart";
@@ -42,6 +42,7 @@ export function Records({
     return { summary, records, byCat, perWeek: sessionsPerWeek(weekly, 12) };
   }, [workouts, includeAltInWeekly]);
   const runs = useMemo(() => runsFrom(workouts ?? []), [workouts]);
+  const form = useMemo(() => currentForm(workouts ?? []), [workouts]);
   if (!workouts) return <div className="pad">Loading…</div>;
   if (workouts.length === 0) return <div className="pad muted">No workouts yet — log your first one!</div>;
 
@@ -58,6 +59,28 @@ export function Records({
       <p className="muted tiny">
         {summary.total} sessions · {niceDate(summary.first)} → {niceDate(summary.last)}
       </p>
+
+      {form && (
+        <div className={`form-card tone-${form.tone}`}>
+          <div className="form-main">
+            <div className="form-eyebrow">Current form</div>
+            <div className="form-title">
+              {form.emoji} {form.label}
+            </div>
+            <div className="form-sub">
+              {form.stale
+                ? "No lifts logged in the last 90 days — jump back in."
+                : `At ${form.pct}% of your all-time best across ${form.lifts} lift${form.lifts === 1 ? "" : "s"}.`}
+            </div>
+          </div>
+          {!form.stale && (
+            <div className="form-ring">
+              {form.pct}
+              <span>%</span>
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="stat-grid">
         <Stat label="Workouts" value={String(summary.total)} />

@@ -118,6 +118,68 @@ export function liftRecords(workouts: StoredWorkout[]): LiftRecord[] {
   return [...map.values()].sort((a, b) => b.count - a.count);
 }
 
+// "Current form": how your recent best (last `recentDays`) stacks up against your
+// all-time best across weight lifts — a fun "how strong am I now vs ever" status.
+// Per lift trained in both windows, ratio = recentBest / allTimeBest (≤ 1, since
+// all-time includes recent); the status is the mean over your most-trained lifts.
+// null when there's no weight history to rate; `stale` when history exists but you
+// haven't touched a barbell in the window.
+export type Form = {
+  pct: number; // 0–100 (mean recent/all-time)
+  emoji: string;
+  label: string;
+  tone: "peak" | "high" | "mid" | "low" | "rest";
+  lifts: number; // how many lifts were compared
+  stale: boolean; // weight history exists, but nothing in the recent window
+};
+export function currentForm(workouts: StoredWorkout[], recentDays = 90): Form | null {
+  const cutoff = new Date(Date.now() - recentDays * 86400000).toISOString().slice(0, 10);
+  const m = new Map<string, { all: number; recent: number; count: number }>();
+  for (const w of workouts) {
+    const recentW = w.date.slice(0, 10) >= cutoff;
+    for (const ex of w.exercises) {
+      const resolved = resolveExercise(ex.name, ex.exerciseId);
+      if (resolved.unit !== "weight") continue; // est-1RM only makes sense for weight lifts
+      const schemeReps = typeof ex.scheme.reps === "number" ? ex.scheme.reps : 0;
+      for (const set of ex.sets) {
+        if (!plausible(set.weight)) continue;
+        const reps = set.reps ?? schemeReps;
+        if (reps <= 0) continue;
+        const e = epley(set.weight, reps);
+        let rec = m.get(resolved.id);
+        if (!rec) m.set(resolved.id, (rec = { all: 0, recent: 0, count: 0 }));
+        rec.count++;
+        if (e > rec.all) rec.all = e;
+        if (recentW && e > rec.recent) rec.recent = e;
+      }
+    }
+  }
+  const rated = [...m.values()].filter((r) => r.all > 0);
+  if (rated.length === 0) return null; // no weight history at all → hide the card
+  // Rate the lifts you've actually trained recently against their all-time best,
+  // weighting toward your staples (most-trained) so a one-off doesn't skew it.
+  const qualifying = rated
+    .filter((r) => r.recent > 0)
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 8);
+  if (qualifying.length === 0) return { pct: 0, emoji: "🌙", label: "Resting", tone: "rest", lifts: 0, stale: true };
+  const mean = qualifying.reduce((s, r) => s + r.recent / r.all, 0) / qualifying.length;
+  const pct = Math.round(mean * 100);
+  const b =
+    pct >= 100
+      ? { emoji: "🔥", label: "New peak", tone: "peak" as const }
+      : pct >= 96
+        ? { emoji: "💪", label: "Peak form", tone: "peak" as const }
+        : pct >= 88
+          ? { emoji: "💪", label: "Near-peak", tone: "high" as const }
+          : pct >= 78
+            ? { emoji: "📈", label: "Building back", tone: "high" as const }
+            : pct >= 65
+              ? { emoji: "🌱", label: "Comeback mode", tone: "mid" as const }
+              : { emoji: "🌱", label: "Rebuilding", tone: "low" as const };
+  return { pct, ...b, lifts: qualifying.length, stale: false };
+}
+
 // Sessions in each of the last `weeks` rolling 7-day windows, oldest→newest
 // (rightmost = the last 7 days). For the consistency trend.
 export function sessionsPerWeek(workouts: StoredWorkout[], weeks = 12): number[] {
