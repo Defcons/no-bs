@@ -1,6 +1,9 @@
 // History analytics: PRs, records and summary stats over stored workouts.
+// All "which day/week/month" derivations go through localDay (audit H1): slicing a
+// stored UTC ISO gave the UTC day, shifting evening sessions into tomorrow.
 import type { StoredWorkout } from "../db";
 import { type ExerciseUnit, type MuscleGroup, resolveExercise } from "./exercises";
+import { localDay } from "./format";
 
 // Est-1RM. A true single IS its own 1RM — the formula's r=1 case would inflate it
 // 3.3% (200 kg single → "206.7"), enough to flip a strength-standard tier.
@@ -148,10 +151,10 @@ export type Form = {
   stale: boolean; // weight history exists, but nothing in the recent window
 };
 export function currentForm(workouts: StoredWorkout[], recentDays = 90): Form | null {
-  const cutoff = new Date(Date.now() - recentDays * 86400000).toISOString().slice(0, 10);
+  const cutoff = localDay(new Date(Date.now() - recentDays * 86400000).toISOString());
   const m = new Map<string, { all: number; recent: number; count: number }>();
   for (const w of workouts) {
-    const recentW = w.date.slice(0, 10) >= cutoff;
+    const recentW = localDay(w.date) >= cutoff;
     for (const ex of w.exercises) {
       const resolved = resolveExercise(ex.name, ex.exerciseId);
       if (resolved.unit !== "weight") continue; // est-1RM only makes sense for weight lifts
@@ -203,7 +206,7 @@ export function sessionsPerWeek(workouts: StoredWorkout[], weeks = 12): number[]
   const todayMs = today.getTime();
   const counts = new Array<number>(weeks).fill(0);
   for (const w of workouts) {
-    const [y, m, d] = w.date.slice(0, 10).split("-").map(Number);
+    const [y, m, d] = localDay(w.date).split("-").map(Number);
     const t = new Date(y, m - 1, d).getTime();
     const idx = Math.floor((todayMs - t) / (7 * 86400000));
     if (idx >= 0 && idx < weeks) counts[weeks - 1 - idx]++;
@@ -233,7 +236,7 @@ export type ProgressPoint = { date: string; e1rm: number; topWeight: number };
 export function progression(workouts: StoredWorkout[], key: string): ProgressPoint[] {
   const byDay = new Map<string, { e1rm: number; topWeight: number }>();
   for (const w of workouts) {
-    const day = w.date.slice(0, 10);
+    const day = localDay(w.date);
     for (const ex of w.exercises) {
       if (resolveExercise(ex.name, ex.exerciseId).id !== key) continue;
       const schemeReps = typeof ex.scheme.reps === "number" ? ex.scheme.reps : 0;
@@ -278,12 +281,12 @@ export type Summary = {
 };
 
 const dayMs = 86400000;
-const monthKey = (iso: string) => iso.slice(0, 7);
+const monthKey = (iso: string) => localDay(iso).slice(0, 7);
 
 export function summarize(workouts: StoredWorkout[]): Summary | null {
   if (workouts.length === 0) return null;
   const ws = [...workouts].sort((a, b) => a.date.localeCompare(b.date));
-  const dates = ws.map((w) => w.date.slice(0, 10));
+  const dates = ws.map((w) => localDay(w.date));
 
   // Longest break = biggest gap between consecutive session days.
   let longestBreakDays = 0;
@@ -299,7 +302,7 @@ export function summarize(workouts: StoredWorkout[]): Summary | null {
   // Current streak = consecutive ISO weeks with >=1 session, counting back from the last.
   const weeks = new Set(ws.map((w) => isoWeek(w.date)));
   let currentStreakWeeks = 0;
-  let cursor = isoWeekNum(ws.at(-1)!.date);
+  let cursor = isoWeekNum(localDay(ws.at(-1)!.date));
   while (weeks.has(weekLabel(cursor))) {
     currentStreakWeeks++;
     cursor = prevWeek(cursor);
@@ -346,7 +349,7 @@ function isoWeekNum(iso: string): number {
   return d.getUTCFullYear() * 100 + week;
 }
 const weekLabel = (n: number) => String(n);
-const isoWeek = (iso: string) => weekLabel(isoWeekNum(iso));
+const isoWeek = (iso: string) => weekLabel(isoWeekNum(localDay(iso)));
 function prevWeek(n: number): number {
   const year = Math.floor(n / 100);
   const week = n % 100;

@@ -16,10 +16,23 @@ export function hhmmss(totalSec: number): string {
     : `${m}:${String(r).padStart(2, "0")}`;
 }
 
+// The LOCAL calendar day ("yyyy-mm-dd") a stored date refers to — THE canonical
+// "which day did this happen" helper; every day-derivation goes through it.
+// App-logged rows store a full UTC ISO timestamp: slicing that gives the UTC day,
+// which is TOMORROW for a US-evening session and YESTERDAY for an Oslo
+// after-midnight one (audit H1). Bare "yyyy-mm-dd" dates (sheet imports) pass
+// through untouched; unparseable input falls back to the old slice.
+export function localDay(iso: string): string {
+  if (!iso || !iso.includes("T")) return (iso || "").slice(0, 10);
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso.slice(0, 10);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
 // "2024-03-15" / ISO -> "15 Mar 2024"
 export function niceDate(iso: string): string {
   if (!iso) return "";
-  const d = new Date(iso.slice(0, 10) + "T00:00:00");
+  const d = new Date(localDay(iso) + "T00:00:00");
   if (Number.isNaN(d.getTime())) return "";
   return d.toLocaleDateString(undefined, { day: "2-digit", month: "short", year: "numeric" });
 }
@@ -38,7 +51,7 @@ export function clockTime(iso: string): string {
 // "yyyy-mm-dd" string is UTC midnight, so subtracting epochs and rounding gave an
 // off-by-one in timezones ahead of UTC — e.g. yesterday reading as "2 days ago".)
 export function daysAgo(iso: string): number {
-  const [y, m, d] = iso.slice(0, 10).split("-").map(Number);
+  const [y, m, d] = localDay(iso).split("-").map(Number);
   const then = new Date(y, m - 1, d).getTime();
   const now = new Date();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();

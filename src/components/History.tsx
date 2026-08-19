@@ -4,7 +4,7 @@
 import { Suspense, lazy, useMemo, useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db, type StoredWorkout } from "../db";
-import { clockTime, daysAgoLabel, hhmmss, mmss, niceDate } from "../lib/format";
+import { clockTime, daysAgoLabel, hhmmss, localDay, mmss, niceDate } from "../lib/format";
 import { computeRun, fmtDist, fmtPace } from "../lib/runStats";
 import { resolveExercise } from "../lib/exercises";
 import { liftRecords, workoutVolume } from "../lib/stats";
@@ -58,7 +58,7 @@ const capFirst = (s: string) => (s ? s[0].toUpperCase() + s.slice(1) : s);
 // Monday-anchored key ("YYYY-MM-DD") for the week a date falls in — built from
 // local Y/M/D parts to avoid UTC-parse drift.
 function weekMondayKey(iso: string): string {
-  const [y, m, d] = iso.slice(0, 10).split("-").map(Number);
+  const [y, m, d] = localDay(iso).split("-").map(Number);
   const dt = new Date(y, m - 1, d);
   dt.setDate(dt.getDate() - ((dt.getDay() + 6) % 7)); // back to Monday
   const mm = String(dt.getMonth() + 1).padStart(2, "0");
@@ -67,7 +67,7 @@ function weekMondayKey(iso: string): string {
 }
 
 const groupKey = (iso: string, by: GroupBy) =>
-  by === "year" ? iso.slice(0, 4) : by === "month" ? iso.slice(0, 7) : weekMondayKey(iso);
+  by === "year" ? localDay(iso).slice(0, 4) : by === "month" ? localDay(iso).slice(0, 7) : weekMondayKey(iso);
 
 function groupLabel(key: string, by: GroupBy): string {
   if (by === "year") return key;
@@ -152,7 +152,7 @@ export function History({
     if (workouts?.length) {
       for (const r of liftRecords(workouts)) {
         if (r.bestE1rm.est <= 0) continue;
-        const d = r.bestE1rm.date.slice(0, 10);
+        const d = localDay(r.bestE1rm.date);
         m.set(d, [...(m.get(d) ?? []), r.name]);
       }
     }
@@ -237,7 +237,7 @@ export function History({
                   units={units}
                   color={splitColorMap.get(w.dayName) ?? splitColor(w.dayName)}
                   volPct={Math.round((workoutVolume(w) / maxVol) * 100)}
-                  prLifts={prByDay.get(w.date.slice(0, 10)) ?? []}
+                  prLifts={prByDay.get(localDay(w.date)) ?? []}
                   kcal={sessionKcal(w.avgHr, w.durationSec, bodyweightKg, age, sex)}
                 />
               ))}

@@ -13,6 +13,7 @@ import {
   setSetting,
 } from "../db";
 import { saveFile } from "../lib/download";
+import { localDay } from "../lib/format";
 import { hrAvailable } from "../lib/hr";
 import { cancelTrainingReminders, notificationsSupported, requestNotifications, scheduleTrainingReminders } from "../lib/notify";
 import { importFromSheet, pendingCount, syncEnabled, syncPending, testSync } from "../lib/sheetSync";
@@ -374,7 +375,7 @@ export function Settings({
       // fullBwHistory, not the prop: bwHistory holds only PAST years — the current
       // year (bodyweightKg) must be in the backup too or a fresh restore loses it.
       const blob = await exportXlsx(workouts, await fullBwHistory(), await db.templates.toArray());
-      await saveFile(`gym-backup-${new Date().toISOString().slice(0, 10)}.xlsx`, blob);
+      await saveFile(`gym-backup-${localDay(new Date().toISOString())}.xlsx`, blob);
       setBackupMsg(`Backed up ${workouts.length} workouts.`);
     } catch (e) {
       setBackupMsg(`Export failed: ${(e as Error).message}`);

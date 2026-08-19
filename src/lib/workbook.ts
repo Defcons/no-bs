@@ -9,7 +9,8 @@
 import { db, getSetting, setSetting, type StoredWorkout } from "../db";
 import type { BwEntry } from "./standards";
 import type { DayTemplate, Scheme } from "../types";
-import { cellFor, sessionKey } from "./sheetSync";
+import { localDay } from "./format";
+import { cellFor, sessionKey, sessionKeys } from "./sheetSync";
 import { computeRun, fmtDist, fmtPace } from "./runStats";
 import { parseBodyweightTab, parseSheet } from "./sheet";
 
@@ -54,13 +55,50 @@ export async function fullBwHistory(): Promise<BwEntry[]> {
   return [...map.entries()].sort((a, b) => a[0] - b[0]).map(([year, kg]) => ({ year, kg }));
 }
 
+// Per-key shape checks for restored preferences: the keys are allowlisted below,
+// but a hand-edited/mangled backup could still carry garbage VALUES ("units": 7,
+// "restDefaultSec": "abc") — an invalid value is skipped, never written.
+type Check = (v: unknown) => boolean;
+const num: Check = (v) => typeof v === "number" && Number.isFinite(v);
+const bool: Check = (v) => typeof v === "boolean";
+const str: Check = (v) => typeof v === "string";
+const oneOf =
+  (...xs: string[]): Check =>
+  (v) => typeof v === "string" && xs.includes(v);
+const SETTING_CHECKS: Record<(typeof BACKUP_SETTINGS)[number], Check> = {
+  age: num,
+  sex: oneOf("male", "female"),
+  autoBreakOnDone: bool,
+  volumeUpBreak: bool,
+  phoneVolumeBreak: bool,
+  mediaBtnBreak: bool,
+  breakCountdown: bool,
+  breakSound: str,
+  restDefaultSec: num,
+  weightStep: num,
+  daysPerWeek: num,
+  units: oneOf("kg", "lb"),
+  theme: oneOf("dark", "light"),
+  keepScreenOn: bool,
+  floatMode: oneOf("pip", "off"),
+  autoEndOnLeave: bool,
+  hrLowThreshold: num,
+  remindersEnabled: bool,
+  exerciseRest: (v) =>
+    typeof v === "object" &&
+    v !== null &&
+    !Array.isArray(v) &&
+    Object.values(v as Record<string, unknown>).every((n) => typeof n === "number" && Number.isFinite(n)),
+};
+
 // Restore preferences — allowlist-filtered on the way IN too, so a hand-edited or
-// older backup can never inject a sync secret or transient key.
+// older backup can never inject a sync secret or transient key; values are
+// shape-checked per key (SETTING_CHECKS) so garbage types never land in Dexie.
 async function applySettings(settings: Record<string, unknown> | undefined): Promise<number> {
   if (!settings) return 0;
   let n = 0;
   for (const key of BACKUP_SETTINGS) {
-    if (key in settings && settings[key] !== undefined && settings[key] !== null) {
+    if (key in settings && settings[key] !== undefined && settings[key] !== null && SETTING_CHECKS[key](settings[key])) {
       await setSetting(key, settings[key]);
       n++;
     }
@@ -88,7 +126,7 @@ function parseSettingsTab(rows: string[][]): Record<string, unknown> {
 const DATA_TAB = "_data";
 
 const fmtDate = (iso: string): string => {
-  const [y, m, d] = iso.slice(0, 10).split("-");
+  const [y, m, d] = localDay(iso).split("-"); // local day — matches sheetSync's header format
   return `${d}.${m}.${y.slice(2)}`;
 };
 
@@ -170,7 +208,7 @@ export function workbookTabs(
 ): SheetTab[] {
   const byYear = new Map<string, StoredWorkout[]>();
   for (const w of workouts) {
-    const y = w.date.slice(0, 4);
+    const y = localDay(w.date).slice(0, 4);
     const arr = byYear.get(y) ?? [];
     arr.push(w);
     byYear.set(y, arr);
@@ -278,7 +316,7 @@ export async function importXlsx(buf: ArrayBuffer): Promise<ImportedBackup> {
 // years (imported wins per year). Never overwrites or deletes.
 export async function applyBackup(imported: ImportedBackup): Promise<{ added: number; bwYears: number; settings: number }> {
   const existing = await db.workouts.toArray();
-  const have = new Set(existing.map(sessionKey));
+  const have = new Set(existing.flatMap(sessionKeys)); // incl. legacy UTC-day keys
   const toAdd: StoredWorkout[] = [];
   for (const w of imported.workouts) {
     if (!w.dayName || !w.date) continue;

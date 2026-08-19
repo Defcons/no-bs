@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db, getSetting, type StoredWorkout } from "../db";
-import { hhmmss, mmss, niceDate } from "../lib/format";
+import { hhmmss, localDay, mmss, niceDate } from "../lib/format";
 import { fmtDist, fmtPace } from "../lib/runStats";
 import { paceLadder, paceMedals, runPBs, runsFrom } from "../lib/runStandards";
 import { type BwEntry, KEY_LIFTS, REF_BW, type Sex, adjustThresholds, bodyweightForYear, levelClass, rateLift } from "../lib/standards";
@@ -123,7 +123,7 @@ export function Records({
                 const rec = records.find((r) => r.standardKey === kl.key);
                 if (!rec) return null;
                 const e1rm = rec.bestE1rm.est;
-                const year = parseInt(rec.bestE1rm.date.slice(0, 4), 10);
+                const year = parseInt(localDay(rec.bestE1rm.date).slice(0, 4), 10);
                 const bw = bodyweightForYear(year, bwHistory, bodyweightKg, currentYear);
                 const r = rateLift(adjustThresholds(kl[sex], bw, age, REF_BW[sex]), e1rm, bw);
                 return (
@@ -342,9 +342,10 @@ function ActivityHeatmap({ workouts }: { workouts: StoredWorkout[] }) {
     const counts = new Map<string, number>(); // "YYYY-MM" → sessions
     const yearSet = new Set<number>();
     for (const w of workouts) {
-      const ym = w.date.slice(0, 7);
+      const day = localDay(w.date);
+      const ym = day.slice(0, 7);
       counts.set(ym, (counts.get(ym) ?? 0) + 1);
-      yearSet.add(+w.date.slice(0, 4));
+      yearSet.add(+day.slice(0, 4));
     }
     return { years: [...yearSet].sort((a, b) => b - a), counts };
   }, [workouts]);

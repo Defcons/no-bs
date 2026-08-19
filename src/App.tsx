@@ -5,7 +5,7 @@ import { db, ensureBootstrapped, getSetting, listExercises, setSetting, type Sto
 import { registerCustomExercises } from "./lib/exercises";
 import { loadExerciseRest } from "./lib/exerciseRest";
 import type { WeightUnit } from "./lib/units";
-import { daysAgo } from "./lib/format";
+import { daysAgo, localDay } from "./lib/format";
 import { type HrMonitor, createHrMonitor, hrAvailable } from "./lib/hr";
 import { Capacitor } from "@capacitor/core";
 import { Haptics, ImpactStyle } from "@capacitor/haptics";
@@ -137,10 +137,10 @@ export default function App() {
     const last = await db.workouts.orderBy("date").reverse().first();
     // Pre-schedule closed-app reminders from the latest workout (native no-ops on web).
     await scheduleTrainingReminders(dpw, last?.date ?? null);
-    const today = new Date().toISOString().slice(0, 10);
+    const today = localDay(new Date().toISOString());
     if ((await getSetting("lastReminder", "")) === today) return;
     const days = last ? daysAgo(last.date) : 999;
-    const trainedToday = last ? last.date.slice(0, 10) === today : false;
+    const trainedToday = last ? localDay(last.date) === today : false;
     if (!trainedToday && trainingDue(days, dpw)) {
       // Stamp BEFORE showing: boot + visibilitychange can call this back-to-back,
       // and both passed the date check before either wrote it (duplicate nudges).
@@ -347,7 +347,7 @@ export default function App() {
       exportedAt: new Date().toISOString(),
     };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
-    await saveFile(`gym-backup-${new Date().toISOString().slice(0, 10)}.json`, blob);
+    await saveFile(`gym-backup-${localDay(new Date().toISOString())}.json`, blob);
   };
 
   const onReset = async () => {

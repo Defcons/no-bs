@@ -7,6 +7,7 @@
 // request (no preflight); Apps Script's redirected response carries ACAO:*.
 import { Capacitor, CapacitorHttp } from "@capacitor/core";
 import { db, getSetting, setSetting, type StoredWorkout } from "../db";
+import { localDay } from "./format";
 import { parseBodyweightTab, parseSheet } from "./sheet";
 import { computeRun, fmtDist, fmtPace } from "./runStats";
 import { downsample, encodePolyline } from "./polyline";
@@ -61,13 +62,15 @@ export function cellFor(ex: ExercisePerf): string {
 // round-trip hash IDENTICALLY: since the 1.56.0 done-only save, undone sets stay in
 // the local array nulled, and note-only / time-distance exercises produce an empty
 // cell — raw lengths differ between the two copies, and every "Import from sheet"
-// would re-add your own sessions as duplicates.
-export function sessionKey(w: {
+// would re-add your own sessions as duplicates. The day is the LOCAL day (matches
+// what fmtDate writes into the sheet header since 1.58.0).
+type KeyableWorkout = {
   dayName: string;
   date: string;
   exercises: { name: string; sets: { weight?: number | null; reps?: number | null }[] }[];
   durationSec?: number;
-}): string {
+};
+function buildKey(w: KeyableWorkout, day: string): string {
   let nEx = 0;
   let nSets = 0;
   for (const e of w.exercises) {
@@ -76,12 +79,25 @@ export function sessionKey(w: {
     nSets += content;
   }
   const mins = w.durationSec ? Math.round(w.durationSec / 60) : 0;
-  return `${w.dayName.trim().toLowerCase()}@@${w.date.slice(0, 10)}@@${nEx}@@${nSets}@@${mins}`;
+  return `${w.dayName.trim().toLowerCase()}@@${day}@@${nEx}@@${nSets}@@${mins}`;
+}
+export function sessionKey(w: KeyableWorkout): string {
+  return buildKey(w, localDay(w.date));
+}
+// Membership keys for an EXISTING local row: its canonical (local-day) key PLUS the
+// legacy UTC-day key when they differ — sheet columns and backups written before
+// 1.58.0 carry the UTC day, so a near-midnight session's old copy would otherwise
+// re-import as a duplicate. Candidates (incoming rows) always use plain sessionKey.
+export function sessionKeys(w: KeyableWorkout): string[] {
+  const local = localDay(w.date);
+  const utc = (w.date || "").slice(0, 10);
+  return utc !== local ? [buildKey(w, local), buildKey(w, utc)] : [buildKey(w, local)];
 }
 
-// ISO date -> "dd.mm.yy" (the sheet's header format).
+// ISO date -> "dd.mm.yy" (the sheet's header format). LOCAL day — an evening
+// session must appear in the sheet under the day the user actually trained.
 function fmtDate(iso: string): string {
-  const [y, m, d] = iso.slice(0, 10).split("-");
+  const [y, m, d] = localDay(iso).split("-");
   return `${d}.${m}.${y.slice(2)}`;
 }
 
@@ -201,7 +217,7 @@ async function syncWorkoutNow(row: StoredWorkout): Promise<SyncResult | null> {
       : "";
   const payload = {
     secret,
-    year: row.date.slice(0, 4),
+    year: localDay(row.date).slice(0, 4), // local day decides the year TAB too
     dayName: row.dayName,
     date: fmtDate(row.date),
     note: row.note ?? "",
@@ -282,8 +298,8 @@ export async function importFromSheet(): Promise<{ added: number; bwYears?: numb
       .filter(([name]) => name !== BODYWEIGHT_TAB)
       .flatMap(([name, rows]) => parseSheet(rows, name));
     const existing = await db.workouts.toArray();
-    const have = new Set(existing.map(sessionKey));
-    const cutoff = new Date(Date.now() + 2 * 86400000).toISOString().slice(0, 10); // drop future typos
+    const have = new Set(existing.flatMap(sessionKeys)); // incl. legacy UTC-day keys
+    const cutoff = localDay(new Date(Date.now() + 2 * 86400000).toISOString()); // drop future typos
 
     const toAdd: StoredWorkout[] = [];
     for (const w of parsed) {

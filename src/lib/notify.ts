@@ -4,6 +4,7 @@
 import { Capacitor } from "@capacitor/core";
 import { LocalNotifications } from "@capacitor/local-notifications";
 import { getSetting } from "../db";
+import { localDay } from "./format";
 
 const native = () => Capacitor.isNativePlatform();
 
@@ -207,14 +208,16 @@ export async function scheduleTrainingReminders(daysPerWeek: number, lastWorkout
     await ensureRestChannel(); // ensure the reminder channel exists first
     await LocalNotifications.cancel({ notifications: TRAIN_NOTIF_IDS.map((id) => ({ id })) });
     const gapDays = Math.ceil(7 / Math.max(1, daysPerWeek));
-    // Parse the date as LOCAL calendar parts — new Date("yyyy-mm-dd") is UTC
-    // midnight, which shifts a day back in UTC-negative timezones.
+    // Parse the LOCAL day of the last workout — new Date("yyyy-mm-dd") is UTC
+    // midnight (shifts a day back in UTC-negative timezones), and slicing a full
+    // ISO gave the UTC day (an evening session read as tomorrow → reminder a day
+    // late). localDay handles both shapes.
     const now = new Date();
     let y = now.getFullYear();
     let mo = now.getMonth();
     let d = now.getDate();
     if (lastWorkoutISO) {
-      const [py, pm, pd] = lastWorkoutISO.slice(0, 10).split("-").map(Number);
+      const [py, pm, pd] = localDay(lastWorkoutISO).split("-").map(Number);
       if (py && pm && pd) [y, mo, d] = [py, pm - 1, pd];
     }
     let due = new Date(y, mo, d + gapDays, REMINDER_HOUR, 0, 0);

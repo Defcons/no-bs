@@ -164,7 +164,13 @@ export function useActiveWorkout() {
   }, []);
 
   // Persist immediately when backgrounded/closed (the debounce could otherwise lose
-  // the last edit if the OS kills the app).
+  // the last edit if the OS kills the app). And on becoming VISIBLE, adopt the
+  // persisted copy if it differs: two web/PWA windows each loaded the draft once and
+  // then last-writer-wins-overwrote each other (sets logged in window A vanished
+  // when window B touched anything). Since we flush on hide, anything different in
+  // the DB when we come back was written by ANOTHER window after our flush — newer
+  // by construction. (Two windows both visible at once still race — phone-first
+  // app, accepted.) Also picks up a finish/cancel done elsewhere (adopts null).
   useEffect(() => {
     const flush = () => {
       window.clearTimeout(saveTimer.current);
@@ -172,7 +178,15 @@ export function useActiveWorkout() {
       setSetting(DRAFT_KEY, draftRef.current);
     };
     const onVis = () => {
-      if (document.visibilityState === "hidden") flush();
+      if (document.visibilityState === "hidden") {
+        flush();
+        return;
+      }
+      if (finishing.current) return;
+      getSetting<Draft | null>(DRAFT_KEY, null).then((d) => {
+        if (finishing.current) return;
+        if (JSON.stringify(d) !== JSON.stringify(draftRef.current)) setDraft(d ?? null);
+      });
     };
     document.addEventListener("visibilitychange", onVis);
     window.addEventListener("pagehide", flush);

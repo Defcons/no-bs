@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <paths xmlns:android="http://schemas.android.com/apk/res/android">
-    <external-path name="my_images" path="." />
+    <!-- Backups/exports are written to the CACHE root (lib/download.ts saveFile) and
+         shared via the share sheet; that's the only FileProvider use. The Capacitor
+         default external-path grant was unused — removed (audit hardening). -->
     <cache-path name="my_cache_images" path="." />
 </paths>

@@ -1,11 +1,12 @@
-// Regression checks for the 2026-08-19 audit-fix batch (1.58.0): sessionKey
+// Regression checks for the 2026-08-19 audit-fix batches (1.58.0): sessionKey
 // sheet-shape normalization, epley r=1, 53-week streaks, the GPS spike gate, the
-// resolver CANON re-probe, and cardio plausibility guards.
+// resolver CANON re-probe, cardio plausibility guards, and localDay (H1) dating.
 // Run anytime: npx tsx scripts/audit-check.ts
-import { sessionKey } from "../src/lib/sheetSync";
+import { sessionKey, sessionKeys } from "../src/lib/sheetSync";
 import { epley, liftRecords, summarize, weekNumbersForLast } from "../src/lib/stats";
 import { resolveExercise } from "../src/lib/exercises";
 import { computeRun } from "../src/lib/runStats";
+import { localDay } from "../src/lib/format";
 import type { StoredWorkout } from "../src/db";
 
 let fails = 0;
@@ -36,10 +37,11 @@ console.log("— sessionKey normalization (H3) —");
       { name: "OHP", sets: [{ weight: null, reps: null }] }, // note-only, all nulled
     ],
   };
-  // The same session as the sheet round-trip reconstructs it: only content survives.
+  // The same session as the sheet round-trip reconstructs it: only content
+  // survives, and the sheet header carries the LOCAL bare day.
   const sheetCopy = {
     dayName: "Push",
-    date: "2026-08-19",
+    date: localDay(local.date),
     durationSec: 3600,
     exercises: [{ name: "Bench", sets: [{ weight: 80, reps: 8 }] }],
   };
@@ -53,8 +55,27 @@ console.log("— sessionKey normalization (H3) —");
     durationSec: 1800,
     exercises: [{ name: "Swimming", sets: [{ weight: null, reps: null }] }], // distance/seconds live on other fields
   };
-  const swimSheet = { dayName: "Alternative", date: "2026-08-19", durationSec: 1800, exercises: [] };
+  const swimSheet = { dayName: "Alternative", date: localDay(swim.date), durationSec: 1800, exercises: [] };
   check("cardio local == sheet copy", sessionKey(swim) === sessionKey(swimSheet));
+}
+
+console.log("— localDay + legacy dual keys (H1) —");
+{
+  check("bare date passes through", localDay("2026-08-19") === "2026-08-19");
+  check("garbage falls back to slice", localDay("not-a-dateT!!") === "not-a-date");
+  // A full ISO resolves to the LOCAL calendar day of that instant.
+  const iso = "2026-08-19T23:30:00.000Z";
+  const d = new Date(iso);
+  const expected = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  check("full ISO → local day", localDay(iso) === expected);
+  // sessionKeys invariants (hold in EVERY timezone): canonical key first; the
+  // legacy UTC-day key is always answered-for (either it IS the canonical one, or
+  // it rides along as the second key so pre-1.58 sheet columns still dedup).
+  const w = { dayName: "Push", date: iso, durationSec: 3600, exercises: [{ name: "Bench", sets: [{ weight: 80, reps: 8 }] }] };
+  const keys = sessionKeys(w);
+  check("canonical key first", keys[0] === sessionKey(w));
+  check("legacy UTC key covered", keys.some((k) => k.includes("@@2026-08-19@@")));
+  check("dual exactly when days differ", (keys.length === 2) === (localDay(iso) !== "2026-08-19"));
 }
 
 console.log("— epley r=1 (audit L) —");
