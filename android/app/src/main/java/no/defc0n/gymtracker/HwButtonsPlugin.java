@@ -60,18 +60,26 @@ public class HwButtonsPlugin extends Plugin {
     }
 
     // Read by MainActivity.onKeyDown() — captures BOTH volume up and down.
-    static boolean captureVolume = false;
+    // volatile: written on Capacitor's plugin-executor thread, read on the main and
+    // accessibility-service threads (no other fence between them).
+    static volatile boolean captureVolume = false;
 
     // When true, the PHONE's own volume keys are CONSUMED (no volume change) and
     // start/skip the break instead — opt-in (setting `phoneVolumeBreak`). Read by
     // MainActivity.onKeyDown (foreground) and VolumeKeyAccessibilityService (locked).
-    static boolean phoneKeyBreak = false;
+    static volatile boolean phoneKeyBreak = false;
     private long lastPhoneFire = 0; // debounce: a11y + activity can both see one press
 
     // Live instance, so the EXTENDED flavor's VolumeKeyAccessibilityService can fire
     // a volume press from OUTSIDE the activity (screen locked / another app on top).
     // It runs in this same process but has no Capacitor Bridge of its own.
-    private static HwButtonsPlugin instance;
+    private static volatile HwButtonsPlugin instance;
+
+    // The a11y service must stop consuming keys once the activity (and with it the
+    // whole break pipeline) is gone — see handleOnDestroy + VolumeKeyAccessibilityService.
+    static boolean alive() {
+        return instance != null;
+    }
 
     private MediaSession session;
 
@@ -149,9 +157,28 @@ public class HwButtonsPlugin extends Plugin {
 
     // --- Volume-change observer -------------------------------------------------
 
+    // An earbud (AVRCP) press moves the media level by one — occasionally two —
+    // steps. Anything bigger is the user actually SETTING volume (system slider
+    // drag, Spotify Connect / Cast remote volume, app-driven change).
+    private static final int MAX_EARBUD_STEP = 2;
+
     private void startVolumeObserver() {
         if (volumeObserver != null || audioManager == null) return;
         lastMusicVol = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC);
+        // Arm-time headroom: arming while the level sits AT min/max leaves the first
+        // press in that direction with zero observable movement (same reason the
+        // per-fire restore stays one step off the extremes) — nudge it in-range now.
+        int max = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
+        int nudged = Math.max(1, Math.min(max - 1, lastMusicVol));
+        if (nudged != lastMusicVol) {
+            log("arm-time nudge " + lastMusicVol + " -> " + nudged);
+            lastMusicVol = nudged;
+            try {
+                audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, nudged, 0);
+            } catch (Exception ignored) {
+                // fixed-volume devices reject writes; the observer still works
+            }
+        }
         log("observer registered, music vol=" + lastMusicVol
                 + " max=" + audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC));
         volumeObserver = new ContentObserver(main) {
@@ -171,6 +198,16 @@ public class HwButtonsPlugin extends Plugin {
                     return;
                 }
                 if (captureVolume) {
+                    // Only a small step reads as an earbud press. A larger jump is real
+                    // user volume intent (slider drag with the panel open, Spotify
+                    // Connect/Cast remote, app-driven change) — firing a break AND
+                    // snapping the level back made media volume impossible to adjust
+                    // mid-workout. Re-baseline and let the user's change stand.
+                    if (Math.abs(now - lastMusicVol) > MAX_EARBUD_STEP) {
+                        log("  -> jump of " + (now - lastMusicVol) + " (user volume intent); re-baseline, no fire");
+                        lastMusicVol = now;
+                        return;
+                    }
                     // An earbud rocker change (no key event preceded it): treat it as a
                     // break trigger and restore the level so music volume doesn't drift.
                     //
@@ -318,6 +355,12 @@ public class HwButtonsPlugin extends Plugin {
         stopSession();
         stopVolumeObserver();
         abandonDuck();
+        // Reset the statics WITH the activity: on the extended flavour the a11y
+        // service keeps this process alive after a swipe-away, and a leftover
+        // phoneKeyBreak=true would make it consume EVERY volume key system-wide
+        // with nothing left to receive the break (until the app is reopened).
+        captureVolume = false;
+        phoneKeyBreak = false;
         if (instance == this) instance = null;
     }
 

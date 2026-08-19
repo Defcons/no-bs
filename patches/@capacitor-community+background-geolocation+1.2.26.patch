@@ -40,7 +40,7 @@ index a92fcf9..0cd53a4 100644
      public void openSettings(PluginCall call) {
          Intent intent = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
 diff --git a/node_modules/@capacitor-community/background-geolocation/android/src/main/java/com/equimaps/capacitor_background_geolocation/BackgroundGeolocationService.java b/node_modules/@capacitor-community/background-geolocation/android/src/main/java/com/equimaps/capacitor_background_geolocation/BackgroundGeolocationService.java
-index fafbb86..43eb3ef 100644
+index fafbb86..e6adb3e 100644
 --- a/node_modules/@capacitor-community/background-geolocation/android/src/main/java/com/equimaps/capacitor_background_geolocation/BackgroundGeolocationService.java
 +++ b/node_modules/@capacitor-community/background-geolocation/android/src/main/java/com/equimaps/capacitor_background_geolocation/BackgroundGeolocationService.java
 @@ -17,7 +17,10 @@ import com.google.android.gms.location.LocationRequest;
@@ -64,7 +64,7 @@ index fafbb86..43eb3ef 100644
      }
      private HashSet<Watcher> watchers = new HashSet<Watcher>();
  
-@@ -86,10 +92,18 @@ public class BackgroundGeolocationService extends Service {
+@@ -86,10 +92,26 @@ public class BackgroundGeolocationService extends Service {
              locationRequest.setPriority(LocationRequest.PRIORITY_HIGH_ACCURACY);
              locationRequest.setSmallestDisplacement(distanceFilter);
  
@@ -78,12 +78,20 @@ index fafbb86..43eb3ef 100644
                  public void onLocationResult(LocationResult locationResult) {
                      Location location = locationResult.getLastLocation();
 +                    if (location != null) {
++                        // Cap the buffer: only the tracker DRAINS it — the geofence
++                        // watcher fills but never drains, so an undrained watcher must
++                        // not grow unboundedly over a long session. 20k fixes ≈ hours
++                        // of tracking headroom; the callback runs on one looper, so
++                        // size-check + remove don't race.
++                        if (buffer.size() >= 20000) {
++                            buffer.remove(0);
++                        }
 +                        buffer.add(location);
 +                    }
                      Intent intent = new Intent(ACTION_BROADCAST);
                      intent.putExtra("location", location);
                      intent.putExtra("id", id);
-@@ -111,6 +125,7 @@ public class BackgroundGeolocationService extends Service {
+@@ -111,6 +133,7 @@ public class BackgroundGeolocationService extends Service {
              watcher.locationRequest = locationRequest;
              watcher.locationCallback = callback;
              watcher.backgroundNotification = backgroundNotification;
@@ -91,7 +99,7 @@ index fafbb86..43eb3ef 100644
              watchers.add(watcher);
  
              // According to Android Studio, this method can throw a Security Exception if
-@@ -168,6 +183,21 @@ public class BackgroundGeolocationService extends Service {
+@@ -168,6 +191,21 @@ public class BackgroundGeolocationService extends Service {
              }
          }
  

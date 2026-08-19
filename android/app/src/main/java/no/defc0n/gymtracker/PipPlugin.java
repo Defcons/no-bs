@@ -21,9 +21,10 @@ import com.getcapacitor.annotation.CapacitorPlugin;
 public class PipPlugin extends Plugin {
 
     // Read by MainActivity.onUserLeaveHint() to auto-float on Home/recents.
-    static boolean autoEnter = false;
-    static int autoW = 1; // aspect ratio of the auto-entered PiP window
-    static int autoH = 1;
+    // volatile: written on Capacitor's plugin-executor thread, read on main.
+    static volatile boolean autoEnter = false;
+    static volatile int autoW = 1; // aspect ratio of the auto-entered PiP window
+    static volatile int autoH = 1;
 
     private boolean supported() {
         return Build.VERSION.SDK_INT >= Build.VERSION_CODES.O

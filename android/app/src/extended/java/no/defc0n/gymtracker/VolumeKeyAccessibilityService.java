@@ -52,8 +52,11 @@ public class VolumeKeyAccessibilityService extends AccessibilityService {
                 + " capture=" + HwButtonsPlugin.captureVolume + " phoneBreak=" + HwButtonsPlugin.phoneKeyBreak);
         // Opt-in: phone volume keys start/skip the break and are CONSUMED (no volume
         // change). This global handler is what makes phone-volume-break work with the
-        // screen LOCKED / another app on top (extended build only).
-        if (HwButtonsPlugin.phoneKeyBreak) {
+        // screen LOCKED / another app on top (extended build only). The alive() guard
+        // is belt-and-braces beside handleOnDestroy's static reset: if the activity is
+        // gone there is nobody to receive the break, and consuming then would eat
+        // every volume key system-wide.
+        if (HwButtonsPlugin.phoneKeyBreak && HwButtonsPlugin.alive()) {
             if (event.getAction() == KeyEvent.ACTION_DOWN && event.getRepeatCount() == 0) {
                 HwButtonsPlugin.firePhoneKeyBreak();
             }
