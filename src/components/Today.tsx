@@ -125,10 +125,21 @@ export function Today({
     if (draft) distinctExerciseNames().then(setNameHistory);
   }, [draft == null]);
 
-  // Load last session of this day for per-set ghost hints.
+  // Load last session of this day for per-set ghost hints. Cancelled on dayName
+  // change — a custom session's name edits fire this per keystroke, and without the
+  // flag the last query to RESOLVE (not the last typed) would win.
   useEffect(() => {
-    if (draft) lastWorkoutForDay(draft.dayName).then(setPrev);
-    else setPrev(undefined);
+    if (!draft) {
+      setPrev(undefined);
+      return;
+    }
+    let cancelled = false;
+    lastWorkoutForDay(draft.dayName).then((w) => {
+      if (!cancelled) setPrev(w);
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [draft?.dayName]);
 
   // All-time best est-1RM per lift for the live "PR" badge. Computed once when a
@@ -219,6 +230,7 @@ export function Today({
   backRef.current = { activeTab, draft, cancel, goToday };
   useEffect(() => {
     if (!Capacitor.isNativePlatform()) return;
+    let cancelled = false;
     let handle: PluginListenerHandle | undefined;
     CapacitorApp.addListener("backButton", () => {
       const { activeTab: t, draft: d, cancel: c, goToday: g } = backRef.current;
@@ -232,8 +244,15 @@ export function Today({
         return;
       }
       void CapacitorApp.exitApp(); // Today with no workout → exit
-    }).then((h) => (handle = h));
+    }).then((h) => {
+      // Cleanup can run before addListener resolves (StrictMode dev remount) — a
+      // listener registered after that must be removed here, or TWO stay live and
+      // every back press double-fires ("never register a second").
+      if (cancelled) void h.remove();
+      else handle = h;
+    });
     return () => {
+      cancelled = true;
       handle?.remove();
     };
   }, []);
@@ -313,7 +332,15 @@ export function Today({
   };
   // The Finish button: nudge to rate mood first if it wasn't set.
   const finishWorkout = () => {
-    if (draft && (draft.moodBefore == null || draft.moodAfter == null)) setFinishAsk(true);
+    if (!draft) return;
+    // Done-only contract guard: on a template session with NOTHING ticked ✓ (and no
+    // notes), finish() saves an empty workout — every typed/prefilled number drops.
+    // That's almost always forgotten badges, so confirm before losing a session.
+    if (!draft.custom && !draft.exercises.some((ex) => ex.note || ex.sets.some((s) => s.done || s.note))) {
+      if (!confirm("No sets are marked done (✓), so the session will save empty — typed numbers are only kept for ticked sets.\n\nFinish anyway?"))
+        return;
+    }
+    if (draft.moodBefore == null || draft.moodAfter == null) setFinishAsk(true);
     else finishNow(false);
   };
   // Watchdogs call this (auto-end); manual paths call finishNow(false) directly.
@@ -484,8 +511,11 @@ export function Today({
 
   // Low-HR watchdog: after HR sits below the threshold for 10 min, ask if you're
   // still working out; if unanswered for 5 more min, auto-end. Driven by HR updates.
+  // Gated off custom sessions AND History edits (beginEdit sets custom) — same gate
+  // as the dropout watchdog above: an auto-end during an edit would compute duration
+  // from the ORIGINAL session date and write a weeks-long durationSec into the row.
   useEffect(() => {
-    if (!draft || !hr.connected || hrLowThreshold <= 0 || hr.bpm == null) {
+    if (!draft || draft.custom || !hr.connected || hrLowThreshold <= 0 || hr.bpm == null) {
       if (!draft) lowSince.current = null;
       return;
     }
@@ -502,13 +532,25 @@ export function Today({
     }
   }, [hr.bpm, hr.connected, hrLowThreshold, draft, hrPrompt]);
 
-  // Prompt countdown → auto-end when it hits zero.
+  // The prompt must die with the workout: cancel()/back-discard clears the draft but
+  // used to leave hrPrompt set — the countdown kept ticking invisibly and its expiry
+  // auto-finished whatever draft existed by then (a FRESH session, mid-set).
+  useEffect(() => {
+    if (!draft) setHrPrompt(false);
+  }, [draft == null]);
+  // Prompt countdown → auto-end ONCE when it hits zero (finishNow clears hrPrompt on
+  // success; if the auto-finish fails, the modal stays for a manual decision instead
+  // of a silent 1 s retry loop).
   useEffect(() => {
     if (!hrPrompt) return;
+    let fired = false;
     const tick = () => {
       const left = Math.ceil((promptDeadline.current - Date.now()) / 1000);
       setHrPromptLeft(Math.max(0, left));
-      if (left <= 0) finishRef.current();
+      if (left <= 0 && !fired) {
+        fired = true;
+        finishRef.current();
+      }
     };
     tick();
     const id = window.setInterval(tick, 1000);

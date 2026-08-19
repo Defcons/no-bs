@@ -62,9 +62,13 @@ export async function notificationsAllowed(): Promise<boolean> {
 
 export async function requestNotifications(): Promise<boolean> {
   if (native()) {
-    const p = await LocalNotifications.requestPermissions();
-    await ensureRestChannel();
-    return p.display === "granted";
+    try {
+      const p = await LocalNotifications.requestPermissions();
+      await ensureRestChannel();
+      return p.display === "granted";
+    } catch {
+      return false; // fired fire-and-forget on boot — must not become an unhandled rejection
+    }
   }
   if (typeof Notification === "undefined") return false;
   return (await Notification.requestPermission()) === "granted";
@@ -153,11 +157,18 @@ export function onNotificationTap(cb: (workoutId: number) => void): () => void {
 // fires even if the app is in the background. (The web build relies on the in-app
 // timer + SW notification.)
 const BREAK_NOTIF_ID = 7001;
+// Bumped by every schedule AND cancel: a schedule that awaited its setting/channel
+// reads re-checks it before arming — a skip's cancel() landing inside that gap would
+// otherwise be overtaken by the late schedule(), re-arming a "Rest over — go!" ding
+// for a break that no longer exists.
+let breakNotifGen = 0;
 export async function scheduleBreakNotification(at: number): Promise<void> {
   if (!native()) return;
+  const myGen = ++breakNotifGen;
   if (!(await getSetting("breakNotify", false))) return; // opt-in (default off) — see Settings "Break-over notification"
   try {
     await ensureRestChannel();
+    if (breakNotifGen !== myGen) return; // cancelled/superseded while awaiting
     await LocalNotifications.schedule({
       notifications: [
         {
@@ -175,6 +186,7 @@ export async function scheduleBreakNotification(at: number): Promise<void> {
 }
 export async function cancelBreakNotification(): Promise<void> {
   if (!native()) return;
+  breakNotifGen++; // invalidate any schedule still inside its await gap
   try {
     await LocalNotifications.cancel({ notifications: [{ id: BREAK_NOTIF_ID }] });
   } catch {

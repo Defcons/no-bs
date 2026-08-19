@@ -34,6 +34,23 @@ export async function currentVersion(): Promise<string> {
 
 export type UpdateResult = { status: "updated" | "uptodate" | "error"; message: string };
 
+// True when `offered` is a strictly older x.y.z than `current`. Non-semver versions
+// ("builtin", "web", odd suffixes) can't be compared — return false so updates
+// still apply there.
+function isSemverDowngrade(offered: string, current: string): boolean {
+  const parse = (v: string): number[] | null => {
+    const m = /^(\d+)\.(\d+)\.(\d+)/.exec(v);
+    return m ? [Number(m[1]), Number(m[2]), Number(m[3])] : null;
+  };
+  const o = parse(offered);
+  const c = parse(current);
+  if (!o || !c) return false;
+  for (let i = 0; i < 3; i++) {
+    if (o[i] !== c[i]) return o[i] < c[i];
+  }
+  return false;
+}
+
 export async function checkAndApplyUpdate(): Promise<UpdateResult> {
   if (!native()) return { status: "error", message: "Updates apply to the installed app only." };
   try {
@@ -48,6 +65,12 @@ export async function checkAndApplyUpdate(): Promise<UpdateResult> {
     }
     const cur = await currentVersion();
     if (latest.version === cur) return { status: "uptodate", message: "You're already on the latest version." };
+    // Downgrade refusal (defense-in-depth beside the origin pin): a stale or
+    // tampered version.json offering an OLDER semver must not roll us back. The
+    // baked "builtin" bundle has no comparable version — updates always apply there.
+    if (isSemverDowngrade(latest.version, cur)) {
+      return { status: "error", message: `Server offers v${latest.version} but you're on v${cur} — not downgrading.` };
+    }
     const bundle = await CapacitorUpdater.download({ url: latest.url, version: latest.version });
     // Stamp the new version so that after the reload the app can open on Settings and
     // confirm the update (App.readJustUpdated reads-and-clears this on boot).

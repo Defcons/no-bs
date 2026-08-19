@@ -48,6 +48,7 @@ export function TemplateEditor({ template, units, onClose }: { template: DayTemp
   const [name, setName] = useState(template.name);
   const [rows, setRows] = useState<ExRow[]>(toRows(template, units));
   const [history, setHistory] = useState<string[]>([]);
+  const [saving, setSaving] = useState(false); // double-tap on Save = two identical day templates
   const isNew = template.id == null;
 
   useEffect(() => {
@@ -69,27 +70,33 @@ export function TemplateEditor({ template, units, onClose }: { template: DayTemp
     });
 
   const save = async () => {
-    const named = rows.filter((r) => r.name.trim());
-    const exercises = named.map((r) => ({
-      name: r.name.trim(),
-      exerciseId: r.exerciseId,
-      scheme: parseScheme(r.sets, r.reps),
-      step: parseStepKg(r.step, units),
-    }));
-    // Persist each exercise's rest (global per exercise, by resolved id). Sequential
-    // — setRestForId copies+rewrites the shared map, so concurrent writes would drop
-    // each other's changes.
-    for (const r of named) {
-      await setRestForId(resolveExercise(r.name.trim(), r.exerciseId).id, r.rest ?? null);
+    if (saving) return; // the awaits below leave the button live — a double-tap added the template twice
+    setSaving(true);
+    try {
+      const named = rows.filter((r) => r.name.trim());
+      const exercises = named.map((r) => ({
+        name: r.name.trim(),
+        exerciseId: r.exerciseId,
+        scheme: parseScheme(r.sets, r.reps),
+        step: parseStepKg(r.step, units),
+      }));
+      // Persist each exercise's rest (global per exercise, by resolved id). Sequential
+      // — setRestForId copies+rewrites the shared map, so concurrent writes would drop
+      // each other's changes.
+      for (const r of named) {
+        await setRestForId(resolveExercise(r.name.trim(), r.exerciseId).id, r.rest ?? null);
+      }
+      const cleanName = name.trim() || "Workout";
+      if (isNew) {
+        const last = await db.templates.orderBy("order").last();
+        await db.templates.add({ name: cleanName, order: (last?.order ?? -1) + 1, exercises });
+      } else {
+        await db.templates.update(template.id!, { name: cleanName, exercises });
+      }
+      onClose();
+    } finally {
+      setSaving(false); // release on error too, or Save dead-ends
     }
-    const cleanName = name.trim() || "Workout";
-    if (isNew) {
-      const last = await db.templates.orderBy("order").last();
-      await db.templates.add({ name: cleanName, order: (last?.order ?? -1) + 1, exercises });
-    } else {
-      await db.templates.update(template.id!, { name: cleanName, exercises });
-    }
-    onClose();
   };
 
   const del = async () => {
@@ -202,8 +209,8 @@ export function TemplateEditor({ template, units, onClose }: { template: DayTemp
           <button className="ghost" onClick={onClose}>
             Cancel
           </button>
-          <button className="primary" onClick={save}>
-            Save
+          <button className="primary" onClick={save} disabled={saving}>
+            {saving ? "Saving…" : "Save"}
           </button>
         </footer>
       </div>

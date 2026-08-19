@@ -110,7 +110,7 @@ export const LIBRARY: Exercise[] = [
   { id: "good-morning", name: "Good Morning", aliases: ["good mornings"], muscle: "Legs", secondary: ["Back"], equipment: "barbell", unit: W, compound: true, builtin: true },
 
   // ── Shoulder ──
-  { id: "overhead-press", name: "Overhead Press", aliases: ["ohp", "military press", "military", "standing press", "shoulder press barbell", "strict press"], muscle: "Shoulder", secondary: ["Arms"], equipment: "barbell", unit: W, compound: true, standardKey: "ohp", builtin: true },
+  { id: "overhead-press", name: "Overhead Press", aliases: ["ohp", "military press", "militarypress", "military", "standing press", "shoulder press barbell", "strict press"], muscle: "Shoulder", secondary: ["Arms"], equipment: "barbell", unit: W, compound: true, standardKey: "ohp", builtin: true },
   { id: "dumbbell-shoulder-press", name: "Dumbbell Shoulder Press", aliases: ["shoulder press", "db shoulder press", "seated dumbbell press", "dumbbell overhead press", "shoulderpress"], muscle: "Shoulder", secondary: ["Arms"], equipment: "dumbbell", unit: W, compound: true, builtin: true },
   { id: "arnold-press", name: "Arnold Press", aliases: ["arnold"], muscle: "Shoulder", secondary: ["Arms"], equipment: "dumbbell", unit: W, builtin: true },
   { id: "machine-shoulder-press", name: "Machine Shoulder Press", aliases: ["shoulder press machine", "seated shoulder press machine"], muscle: "Shoulder", equipment: "machine", unit: W, builtin: true },
@@ -212,6 +212,19 @@ export function resolveExercise(name: string, exerciseId?: string): Exercise {
   const k = norm(name);
   const hit = customIndex.get(k) ?? builtinIndex.get(k);
   if (hit) return hit;
+  // A fused/variant spelling can miss the alias index while its CANON rewrite IS a
+  // catalog name/alias (e.g. "Militarypress" → "Military press" → overhead-press).
+  // Re-probe with the rewrite so the old-sheet era and the app era share one
+  // identity — but ONLY when the rule consumed the WHOLE name: a partial match
+  // ("Incline curl" → "Incline") must NOT collapse into the catalog's incline
+  // bench entry; those keep the legacy fallback below, exactly as before.
+  for (const [re, canon] of CANON) {
+    if (!re.test(name)) continue;
+    if (norm(name.replace(re, " ")) !== "") break; // partial match → legacy fallback
+    const canonHit = customIndex.get(norm(canon)) ?? builtinIndex.get(norm(canon));
+    if (canonHit) return canonHit;
+    break;
+  }
   return {
     id: canonKey(name), // == old liftRecords key for unmatched names
     name: canonName(name),

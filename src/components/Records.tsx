@@ -277,7 +277,7 @@ function RecordRow({ r, workouts, units }: { r: LiftRecord; workouts: StoredWork
                 <div className="rec-metric">
                   <div className="rec-lbl">Max reps</div>
                   <span className="big">{r.maxReps.reps}</span>
-                  {r.maxReps.weight > 0 && <span className="muted"> +{r.maxReps.weight}kg</span>}
+                  {r.maxReps.weight > 0 && <span className="muted"> +{weightStr(r.maxReps.weight, units)} {units}</span>}
                   <div className="tiny muted">{niceDate(r.maxReps.date)}</div>
                 </div>
               )}

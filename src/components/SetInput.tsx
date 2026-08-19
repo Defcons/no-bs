@@ -50,6 +50,7 @@ const tidy = (n: number, digits: number) => String(Number(n.toFixed(digits)));
 // half-finished "5." or "5," — stays on screen instead of being reformatted away, so
 // the decimal separator is no longer eaten before you can type the next digit.
 // Tap-to-retype: clears on focus; restores the old value if you blur without a new one.
+// (Settings' bodyweight fields fix the same bug with their own raw-buffer BwField.)
 function DecField({
   value,
   format,

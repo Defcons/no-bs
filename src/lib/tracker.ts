@@ -53,6 +53,11 @@ const HR_FRESH_MS = 8000; // only stamp HR on fixes that just arrived (foregroun
 
 let watcherId: string | null = null;
 let starting = false; // a start() is mid-await
+// Bumped by every start/stop. A start whose generation went stale across an await
+// was superseded (stop, or stop→start) and must clean up its own watcher instead of
+// claiming state — a bare boolean gets clobbered by overlapping cycles and leaves a
+// live watcher wired to a dead recording session (same pattern as geofence.ts).
+let gen = 0;
 let points: TrackPoint[] = [];
 let getHr: (() => number | null) | null = null;
 let drainTimer: ReturnType<typeof setInterval> | null = null;
@@ -85,6 +90,7 @@ async function drain(id: string): Promise<void> {
 // Start recording. getBpm lets us stamp fresh (foreground) points with the live HR.
 export async function startTracking(getBpm: () => number | null): Promise<boolean> {
   if (!Capacitor.isNativePlatform() || watcherId || starting) return false;
+  const myGen = ++gen;
   starting = true;
   points = [];
   recordMode = "pending";
@@ -107,23 +113,27 @@ export async function startTracking(getBpm: () => number | null): Promise<boolea
         points.push({ t: position.time ?? Date.now(), lat: position.latitude, lng: position.longitude, hr });
       },
     );
-    if (!starting) {
-      // stopTracking() ran while we awaited the watcher → tear it back down.
+    if (gen !== myGen) {
+      // stopTracking() (or a stop→start) ran while we awaited → tear it back down.
       await BackgroundGeolocation.removeWatcher({ id }).catch(() => {});
       return false;
     }
 
     // Probe native buffering; old native builds reject → legacy JS-callback mode.
+    // Assigned to the shared recordMode only AFTER the staleness check — a stale
+    // start must not clobber the mode a successor already established.
+    let mode: "native" | "legacy";
     try {
       await BackgroundGeolocation.getBufferedLocations({ id }); // resolves (and clears) on the patched APK
-      recordMode = "native";
+      mode = "native";
     } catch {
-      recordMode = "legacy";
+      mode = "legacy";
     }
-    if (!starting) {
+    if (gen !== myGen) {
       await BackgroundGeolocation.removeWatcher({ id }).catch(() => {});
       return false;
     }
+    recordMode = mode;
 
     watcherId = id;
     if (recordMode === "native") {
@@ -134,7 +144,9 @@ export async function startTracking(getBpm: () => number | null): Promise<boolea
   } catch {
     return false; // permission denied / plugin error — recording just stays off
   } finally {
-    starting = false;
+    // Only the current generation may release the lock (a stale start clearing it
+    // would let two starts run concurrently).
+    if (gen === myGen) starting = false;
   }
 }
 
@@ -144,7 +156,8 @@ export function currentTrack(): TrackPoint[] {
 
 // Stop recording and return the collected track (final native drain included).
 export async function stopTracking(): Promise<TrackPoint[]> {
-  starting = false; // cancel any in-flight start
+  gen++; // invalidate any in-flight start (it cleans up after itself on resolve)
+  starting = false;
   if (drainTimer) {
     clearInterval(drainTimer);
     drainTimer = null;

@@ -39,7 +39,14 @@ export function ExerciseNameField({ value, onChange, placeholder, className, his
   };
   const saveCustom = async () => {
     if (!creating || !creating.name.trim()) return;
-    const ex: Exercise = { id: slug(creating.name), name: creating.name.trim(), muscle: creating.muscle, equipment: "other", unit: "weight", builtin: false };
+    // Punctuation variants slug identically ("Press (machine)" / "Press – machine"
+    // both → "press-machine"), and db.exercises.put would silently OVERWRITE the
+    // existing entry, merging both histories under one catalog row. Probe the
+    // resolver's id maps (covers builtins AND the user catalog) and suffix until free.
+    const base = slug(creating.name);
+    let id = base;
+    for (let n = 2; !resolveExercise("", id).fallback; n++) id = `${base}-${n}`;
+    const ex: Exercise = { id, name: creating.name.trim(), muscle: creating.muscle, equipment: "other", unit: "weight", builtin: false };
     await upsertExercise(ex); // App's live query re-registers it into the resolver
     pick(ex.name, ex);
   };

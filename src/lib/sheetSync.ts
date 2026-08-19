@@ -56,15 +56,27 @@ export function cellFor(ex: ExercisePerf): string {
 // same-day sessions (e.g. a morning and an evening run), so include a cheap
 // content signature — identical sessions still dedupe, distinct ones survive.
 // Duration is rounded to minutes so formatting round-trips don't split keys.
+// The signature counts only what the SHEET can carry (sets with a weight or reps,
+// exercises with ≥1 such set — cellFor's own filter) so a local row and its sheet
+// round-trip hash IDENTICALLY: since the 1.56.0 done-only save, undone sets stay in
+// the local array nulled, and note-only / time-distance exercises produce an empty
+// cell — raw lengths differ between the two copies, and every "Import from sheet"
+// would re-add your own sessions as duplicates.
 export function sessionKey(w: {
   dayName: string;
   date: string;
-  exercises: { name: string; sets: unknown[] }[];
+  exercises: { name: string; sets: { weight?: number | null; reps?: number | null }[] }[];
   durationSec?: number;
 }): string {
-  const nSets = w.exercises.reduce((a, e) => a + e.sets.length, 0);
+  let nEx = 0;
+  let nSets = 0;
+  for (const e of w.exercises) {
+    const content = e.sets.filter((s) => s.weight != null || s.reps != null).length;
+    if (content > 0) nEx++;
+    nSets += content;
+  }
   const mins = w.durationSec ? Math.round(w.durationSec / 60) : 0;
-  return `${w.dayName.trim().toLowerCase()}@@${w.date.slice(0, 10)}@@${w.exercises.length}@@${nSets}@@${mins}`;
+  return `${w.dayName.trim().toLowerCase()}@@${w.date.slice(0, 10)}@@${nEx}@@${nSets}@@${mins}`;
 }
 
 // ISO date -> "dd.mm.yy" (the sheet's header format).
@@ -206,12 +218,22 @@ async function syncWorkoutNow(row: StoredWorkout): Promise<SyncResult | null> {
   };
   try {
     const result = await post(url, payload);
-    // Only mark synced if the sheet actually took the exercises (a name mismatch
-    // returns ok:true with written:[] — don't silently claim success then).
+    // Only mark synced if the sheet took ALL the exercises. A name mismatch returns
+    // ok:true with that exercise in skipped:[] — a half-written session must stay
+    // pending (and say so), or the skipped lift's history silently never reaches
+    // the sheet again. Retries are safe: the server reuses the same-date column.
     const wroteExercises = (result.written?.length ?? 0) > 0;
     const nothingToWrite = payload.exercises.length === 0;
-    if (result.ok && (wroteExercises || nothingToWrite) && row.id != null) {
+    const skipped = result.skipped ?? [];
+    if (result.ok && (wroteExercises || nothingToWrite) && skipped.length === 0 && row.id != null) {
       await db.workouts.update(row.id, { synced: true });
+    }
+    if (result.ok && skipped.length > 0) {
+      return {
+        ...result,
+        ok: false,
+        error: `The sheet has no row for: ${skipped.join(", ")} — rename the sheet row (or the exercise) and retry from Settings → Sync now.`,
+      };
     }
     return result;
   } catch (e) {

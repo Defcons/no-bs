@@ -3,6 +3,7 @@
 // the target time (endsAt) is stored on the workout draft.
 import { Capacitor } from "@capacitor/core";
 import { useEffect, useRef, useState } from "react";
+import { useLiveQuery } from "dexie-react-hooks";
 import { mmss } from "../lib/format";
 import { showReminder } from "../lib/notify";
 import { getCustomSound, getSetting } from "../db";
@@ -19,30 +20,37 @@ export function RestTimer({ endsAt, onChange }: Props) {
   const dismissRef = useRef(0); // auto-dismiss timeout after the alarm fires
   // Pre-load the chosen alarm sound so it plays instantly when rest ends. The
   // setting is either a built-in id ("beep"…) or "custom:<id>" (a user's file,
-  // pre-decoded into an AudioBuffer here).
+  // pre-decoded into an AudioBuffer here). Read REACTIVELY (same pattern as the
+  // 1.53.0 break-trigger toggles): RestTimer stays mounted for the app's lifetime,
+  // so a mount-once load meant a Settings change never applied mid-session.
+  const soundChoice = useLiveQuery(() => getSetting<string>("breakSound", "beep"), [], "beep");
   const soundRef = useRef<BreakSoundId>("beep");
   const customBufRef = useRef<AudioBuffer | null>(null);
   useEffect(() => {
-    getSetting<string>("breakSound", "beep").then(async (s) => {
-      if (isCustom(s)) {
+    let cancelled = false;
+    (async () => {
+      if (isCustom(soundChoice)) {
         try {
-          const rec = await getCustomSound(customIdOf(s));
-          customBufRef.current = rec ? await decodeSound(rec.blob) : null;
+          const rec = await getCustomSound(customIdOf(soundChoice));
+          const buf = rec ? await decodeSound(rec.blob) : null;
+          if (!cancelled) customBufRef.current = buf;
         } catch {
-          customBufRef.current = null; // fall back to the default beep on decode failure
+          if (!cancelled) customBufRef.current = null; // fall back to the default beep
         }
       } else {
-        soundRef.current = s as BreakSoundId;
+        soundRef.current = soundChoice as BreakSoundId;
         customBufRef.current = null;
       }
-    });
-  }, []);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [soundChoice]);
 
-  // Optional faint 3-2-1 countdown before the break ends (default off).
+  // Optional faint 3-2-1 countdown before the break ends (default off) — reactive too.
+  const breakCountdown = useLiveQuery(() => getSetting<boolean>("breakCountdown", false), [], false);
   const countdownRef = useRef(false);
-  useEffect(() => {
-    getSetting<boolean>("breakCountdown", false).then((v) => (countdownRef.current = v));
-  }, []);
+  countdownRef.current = breakCountdown;
   const tickedRef = useRef<Set<number>>(new Set());
 
   useEffect(() => {

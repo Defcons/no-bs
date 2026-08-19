@@ -14,7 +14,7 @@ export type SetEntry = {
   seconds?: number | null; // duration (timed holds; also the time for a distance set)
   distanceM?: number | null; // metres, for distance exercises (run/bike/swim/row)
   assist?: number | null; // extra/assisted reps → written as "(n)" in the sheet
-  done?: boolean; // set completed (green) — toggled by the badge or on any value edit
+  done?: boolean; // set completed (green) — toggled ONLY by the number badge (value edits deliberately don't; since 1.56.0 finish() records numbers only for done sets)
   note?: string;
   raw?: string; // original token from the sheet, kept for fidelity/debugging
 };

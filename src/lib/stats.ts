@@ -2,11 +2,18 @@
 import type { StoredWorkout } from "../db";
 import { type ExerciseUnit, type MuscleGroup, resolveExercise } from "./exercises";
 
-export const epley = (weight: number, reps: number): number => weight * (1 + reps / 30);
+// Est-1RM. A true single IS its own 1RM — the formula's r=1 case would inflate it
+// 3.3% (200 kg single → "206.7"), enough to flip a strength-standard tier.
+export const epley = (weight: number, reps: number): number => (reps === 1 ? weight : weight * (1 + reps / 30));
 
-// Guard against sheet typos like "40-4040" producing absurd PRs.
-const MAX_PLAUSIBLE_KG = 500;
+// Guard against sheet typos like "40-4040" producing absurd PRs. Exported so the
+// live PR badge (ExerciseCard) filters by the same bound.
+export const MAX_PLAUSIBLE_KG = 500;
 const plausible = (w: number | null): w is number => w != null && w > 0 && w <= MAX_PLAUSIBLE_KG;
+// Same guard class for cardio entries: a swapped distance/time pair ("10 km in
+// 2 min") must not mint a permanent best-pace/longest record.
+const MAX_PLAUSIBLE_DISTANCE_M = 300_000;
+const MIN_PLAUSIBLE_PACE_SEC_PER_KM = 60; // 60 km/h sustained — beyond human-powered
 
 // Exercise identity + classification (canonName / canonKey / muscleGroup /
 // MUSCLE_ORDER) moved to lib/exercises.ts and is now catalog-backed via
@@ -81,11 +88,19 @@ export function liftRecords(workouts: StoredWorkout[]): LiftRecord[] {
           const m = set.distanceM ?? 0;
           const s = set.seconds ?? 0;
           if (m > 0 || s > 0) rec.count++;
-          if (m > rec.maxDistance.meters) rec.maxDistance = { meters: m, seconds: s, date: w.date };
-          if (m > 0 && s > 0) {
+          const mOk = m > 0 && m <= MAX_PLAUSIBLE_DISTANCE_M;
+          if (mOk && m > rec.maxDistance.meters) rec.maxDistance = { meters: m, seconds: s, date: w.date };
+          if (mOk && s > 0) {
             const pace = s / (m / 1000); // sec per km
-            if (rec.bestPace.secPerKm === 0 || pace < rec.bestPace.secPerKm) rec.bestPace = { secPerKm: pace, date: w.date };
+            if (
+              pace >= MIN_PLAUSIBLE_PACE_SEC_PER_KM &&
+              (rec.bestPace.secPerKm === 0 || pace < rec.bestPace.secPerKm)
+            )
+              rec.bestPace = { secPerKm: pace, date: w.date };
           }
+          // Duration-only cardio on a distance-unit exercise ("Cycling 45 min", no
+          // km logged) still earns a record row via its longest session.
+          if (m === 0 && s > 0 && s > rec.maxDuration.seconds) rec.maxDuration = { seconds: s, date: w.date };
           continue;
         }
         if (resolved.unit === "time") {
@@ -200,11 +215,14 @@ export function sessionsPerWeek(workouts: StoredWorkout[], weeks = 12): number[]
 // aligned 1:1 with sessionsPerWeek's buckets so they label the same bars.
 export function weekNumbersForLast(weeks = 12): number[] {
   const today = new Date();
-  today.setHours(0, 0, 0, 0);
   const out: number[] = [];
   for (let i = weeks - 1; i >= 0; i--) {
-    const d = new Date(today.getTime() - i * 7 * 86400000);
-    out.push(isoWeekNum(d.toISOString()) % 100);
+    // Calendar-safe local date math: toISOString() here converted local midnight to
+    // the UTC day — in UTC+ zones that's YESTERDAY, so every Monday all 12 labels
+    // showed the previous ISO week.
+    const d = new Date(today.getFullYear(), today.getMonth(), today.getDate() - i * 7);
+    const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    out.push(isoWeekNum(iso) % 100);
   }
   return out;
 }
@@ -333,5 +351,8 @@ function prevWeek(n: number): number {
   const year = Math.floor(n / 100);
   const week = n % 100;
   if (week > 1) return year * 100 + (week - 1);
-  return (year - 1) * 100 + 52; // approx; good enough for a streak counter
+  // Week 1 → the previous ISO year's LAST week — 52 OR 53 (2026 has 53; the old
+  // hardcoded 52 broke every streak crossing that New Year). Dec 28 always sits in
+  // the final ISO week of its year.
+  return isoWeekNum(`${year - 1}-12-28`);
 }

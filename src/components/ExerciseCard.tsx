@@ -8,7 +8,7 @@ import { ExerciseNameField } from "./ExerciseNameField";
 import { resolveExercise } from "../lib/exercises";
 import { type WeightUnit, weightStr } from "../lib/units";
 import { daysAgoLabel, mmss, niceDate } from "../lib/format";
-import { epley } from "../lib/stats";
+import { MAX_PLAUSIBLE_KG, epley } from "../lib/stats";
 import { playPr } from "../lib/sounds";
 
 type Props = {
@@ -42,7 +42,7 @@ export function ExerciseCard({ exercise, step, prev, prevDate, onChange, onSetDo
     let top = bestE1rm;
     exercise.sets.forEach((s, i) => {
       // MAX_PLAUSIBLE_KG guard (mirrors lib/stats): ignore typo weights like 40-4040.
-      if (!s.done || s.weight == null || s.weight <= 0 || s.weight > 500 || !s.reps || s.reps <= 0) return;
+      if (!s.done || s.weight == null || s.weight <= 0 || s.weight > MAX_PLAUSIBLE_KG || !s.reps || s.reps <= 0) return;
       const e = epley(s.weight, s.reps);
       if (e > top) {
         top = e;
@@ -92,8 +92,9 @@ export function ExerciseCard({ exercise, step, prev, prevDate, onChange, onSetDo
   const patchSet = (i: number, patch: Partial<SetEntry>) => {
     const sets = exercise.sets.map((s, idx) => (idx === i ? { ...s, ...patch } : s));
     onChange({ ...exercise, sets });
-    // A bare {done:true} patch = the set badge was tapped (weight/rep edits also
-    // set done, but always alongside their value) — that's the "set finished" signal.
+    // A bare {done:true} patch = the set badge was tapped — the ONLY way a set gets
+    // marked done (value edits deliberately don't, and since 1.56.0 finish() records
+    // numbers only for done sets) — that's the "set finished" signal.
     if (patch.done === true && Object.keys(patch).length === 1) onSetDone?.();
   };
   // Scheme's target reps (null for "Max"): the rep-vs-target border cue + new-set default.

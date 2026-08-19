@@ -42,6 +42,18 @@ export async function collectSettings(): Promise<Record<string, unknown>> {
   return out;
 }
 
+// Bodyweight-by-year INCLUDING the current year — bwHistory stores only past years,
+// the current one lives in the bodyweightKg setting. Any backup must carry both
+// (composed the same way syncBodyweight builds the sheet tab); exports that used
+// bwHistory alone left a fresh-device restore without a bodyweight.
+export async function fullBwHistory(): Promise<BwEntry[]> {
+  const history = await getSetting<BwEntry[]>("bwHistory", []);
+  const currentKg = await getSetting<number>("bodyweightKg", 0);
+  const map = new Map<number, number>(history.map((e) => [e.year, e.kg]));
+  if (currentKg > 0) map.set(new Date().getFullYear(), currentKg);
+  return [...map.entries()].sort((a, b) => a[0] - b[0]).map(([year, kg]) => ({ year, kg }));
+}
+
 // Restore preferences — allowlist-filtered on the way IN too, so a hand-edited or
 // older backup can never inject a sync secret or transient key.
 async function applySettings(settings: Record<string, unknown> | undefined): Promise<number> {
@@ -214,6 +226,10 @@ export type ImportedBackup = {
   bwHistory?: BwEntry[];
   templates?: DayTemplate[];
   settings?: Record<string, unknown>;
+  // Set when the lossless _data tab was absent/corrupt and the visible tabs were
+  // parsed instead — GPS tracks, breaks, custom flags, templates etc. are then gone,
+  // and the restore UI must say so instead of reporting a clean "Restored N".
+  lossy?: boolean;
 };
 
 // Read a backup. Prefers the lossless _data tab; falls back to parsing the visible
@@ -253,7 +269,7 @@ export async function importXlsx(buf: ArrayBuffer): Promise<ImportedBackup> {
     ? parseBodyweightTab(aoa("Bodyweight")).map((e) => ({ year: e.year, kg: e.kg }))
     : undefined;
   const settings = wb.SheetNames.includes("Settings") ? parseSettingsTab(aoa("Settings")) : undefined;
-  return { workouts, bwHistory, settings };
+  return { workouts, bwHistory, settings, lossy: true };
 }
 
 // Apply a restore: add only workouts this device is missing (deduped by a
@@ -271,7 +287,17 @@ export async function applyBackup(imported: ImportedBackup): Promise<{ added: nu
     have.add(k);
     const { id: _id, ...rest } = w as StoredWorkout;
     void _id;
-    toAdd.push({ ...rest, source: rest.source ?? "restore", synced: rest.synced ?? true } as StoredWorkout);
+    // synced is TRI-state for app-logged rows: an unsynced session stores
+    // `synced: undefined`, which JSON.stringify DROPS from the backup — so `?? true`
+    // here silently marked restored-but-never-synced sessions as synced, and the
+    // new-phone restore left them permanently off the sheet. For "app" rows keep the
+    // absence (= still pending); everything else (sheet:*/restore/legacy) defaults
+    // to true so a restore can't spray historical columns into the sheet.
+    toAdd.push({
+      ...rest,
+      source: rest.source ?? "restore",
+      synced: rest.source === "app" ? rest.synced : (rest.synced ?? true),
+    } as StoredWorkout);
   }
   if (toAdd.length) await db.workouts.bulkAdd(toAdd);
 

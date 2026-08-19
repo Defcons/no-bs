@@ -138,6 +138,10 @@ export function useActiveWorkout() {
   const [elapsed, setElapsed] = useState(0); // full workout time (auto)
   const [swElapsed, setSwElapsed] = useState(0); // separate stopwatch
   const saveTimer = useRef<number | undefined>(undefined);
+  // True from finish() entry until the draft null-write lands: blocks EVERY persist
+  // path (debounced + background flush) so a late update()/flush can't write the
+  // pre-finish draft back after the null and resurrect the session as a ghost.
+  const finishing = useRef(false);
   const draftRef = useRef<Draft | null>(null);
   draftRef.current = draft;
 
@@ -164,6 +168,7 @@ export function useActiveWorkout() {
   useEffect(() => {
     const flush = () => {
       window.clearTimeout(saveTimer.current);
+      if (finishing.current) return; // mid-finish: draftRef still holds the pre-null draft
       setSetting(DRAFT_KEY, draftRef.current);
     };
     const onVis = () => {
@@ -193,6 +198,7 @@ export function useActiveWorkout() {
   // Debounced persistence of the draft.
   const persist = useCallback((d: Draft | null) => {
     window.clearTimeout(saveTimer.current);
+    if (finishing.current) return; // a late update() during finish() must not re-arm the timer
     saveTimer.current = window.setTimeout(() => {
       setSetting(DRAFT_KEY, d);
     }, 200);
@@ -360,7 +366,7 @@ export function useActiveWorkout() {
   // (e.g. a recorded GPS track) optional.
   const finish = useCallback(
     async (hr?: { avg?: number; max?: number }, extra?: Partial<StoredWorkout>, opts?: { endedAt?: number }) => {
-      if (!draft) return;
+      if (!draft || finishing.current) return;
       window.clearTimeout(saveTimer.current); // same ghost-draft guard as cancel()
       // Manual finish → wall-clock. Auto-end → up to the last logged set (opts.endedAt),
       // clamped so it can never go negative or below a couple of minutes.
@@ -372,10 +378,15 @@ export function useActiveWorkout() {
       const lastBreak = closeCurrentBreak(draft);
       const breaks = lastBreak ? [...(draft.breaks ?? []), lastBreak] : draft.breaks;
       // Interval/cardio sessions (custom, ≥2 rests) get a one-line interval breakdown
-      // auto-appended to the note — append-only + dedup-guarded, so a History edit or
-      // re-finish never duplicates it, and strength (template) sessions never get it
-      // even when they have many per-set breaks.
-      const ivLine = draft.custom ? intervalSummary(draft.startedAt, draft.startedAt + durationSec * 1000, breaks) : null;
+      // auto-appended to the note. Gated on editId == null: beginEdit sets custom:true
+      // purely for editability, so without the gate a History edit of a STRENGTH
+      // session (which banks breaks since 1.54.0) would get the line appended —
+      // "strength/template sessions never get it" must survive edits too. The
+      // dedup-guard below additionally stops re-finish duplicates on real customs.
+      const ivLine =
+        draft.custom && draft.editId == null
+          ? intervalSummary(draft.startedAt, draft.startedAt + durationSec * 1000, breaks)
+          : null;
       const note =
         ivLine && !(draft.note ?? "").includes(INTERVAL_NOTE_PREFIX)
           ? `${draft.note ? draft.note + "\n" : ""}${ivLine}`
@@ -421,22 +432,31 @@ export function useActiveWorkout() {
         ...extra,
       };
       const editing = draft.editId != null;
-      if (editing) {
-        // Update the existing workout in place; keep its original date/source/synced.
-        await db.workouts.update(draft.editId!, {
-          dayName: row.dayName,
-          exercises: row.exercises,
-          note: row.note,
-          moodBefore: row.moodBefore,
-          moodAfter: row.moodAfter,
-          breaks: row.breaks,
-          durationSec: row.durationSec,
-        });
-      } else {
-        await db.workouts.add(row);
+      // Everything above is synchronous — nothing can interleave. From the first
+      // await until the null-write lands, a queued update()/background flush could
+      // write the pre-finish draft back AFTER the null (a saved-AND-in-progress
+      // ghost, double-finish → duplicate row), so persists are blocked here.
+      finishing.current = true;
+      try {
+        if (editing) {
+          // Update the existing workout in place; keep its original date/source/synced.
+          await db.workouts.update(draft.editId!, {
+            dayName: row.dayName,
+            exercises: row.exercises,
+            note: row.note,
+            moodBefore: row.moodBefore,
+            moodAfter: row.moodAfter,
+            breaks: row.breaks,
+            durationSec: row.durationSec,
+          });
+        } else {
+          await db.workouts.add(row);
+        }
+        setDraft(null);
+        await setSetting(DRAFT_KEY, null);
+      } finally {
+        finishing.current = false;
       }
-      setDraft(null);
-      await setSetting(DRAFT_KEY, null);
       return { ...row, custom: draft.custom, edited: editing };
     },
     [draft],

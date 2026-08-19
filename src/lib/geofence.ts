@@ -56,18 +56,26 @@ const glog = (m: string): void => {
 
 let watcherId: string | null = null;
 let starting = false; // a start() is mid-await (addWatcher not yet resolved)
+// Bumped by every start() and stop(). A start() whose generation went stale across
+// an await was superseded (stop, or stop→start) — it must tear down anything it
+// created and claim nothing. A bare boolean can't express this: overlapping
+// stop→start cycles clobbered it, leaving a watcher alive whose callback belonged
+// to a DEAD React effect (FGS notification up, leave-detection silently gone).
+let gen = 0;
 
 // Begin watching for an active workout. Anchors to the first decent fix, then
 // fires onLeave() once you've been >RADIUS_M away for EXIT_GRACE_MS. No-op when the
 // toggle is off or not on native. Returns whether a watcher actually started.
 export async function startGeofence(onLeave: () => void): Promise<boolean> {
   if (!Capacitor.isNativePlatform() || watcherId || starting) return false;
+  const myGen = ++gen;
   starting = true;
   try {
     if (!(await getSetting<boolean>("autoEndOnLeave", false))) {
       glog("not started — 'Auto-end when I leave' is OFF");
       return false;
     }
+    if (gen !== myGen) return false; // stopped/superseded while reading the setting
     glog("starting leave-area watcher");
 
     let anchor: LatLng | null = null;
@@ -119,8 +127,9 @@ export async function startGeofence(onLeave: () => void): Promise<boolean> {
         }
       },
     );
-    // stopGeofence() ran while we were awaiting the watcher → tear it right back down.
-    if (!starting) {
+    // Stopped or superseded while awaiting the watcher → this one isn't ours to
+    // keep; tear it right back down.
+    if (gen !== myGen) {
       await BackgroundGeolocation.removeWatcher({ id }).catch(() => {});
       return false;
     }
@@ -129,12 +138,15 @@ export async function startGeofence(onLeave: () => void): Promise<boolean> {
   } catch {
     return false; // permission denied / plugin error — feature just stays off
   } finally {
-    starting = false;
+    // Only the CURRENT generation may release the lock — a stale start clearing it
+    // would let a second start() run concurrently with the one that superseded it.
+    if (gen === myGen) starting = false;
   }
 }
 
 export async function stopGeofence(): Promise<void> {
-  starting = false; // cancel any in-flight start
+  gen++; // invalidate any in-flight start (it cleans up after itself on resolve)
+  starting = false;
   if (!watcherId) return;
   const id = watcherId;
   watcherId = null;

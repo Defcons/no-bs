@@ -31,11 +31,44 @@ import {
 } from "../lib/sounds";
 import { checkAndApplyUpdate, currentVersion, updatesSupported } from "../lib/update";
 import { feedbackMailtoUrl } from "../lib/feedback";
-import { applyBackup, exportXlsx, importXlsx, type ImportedBackup } from "../lib/workbook";
+import { applyBackup, exportXlsx, fullBwHistory, importXlsx, type ImportedBackup } from "../lib/workbook";
 import { Switch } from "./Switch";
 import { SoundField } from "./SoundField";
 import { MoonIcon, SunIcon } from "./icons";
 import { SheetsGuide } from "./SheetsGuide";
+
+// A bodyweight entry field with the same raw-while-editing buffer as SetInput's
+// DecField: the controlled re-format on every keystroke ate the decimal separator
+// ("80," re-rendered as "80", so typing on gave 805). Keeps Settings' own markup.
+function BwField({
+  kg,
+  units,
+  onCommit,
+  className = "bw-input",
+}: {
+  kg: number;
+  units: WeightUnit;
+  onCommit: (kg: number) => void;
+  className?: string;
+}) {
+  const [raw, setRaw] = useState<string | null>(null); // non-null while editing
+  return (
+    <input
+      type="text"
+      inputMode="decimal"
+      className={className}
+      value={raw != null ? raw : kg ? weightStr(kg, units) : ""}
+      placeholder={units}
+      onFocus={() => setRaw(kg ? weightStr(kg, units) : "")}
+      onBlur={() => setRaw(null)}
+      onChange={(e) => {
+        setRaw(e.target.value);
+        const n = parseFloat(e.target.value.replace(",", "."));
+        onCommit(Number.isFinite(n) && n > 0 ? fromDisplayWeight(n, units) : 0);
+      }}
+    />
+  );
+}
 
 // A boolean setting: label + switch inline, description below.
 function ToggleRow({
@@ -338,7 +371,9 @@ export function Settings({
     setBackupMsg("Building workbook…");
     try {
       const workouts = await db.workouts.toArray();
-      const blob = await exportXlsx(workouts, bwHistory, await db.templates.toArray());
+      // fullBwHistory, not the prop: bwHistory holds only PAST years — the current
+      // year (bodyweightKg) must be in the backup too or a fresh restore loses it.
+      const blob = await exportXlsx(workouts, await fullBwHistory(), await db.templates.toArray());
       await saveFile(`gym-backup-${new Date().toISOString().slice(0, 10)}.xlsx`, blob);
       setBackupMsg(`Backed up ${workouts.length} workouts.`);
     } catch (e) {
@@ -360,9 +395,14 @@ export function Settings({
       const { added, bwYears, settings } = await applyBackup(imported);
       const bw = bwYears ? ` · ${bwYears} bodyweight year${bwYears === 1 ? "" : "s"}` : "";
       const set = settings ? ` · ${settings} setting${settings === 1 ? "" : "s"}` : "";
+      // A restore that fell back to the visible tables (no/corrupt _data tab) is
+      // PARTIAL — say so instead of reporting a clean "Restored N".
+      const lossyNote = imported.lossy
+        ? " ⚠ Backup's hidden data tab was missing — restored from the visible tables only (no GPS routes, breaks or templates)."
+        : "";
       setBackupMsg(
         (added ? `Restored ${added} workout${added === 1 ? "" : "s"}` : "Nothing new to restore") +
-          bw + set + (settings ? " — reloading to apply…" : "."),
+          bw + set + lossyNote + (settings ? " — reloading to apply…" : "."),
       );
       if (bwYears) onImported();
       // Preferences (theme/toggles/rest defaults) are read at mount, so reload to
@@ -807,17 +847,7 @@ export function Settings({
           <div className="row" style={{ marginTop: 8 }}>
             <span className="bw-input bw-year muted">{thisYear}</span>
             <span className="muted">→</span>
-            <input
-              type="text"
-              inputMode="decimal"
-              className="bw-input"
-              value={bodyweightKg ? weightStr(bodyweightKg, units) : ""}
-              placeholder={units}
-              onChange={(e) => {
-                const n = parseFloat(e.target.value.replace(",", "."));
-                setBodyweightKg(Number.isFinite(n) ? fromDisplayWeight(n, units) : 0);
-              }}
-            />
+            <BwField kg={bodyweightKg} units={units} onCommit={setBodyweightKg} />
             <span className="muted">{units}</span>
             <span className="tiny muted">now</span>
           </div>
@@ -839,17 +869,10 @@ export function Settings({
                 }}
               />
               <span className="muted">→</span>
-              <input
-                type="text"
-                inputMode="decimal"
-                className="bw-input"
-                value={e.kg ? weightStr(e.kg, units) : ""}
-                placeholder={units}
-                onChange={(ev) => {
-                  const k = parseFloat(ev.target.value.replace(",", "."));
-                  const kg = Number.isFinite(k) ? fromDisplayWeight(k, units) : 0;
-                  setBwHistory(bwHistory.map((x, idx) => (idx === i ? { ...x, kg } : x)));
-                }}
+              <BwField
+                kg={e.kg}
+                units={units}
+                onCommit={(kg) => setBwHistory(bwHistory.map((x, idx) => (idx === i ? { ...x, kg } : x)))}
               />
               <span className="muted">{units}</span>
               <button className="mini danger" onClick={() => setBwHistory(bwHistory.filter((_, idx) => idx !== i))}>

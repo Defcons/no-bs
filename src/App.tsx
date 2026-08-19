@@ -12,7 +12,7 @@ import { Haptics, ImpactStyle } from "@capacitor/haptics";
 import { notificationsAllowed, onNotificationTap, requestNotifications, scheduleTrainingReminders, showReminder } from "./lib/notify";
 import { markAppReady } from "./lib/update";
 import { isExtendedBuild } from "./lib/buildInfo";
-import { collectSettings } from "./lib/workbook";
+import { collectSettings, fullBwHistory } from "./lib/workbook";
 import { setKeepAwake } from "./lib/pip";
 import { saveFile } from "./lib/download";
 import { syncBodyweight, syncProfile } from "./lib/sheetSync";
@@ -112,7 +112,14 @@ export default function App() {
   // and Math.max(...spread) on every packet during long sessions).
   const hrAgg = useRef({ sum: 0, count: 0, max: 0 });
   const monitor = useRef<HrMonitor | null>(null);
-  if (!monitor.current) monitor.current = createHrMonitor((c) => setConnected(c));
+  // On an unexpected BLE drop the strap stops notifying but bpm state keeps the last
+  // reading — the badge/PiP then show a frozen "live" HR and the GPS tracker keeps
+  // stamping it into track points (skewing avgHr/kcal). Clear it with the connection.
+  if (!monitor.current)
+    monitor.current = createHrMonitor((c) => {
+      setConnected(c);
+      if (!c) setBpm(null);
+    });
 
   const templates = useLiveQuery(() => db.templates.orderBy("order").toArray(), []);
 
@@ -135,11 +142,13 @@ export default function App() {
     const days = last ? daysAgo(last.date) : 999;
     const trainedToday = last ? last.date.slice(0, 10) === today : false;
     if (!trainedToday && trainingDue(days, dpw)) {
+      // Stamp BEFORE showing: boot + visibilitychange can call this back-to-back,
+      // and both passed the date check before either wrote it (duplicate nudges).
+      await setSetting("lastReminder", today);
       await showReminder(
         "Time to train 💪",
         `It's been ${days} day${days === 1 ? "" : "s"} — train today to stay on your ${dpw}×/week goal.`,
       );
-      await setSetting("lastReminder", today);
     }
   };
 
@@ -329,7 +338,9 @@ export default function App() {
       v: 3,
       workouts: await db.workouts.toArray(),
       templates: await db.templates.toArray(),
-      bwHistory: await getSetting<BwEntry[]>("bwHistory", []),
+      // Includes the CURRENT year (bwHistory alone holds only past years — the
+      // current one lives in bodyweightKg, and a fresh-device restore was losing it).
+      bwHistory: await fullBwHistory(),
       // Allowlisted preferences only (collectSettings excludes sync credentials +
       // transient state), as an object that restore reads back through applyBackup.
       settings: await collectSettings(),
