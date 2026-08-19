@@ -14,14 +14,16 @@ export default defineConfig({
       injectRegister: null,
       includeAssets: ["favicon.svg"],
       // Don't let the SPA navigation fallback hijack direct file URLs (e.g. the
-      // downloadable /gym-tracker.apk) — those should hit the network.
+      // downloadable /dl/nobs.apk) — those should hit the network.
       workbox: { navigateFallbackDenylist: [/\.[^/]+$/] },
       manifest: {
         name: "NoBS – Workout Log",
         short_name: "NoBS",
         description: "A no-BS workout log: sets, reps, timer, heart rate. Nothing you don't need.",
-        theme_color: "#0e1116",
-        background_color: "#0e1116",
+        // Matches index.html's <meta theme-color> and the dark --bg token in
+        // src/index.css — keep all three in sync.
+        theme_color: "#0b0d12",
+        background_color: "#0b0d12",
         display: "standalone",
         orientation: "portrait",
         start_url: "/",

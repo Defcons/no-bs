@@ -1,32 +1,33 @@
-# React + TypeScript + Vite
+# NoBS — Workout Log
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+A no-BS gym app: sets, reps, rest timer, heart rate. Nothing you don't need — no account, no feed, no subscription, no telemetry.
 
-Currently, two official plugins are available:
+**[nobs.agentas.net](https://nobs.agentas.net)** · installable PWA + native Android (Play release in review; sideload APK on the site)
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## What it does
 
-## React Compiler
+- **Log fast, thumb-first** — day templates prefill last week's weights; tick a set done, the rest timer starts itself. Only what you tick is recorded.
+- **Timers that survive reality** — pausable workout clock, per-exercise rest presets, break sounds that duck your music, a floating PiP timer when you leave the app, optional earbud-button break control.
+- **Heart rate** — Web Bluetooth straps, live BPM + session average, calorie estimate (Keytel), smart low-HR warnings, auto-end when the strap goes quiet.
+- **Running & cardio** — GPS route recording (screen-off safe), pace/distance stats, personal pace medals, shareable route links.
+- **Records & progress** — PR detection with a live badge, strength standards (men's and women's tables), est-1RM progression charts, weekly consistency, "current form" vs your all-time peak.
+- **Your data stays yours** — everything lives on-device (IndexedDB). Optional backup to `.xlsx`/JSON (lossless, GPS tracks included) or sync to your own Google Sheet via a bound Apps Script — your sheet, your script, your secret. The app phones home to exactly nobody.
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## Stack
 
-## Expanding the Oxlint configuration
+Vite + React + TypeScript · Dexie (IndexedDB) · Capacitor (Android) · self-hosted OTA updates (Capgo, manual trigger, origin-pinned) · Leaflet for run maps.
 
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
+## Development
 
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
+```bash
+npm install
+npm run dev        # web dev server
+npx tsc --noEmit   # typecheck
+npm run build      # production build (PWA)
 ```
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+Android builds (both flavours), deployment, and the OTA pipeline are documented in [DEPLOY.md](DEPLOY.md). Repo orientation lives in [OrientationMap.md](OrientationMap.md) / [NavigationMap.md](NavigationMap.md); behaviour facts in [docs/KnowledgeBase.md](docs/KnowledgeBase.md).
+
+## Contact
+
+apps@agentas.net
