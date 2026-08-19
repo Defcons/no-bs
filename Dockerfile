@@ -2,17 +2,15 @@
 FROM node:20-alpine AS build
 WORKDIR /app
 ARG APP_VERSION=dev
-# Personal build config (from GitHub secrets via docker-compose build args). Empty =
-# a clean public build. Written to a throwaway .env.production so Vite bakes them.
-ARG VITE_SYNC_URL=
-ARG VITE_SYNC_SECRET=
+# Public build config only. VITE_APP_URL = the app's public origin (shareable
+# route-link base). The old VITE_SYNC_*/VITE_SEED personal-config args are GONE —
+# since 1.47.0 no build bakes in personal config (SECURITY INVARIANT, see
+# OrientationMap.md): sync is configured per-device in Settings. Do not re-add.
 ARG VITE_APP_URL=
-ARG VITE_SEED=
 COPY package.json package-lock.json ./
 RUN npm ci
 COPY . .
-RUN printf 'VITE_SYNC_URL=%s\nVITE_SYNC_SECRET=%s\nVITE_APP_URL=%s\nVITE_SEED=%s\n' \
-      "$VITE_SYNC_URL" "$VITE_SYNC_SECRET" "$VITE_APP_URL" "$VITE_SEED" > .env.production \
+RUN printf 'VITE_APP_URL=%s\n' "$VITE_APP_URL" > .env.production \
   && npm run build \
   && rm -f .env.production
 # OTA bundle for the native app: a zip of the built web app + a version manifest

@@ -15,6 +15,18 @@
 
 var SECRET = "CHANGE_ME"; // must match the app's "Shared secret"
 
+// Compare SHA-256 digests instead of the raw strings: `!==` short-circuits on the
+// first differing character (a timing side-channel), and hashing also equalizes
+// length. Overkill for a hobby endpoint, but it costs nothing.
+function secretOk(provided) {
+  if (typeof provided !== "string" || !provided) return false;
+  var a = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, provided, Utilities.Charset.UTF_8);
+  var b = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, SECRET, Utilities.Charset.UTF_8);
+  var diff = 0;
+  for (var i = 0; i < a.length; i++) diff |= a[i] ^ b[i];
+  return diff === 0;
+}
+
 function doGet() {
   return json({ ok: true, service: "gym-tracker-sync" });
 }
@@ -22,7 +34,7 @@ function doGet() {
 function doPost(e) {
   try {
     var body = JSON.parse(e.postData.contents);
-    if (body.secret !== SECRET) return json({ ok: false, error: "bad secret" });
+    if (!secretOk(body.secret)) return json({ ok: false, error: "bad secret" });
     if (body.ping) return json({ ok: true, ping: true });
 
     // Pull: return every tab's cells (as displayed) so the app can import
@@ -203,15 +215,17 @@ function createBlock(sheet, body) {
   for (var i = 0; i < body.exercises.length; i++) {
     rows.push([safe(body.exercises[i].name), safe(body.exercises[i].cell)]);
   }
+  // safe() on EVERY body-derived value (defense-in-depth): the app writes numeric/
+  // enum shapes here, but the endpoint is reachable by anything holding the secret.
   rows.push(["Note", safe(body.note) || ""]);
-  rows.push(["Mood", body.mood || ""]);
-  rows.push(["Time", body.time || ""]);
-  rows.push(["Time of day", body.timeOfDay || ""]);
-  rows.push(["Avg HR", body.hr || ""]);
+  rows.push(["Mood", safe(body.mood) || ""]);
+  rows.push(["Time", safe(body.time) || ""]);
+  rows.push(["Time of day", safe(body.timeOfDay) || ""]);
+  rows.push(["Avg HR", safe(body.hr) || ""]);
   // Cardio-only meta rows: skip the ones that are empty for a normal session.
   ["Distance", "Pace", "Speed", "Route"].forEach(function (lbl) {
     var v = { Distance: body.distance, Pace: body.pace, Speed: body.speed, Route: body.route }[lbl];
-    if (v) rows.push([lbl, v]);
+    if (v) rows.push([lbl, safe(v)]);
   });
 
   var start = sheet.getLastRow() + 2; // leave one blank spacer row

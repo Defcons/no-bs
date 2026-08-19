@@ -4,10 +4,9 @@ services:
       context: .
       args:
         APP_VERSION: ${APP_VERSION:-dev}
-        VITE_SYNC_URL: ${VITE_SYNC_URL:-}
-        VITE_SYNC_SECRET: ${VITE_SYNC_SECRET:-}
+        # VITE_SYNC_*/VITE_SEED forwards removed with the baked-config seam
+        # (security invariant — no build bakes personal config since 1.47.0).
         VITE_APP_URL: ${VITE_APP_URL:-}
-        VITE_SEED: ${VITE_SEED:-}
     container_name: gym-tracker
     restart: unless-stopped
     environment:
