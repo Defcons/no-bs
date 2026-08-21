@@ -26,7 +26,7 @@ npx tsc --noEmit   # typecheck
 npm run build      # production build (PWA)
 ```
 
-Android builds (both flavours), deployment, and the OTA pipeline are documented in [DEPLOY.md](DEPLOY.md). Repo orientation lives in [OrientationMap.md](OrientationMap.md) / [NavigationMap.md](NavigationMap.md); behaviour facts in [docs/KnowledgeBase.md](docs/KnowledgeBase.md).
+Android builds (both flavours) use Capacitor + Gradle — `npx cap sync android`, then `gradlew bundleStandardRelease` (Play AAB) or `assembleExtendedRelease` (sideload APK). JS-only changes ship over-the-air; native changes need a fresh build.
 
 ## License
 
