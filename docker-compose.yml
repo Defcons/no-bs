@@ -16,4 +16,4 @@ services:
     volumes:
       # Persistent host dir for the downloadable APK, so it survives image rebuilds.
       # Served at <your-domain>/dl/ — host dir holding the downloadable APK
-      - /apps/nobs-dl:/usr/share/nginx/html/dl
+      - /opt/nobs-dl:/usr/share/nginx/html/dl
