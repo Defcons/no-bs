@@ -28,6 +28,12 @@ npm run build      # production build (PWA)
 
 Android builds (both flavours), deployment, and the OTA pipeline are documented in [DEPLOY.md](DEPLOY.md). Repo orientation lives in [OrientationMap.md](OrientationMap.md) / [NavigationMap.md](NavigationMap.md); behaviour facts in [docs/KnowledgeBase.md](docs/KnowledgeBase.md).
 
+## License
+
+[AGPL-3.0](LICENSE). Use it, study it, change it, share it — but if you distribute it or run a modified version as a network service, you release your source under the same terms. That's deliberate: a workout log built on "no account, no subscription, your data is a file you own" shouldn't be able to become someone else's closed, subscription-walled service.
+
+Copyright © 2026 Agentas AS.
+
 ## Contact
 
 apps@agentas.net

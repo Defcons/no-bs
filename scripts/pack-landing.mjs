@@ -1,10 +1,13 @@
-// Package the NoBS landing page (artifact body) into a standalone site under
-// codecrafts-sites/nobs/ — full HTML document with head/meta/OG + favicon + OG image.
+// Package the NoBS landing page (artifact body HTML) into a standalone site:
+// a full HTML document with head/meta/OG + favicon + OG image.
+// Usage: node scripts/pack-landing.mjs [srcHtml] [outDir]
 import { readFileSync, writeFileSync, mkdirSync } from "fs";
 import sharp from "sharp";
 
-const SRC = "REDACTED_LOCAL_PATH";
-const OUT = "C:/Dev/web/codecrafts-sites/nobs";
+// Repo-relative defaults; override via CLI args. Drop the landing artifact's
+// body HTML at assets/nobs-landing.html (or pass a path) to (re)generate.
+const SRC = process.argv[2] ?? "assets/nobs-landing.html";
+const OUT = process.argv[3] ?? "landing-dist";
 mkdirSync(OUT, { recursive: true });
 
 const body = readFileSync(SRC, "utf8");
@@ -20,8 +23,8 @@ const head = `<!doctype html>
 <meta property="og:type" content="website">
 <meta property="og:title" content="NoBS – Workout Log">
 <meta property="og:description" content="No ads. No subs. No BS. Only the stuff you actually use at the gym.">
-<meta property="og:image" content="https://nobs.codecrafts.cc/og.png">
-<meta property="og:url" content="https://nobs.codecrafts.cc">
+<meta property="og:image" content="https://nobs.agentas.net/og.png">
+<meta property="og:url" content="https://nobs.agentas.net">
 <meta name="twitter:card" content="summary_large_image">
 </head>
 <body>
