@@ -10,10 +10,11 @@ services:
     container_name: gym-tracker
     restart: unless-stopped
     environment:
-      - TZ=Europe/Oslo
+      - TZ=${TZ:-Etc/UTC}
     ports:
-      - "3060:80" # host:container — NPM proxies app.agentas.net (+ app.codecrafts.cc alias, gym.defc0n.no retiring) here
+      - "3060:80" # host:container — put your own reverse proxy (Caddy/NPM/Traefik) in front
     volumes:
-      # Persistent dir for the downloadable APK, so it survives image rebuilds.
-      # Served at gym.defc0n.no/dl/gym-tracker.apk
-      - /apps/gym-tracker-dl:/usr/share/nginx/html/dl
+      # Persistent host dir for the downloadable APK, so it survives image rebuilds.
+      # Served at <your-domain>/dl/gym-tracker.apk. Point APK_DIR at your host path
+      # (e.g. in a gitignored .env — Compose loads it automatically).
+      - ${APK_DIR:-./apk-dl}:/usr/share/nginx/html/dl
