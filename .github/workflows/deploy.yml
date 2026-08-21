@@ -36,12 +36,12 @@ jobs:
           envs:     VITE_APP_URL
           script: |
             set -euo pipefail
-            git config --global --add safe.directory /apps/gym-tracker
-            cd /apps/gym-tracker
+            git config --global --add safe.directory /opt/nobs
+            cd /opt/nobs
             git fetch origin
             git reset --hard origin/master
             export APP_VERSION="$(git rev-parse --short HEAD)"
             echo "Building OTA bundle version $APP_VERSION"
             docker compose build --no-cache
-            docker compose up -d
-            echo "gym-tracker deploy complete ($APP_VERSION)"
+            docker compose up -d --remove-orphans
+            echo "nobs deploy complete ($APP_VERSION)"

@@ -28,7 +28,7 @@ function secretOk(provided) {
 }
 
 function doGet() {
-  return json({ ok: true, service: "gym-tracker-sync" });
+  return json({ ok: true, service: "nobs-sync" });
 }
 
 function doPost(e) {

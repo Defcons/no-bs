@@ -1,5 +1,5 @@
 services:
-  gym-tracker:
+  nobs:
     build:
       context: .
       args:
@@ -7,7 +7,7 @@ services:
         # VITE_SYNC_*/VITE_SEED forwards removed with the baked-config seam
         # (security invariant — no build bakes personal config since 1.47.0).
         VITE_APP_URL: ${VITE_APP_URL:-}
-    container_name: gym-tracker
+    container_name: nobs
     restart: unless-stopped
     environment:
       - TZ=Europe/Oslo
@@ -15,5 +15,5 @@ services:
       - "3060:80" # host:container — put your own reverse proxy (Caddy/NPM/Traefik) in front
     volumes:
       # Persistent host dir for the downloadable APK, so it survives image rebuilds.
-      # Served at <your-domain>/dl/gym-tracker.apk
+      # Served at <your-domain>/dl/ — host dir holding the downloadable APK
       - /apps/gym-tracker-dl:/usr/share/nginx/html/dl
