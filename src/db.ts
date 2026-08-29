@@ -173,3 +173,11 @@ export async function lastWorkoutForDay(dayName: string): Promise<StoredWorkout 
   all.sort((a, b) => b.date.localeCompare(a.date));
   return all[0];
 }
+
+// The last N sessions of a given day type, most recent first — drives the
+// swipe-back-through-history panels on the active exercise cards.
+export async function recentWorkoutsForDay(dayName: string, n: number): Promise<StoredWorkout[]> {
+  const all = await db.workouts.where("dayName").equals(dayName).toArray();
+  all.sort((a, b) => b.date.localeCompare(a.date));
+  return all.slice(0, n);
+}

@@ -1,6 +1,8 @@
 // A single exercise within the active workout: header (name + scheme), its set
-// rows, add/remove set, and an optional per-exercise note.
-import { type TouchEvent, useEffect, useMemo, useRef, useState } from "react";
+// rows, add/remove set, and an optional per-exercise note. Swipe the card LEFT to
+// step back through up to 3 previous sessions of this exercise (read-only), RIGHT
+// to come forward; the ↺ header button does the same by tap.
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { ExercisePerf, SetEntry } from "../types";
 import { uid } from "../lib/uid";
 import { SetInput } from "./SetInput";
@@ -11,11 +13,14 @@ import { daysAgoLabel, mmss, niceDate } from "../lib/format";
 import { MAX_PLAUSIBLE_KG, epley } from "../lib/stats";
 import { playPr } from "../lib/sounds";
 
+// One past performance of this exercise + the date it was logged (most-recent first).
+export type PrevSession = { date: string; perf: ExercisePerf };
+const MAX_BACK = 3; // how many sessions back the swipe can reach
+
 type Props = {
   exercise: ExercisePerf;
   step: number;
-  prev?: ExercisePerf; // last session's performance of this exercise (for hints)
-  prevDate?: string; // ISO date of that last session (for the swipe-in "last time" panel)
+  history?: PrevSession[]; // up to MAX_BACK previous sessions of this exercise, newest first
   onChange: (ex: ExercisePerf) => void;
   onSetDone?: () => void; // set explicitly marked done via its badge (not weight edits)
   bestE1rm?: number; // all-time best est-1RM for this lift (drives the live PR badge)
@@ -28,7 +33,7 @@ type Props = {
   onMoveDown?: () => void;
 };
 
-export function ExerciseCard({ exercise, step, prev, prevDate, onChange, onSetDone, bestE1rm, isActive, editableName, units, nameHistory, onRemove, onMoveUp, onMoveDown }: Props) {
+export function ExerciseCard({ exercise, step, history, onChange, onSetDone, bestE1rm, isActive, editableName, units, nameHistory, onRemove, onMoveUp, onMoveDown }: Props) {
   const [showNote, setShowNote] = useState(!!exercise.note);
   const resolved = resolveExercise(exercise.name, exercise.exerciseId);
   const unit = resolved.unit;
@@ -65,30 +70,76 @@ export function ExerciseCard({ exercise, step, prev, prevDate, onChange, onSetDo
     prevPr.current = prSetId;
   }, [prSetId]);
 
-  // Swipe RIGHT (or the ↺ header button) reveals last time's numbers, read-only.
-  const [showPrev, setShowPrev] = useState(false);
-  const touch = useRef<{ x: number; y: number } | null>(null);
-  const onTouchStart = (e: TouchEvent) => {
-    // Don't begin a swipe from inside a field/control — editing weight/reps (or a
-    // stepper drag) must not flip the card to the last-time panel.
-    if ((e.target as HTMLElement).closest("input, textarea, select, button")) {
-      touch.current = null;
-      return;
-    }
-    const t = e.touches[0];
-    touch.current = { x: t.clientX, y: t.clientY };
-  };
-  const onTouchEnd = (e: TouchEvent) => {
-    const s = touch.current;
-    touch.current = null;
-    if (!s) return;
-    const t = e.changedTouches[0];
-    const dx = t.clientX - s.x;
-    const dy = t.clientY - s.y;
-    // Only a clearly-horizontal swipe (so vertical scrolling is unaffected).
-    if (Math.abs(dx) < 55 || Math.abs(dx) < Math.abs(dy) * 1.4) return;
-    setShowPrev(dx > 0);
-  };
+  // History browsing. histOffset 0 = this week (editable); 1..maxBack = that many
+  // sessions back (read-only). Swipe LEFT / ↺ steps back, swipe RIGHT comes forward.
+  const prev = history?.[0]?.perf; // most recent — drives the per-set "last time" hints
+  const maxBack = Math.min(history?.length ?? 0, MAX_BACK);
+  const [histOffset, setHistOffset] = useState(0);
+  const off = Math.min(histOffset, maxBack);
+  const shown = off > 0 ? history?.[off - 1] : undefined;
+  const backLabel = off === 1 ? "Last time" : `${off} sessions back`;
+  const cycleBack = () => setHistOffset((o) => (maxBack === 0 ? 0 : o >= maxBack ? 0 : o + 1));
+
+  // Whole-card horizontal swipe. Native (non-passive) listeners so a horizontal drag
+  // can preventDefault — that stops page scroll AND lets the swipe start over a field
+  // or button: on the first clearly-horizontal move we blur any focused input (so
+  // swiping across a weight box never pops the keyboard) and own the gesture. A
+  // vertical drag is left alone for normal scrolling.
+  const cardRef = useRef<HTMLElement | null>(null);
+  const swipedRef = useRef(false); // a swipe just happened → swallow the trailing click
+  useEffect(() => {
+    const el = cardRef.current;
+    if (!el) return;
+    let sx = 0;
+    let sy = 0;
+    let dir: "?" | "h" | "v" = "?";
+    const onStart = (e: TouchEvent) => {
+      if (e.touches.length !== 1) {
+        dir = "v";
+        return;
+      }
+      sx = e.touches[0].clientX;
+      sy = e.touches[0].clientY;
+      dir = "?";
+      swipedRef.current = false;
+    };
+    const onMove = (e: TouchEvent) => {
+      if (dir === "v") return;
+      const dx = e.touches[0].clientX - sx;
+      const dy = e.touches[0].clientY - sy;
+      if (dir === "?") {
+        if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return; // too small to tell yet
+        dir = Math.abs(dx) > Math.abs(dy) * 1.2 ? "h" : "v";
+        if (dir === "h") (document.activeElement as HTMLElement | null)?.blur?.();
+      }
+      if (dir === "h") {
+        e.preventDefault();
+        swipedRef.current = true;
+      }
+    };
+    const onEnd = (e: TouchEvent) => {
+      if (dir !== "h") {
+        dir = "?";
+        return;
+      }
+      const dx = e.changedTouches[0].clientX - sx;
+      dir = "?";
+      if (Math.abs(dx) < 45) return; // too short to count as a swipe
+      const m = Math.min(history?.length ?? 0, MAX_BACK);
+      setHistOffset((o) => (dx < 0 ? Math.min(o + 1, m) : Math.max(o - 1, 0)));
+    };
+    el.addEventListener("touchstart", onStart, { passive: true });
+    el.addEventListener("touchmove", onMove, { passive: false });
+    el.addEventListener("touchend", onEnd, { passive: true });
+    el.addEventListener("touchcancel", onEnd, { passive: true });
+    return () => {
+      el.removeEventListener("touchstart", onStart);
+      el.removeEventListener("touchmove", onMove);
+      el.removeEventListener("touchend", onEnd);
+      el.removeEventListener("touchcancel", onEnd);
+    };
+  }, [history?.length]);
+
   const patchSet = (i: number, patch: Partial<SetEntry>) => {
     const sets = exercise.sets.map((s, idx) => (idx === i ? { ...s, ...patch } : s));
     onChange({ ...exercise, sets });
@@ -113,7 +164,19 @@ export function ExerciseCard({ exercise, step, prev, prevDate, onChange, onSetDo
   };
 
   return (
-    <section className={`exercise-card ${isActive ? "active" : ""}`} onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
+    <section
+      ref={cardRef}
+      className={`exercise-card ${isActive ? "active" : ""}`}
+      onClickCapture={(e) => {
+        // A finished swipe can leave a stray click on whatever was under the finger
+        // (a set badge, a stepper) — swallow exactly that one.
+        if (swipedRef.current) {
+          e.stopPropagation();
+          e.preventDefault();
+          swipedRef.current = false;
+        }
+      }}
+    >
       <header className="exercise-head">
         {editableName ? (
           <ExerciseNameField
@@ -139,10 +202,10 @@ export function ExerciseCard({ exercise, step, prev, prevDate, onChange, onSetDo
           </button>
           <span className="hdiv" />
           <button
-            className={`hbtn ${showPrev ? "has-note" : ""}`}
-            aria-label="last time's numbers"
-            title="Last time (or swipe right)"
-            onClick={() => setShowPrev((v) => !v)}
+            className={`hbtn ${off > 0 ? "has-note" : ""}`}
+            aria-label="previous sessions"
+            title="Previous sessions (or swipe ←)"
+            onClick={cycleBack}
           >
             ↺
           </button>
@@ -171,7 +234,7 @@ export function ExerciseCard({ exercise, step, prev, prevDate, onChange, onSetDo
         </div>
       </header>
 
-      {isActive && nextSetIdx >= 0 && (
+      {isActive && off === 0 && nextSetIdx >= 0 && (
         <div className="active-hint tiny">
           <span className="active-now">▶ Current</span>
           <span className="muted">
@@ -191,20 +254,19 @@ export function ExerciseCard({ exercise, step, prev, prevDate, onChange, onSetDo
         />
       )}
 
-      {showPrev ? (
+      {off > 0 && shown ? (
         <div className="prev-panel lastweek" aria-readonly="true">
           <div className="lw-ribbon">
-            <span className="lw-tag">Last week</span>
-            {prevDate && (
-              <span className="lw-date">
-                {niceDate(prevDate)} · {daysAgoLabel(prevDate)}
-              </span>
-            )}
+            <span className="lw-tag">{backLabel}</span>
+            <span className="lw-date">
+              {niceDate(shown.date)} · {daysAgoLabel(shown.date)}
+            </span>
+            {maxBack > 1 && <span className="lw-count num">{off}/{maxBack}</span>}
             <span className="lw-lock">🔒 read-only</span>
           </div>
-          {prev && prev.sets.length ? (
+          {shown.perf.sets.length ? (
             <div className="prev-rows">
-              {prev.sets.map((s, i) => {
+              {shown.perf.sets.map((s, i) => {
                 const u = units ?? "kg";
                 // Reps vs the scheme target: over = green, under = red (mirrors the live cue).
                 const over = s.reps != null && defReps != null && s.reps > defReps;
@@ -259,12 +321,12 @@ export function ExerciseCard({ exercise, step, prev, prevDate, onChange, onSetDo
                   </div>
                 );
               })}
-              {prev.note && <p className="lw-note">“{prev.note}”</p>}
+              {shown.perf.note && <p className="lw-note">“{shown.perf.note}”</p>}
             </div>
           ) : (
-            <p className="muted tiny">No previous session logged for this exercise yet.</p>
+            <p className="muted tiny">No sets logged for this exercise that session.</p>
           )}
-          <button className="mini prev-back" onClick={() => setShowPrev(false)}>
+          <button className="mini prev-back" onClick={() => setHistOffset(0)}>
             ← Back to this week (edit)
           </button>
         </div>

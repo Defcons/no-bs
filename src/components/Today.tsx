@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useLiveQuery } from "dexie-react-hooks";
-import { db, distinctExerciseNames, getSetting, lastWorkoutForDay, type StoredWorkout } from "../db";
+import { db, distinctExerciseNames, getSetting, lastWorkoutForDay, recentWorkoutsForDay, type StoredWorkout } from "../db";
 import { resolveExercise } from "../lib/exercises";
 import { restForId } from "../lib/exerciseRest";
 import { daysAgo, daysAgoLabel, hhmmss, mmss, niceDate } from "../lib/format";
@@ -51,6 +51,20 @@ type Props = {
   activeTab: string; // which tab is showing — the back button only acts on "today"
   goToday: () => void; // back on another tab switches here first (exit only from Today)
 };
+
+// Up to 3 previous performances of one exercise, newest first, drawn from the recent
+// sessions of this day — each with the date it was logged. Sessions that didn't
+// include the exercise are skipped, so every swipe-back reveals real numbers.
+function exerciseHistory(sessions: StoredWorkout[], ex: ExercisePerf): { date: string; perf: ExercisePerf }[] {
+  const id = resolveExercise(ex.name, ex.exerciseId).id;
+  const out: { date: string; perf: ExercisePerf }[] = [];
+  for (const w of sessions) {
+    const perf = w.exercises.find((p) => resolveExercise(p.name, p.exerciseId).id === id);
+    if (perf && perf.sets.length) out.push({ date: w.date, perf });
+    if (out.length >= 3) break;
+  }
+  return out;
+}
 
 export function Today({
   templates,
@@ -113,7 +127,7 @@ export function Today({
   const promptDeadline = useRef<number>(0);
   const hrEver = useRef(false); // did HR ever connect this session?
   const lastHrAt = useRef(0); // last time an HR reading arrived
-  const [prev, setPrev] = useState<StoredWorkout | undefined>();
+  const [prevSessions, setPrevSessions] = useState<StoredWorkout[]>([]);
   const [prBest, setPrBest] = useState<Map<string, number>>(new Map()); // lift id → all-time best est-1RM (live PR badge)
   const [lastByDay, setLastByDay] = useState<Record<string, StoredWorkout | undefined>>({});
   const [lastAlt, setLastAlt] = useState<StoredWorkout | null>(null); // most recent Alternative session
@@ -130,12 +144,14 @@ export function Today({
   // flag the last query to RESOLVE (not the last typed) would win.
   useEffect(() => {
     if (!draft) {
-      setPrev(undefined);
+      setPrevSessions([]);
       return;
     }
     let cancelled = false;
-    lastWorkoutForDay(draft.dayName).then((w) => {
-      if (!cancelled) setPrev(w);
+    // Fetch a few extra sessions (6) so up to 3 real PERFORMANCES survive per exercise
+    // even when a session skipped or swapped one — exerciseHistory() filters per lift.
+    recentWorkoutsForDay(draft.dayName, 6).then((ws) => {
+      if (!cancelled) setPrevSessions(ws);
     });
     return () => {
       cancelled = true;
@@ -866,10 +882,7 @@ export function Today({
             key={ex.id ?? i}
             exercise={ex}
             step={stepForExercise(ex.name, weightStep, ex.step)}
-            prev={prev?.exercises.find(
-              (p) => resolveExercise(p.name, p.exerciseId).id === resolveExercise(ex.name, ex.exerciseId).id,
-            )}
-            prevDate={prev?.date}
+            history={exerciseHistory(prevSessions, ex)}
             bestE1rm={prBest.get(resolveExercise(ex.name, ex.exerciseId).id)}
             isActive={i === activeExIdx}
             onChange={(e) => setExercise(i, e)}
