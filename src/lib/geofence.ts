@@ -1,5 +1,5 @@
 // Leave-area auto-end. When a (non-Alternative) workout starts, we anchor to where
-// you are on the first GPS fix; if you then move more than ~100 m away for 5 min
+// you are on the first GPS fix; if you then move more than ~100 m away for 10 min
 // while the workout is running, onLeave() fires so the session auto-saves. Uses a
 // background foreground-service so it works with the screen off. Native only.
 import { Capacitor, registerPlugin } from "@capacitor/core";
@@ -45,7 +45,7 @@ export function distanceM(a: LatLng, b: LatLng): number {
 }
 
 const RADIUS_M = 100; // how far counts as "left the area"
-const EXIT_GRACE_MS = 5 * 60 * 1000; // ...sustained for this long
+const EXIT_GRACE_MS = 10 * 60 * 1000; // ...sustained for this long
 const REFINE_BY_M = 15; // upgrade the anchor to a fix at least this much more accurate
 // Flip to true + rebuild the OTA bundle to trace anchor/distance/accuracy in logcat
 // (Capacitor forwards console.log). This feature fails SILENTLY, so it needs a trace.
@@ -86,7 +86,7 @@ export async function startGeofence(onLeave: () => void): Promise<boolean> {
     const id = await BackgroundGeolocation.addWatcher(
       {
         backgroundTitle: "NoBS – Workout Log",
-        backgroundMessage: "Finishing up — saves your workout when you leave.",
+        backgroundMessage: "Saves your workout automatically when you leave the gym.",
         requestPermissions: true,
         stale: false,
         distanceFilter: 25,

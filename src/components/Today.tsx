@@ -471,8 +471,8 @@ export function Today({
   // looks nearly done — most sets marked complete, OR a long stretch with no
   // activity (finished, or walked off without ending) — so the notification only
   // shows for the last few minutes, exactly when leaving actually matters.
-  const NEAR_END_FRACTION = 0.6; // ≥60% of sets marked done
-  const IDLE_ARM_MS = 12 * 60 * 1000; // ...or no activity for 12 min
+  const NEAR_END_FRACTION = 0.85; // ≥85% of sets marked done (the notification felt too early at 0.6)
+  const IDLE_ARM_MS = 15 * 60 * 1000; // ...or no activity for 15 min
   useEffect(() => setGeoArmed(false), [draft?.startedAt]); // fresh session → disarm
   useEffect(() => {
     if (!draft || draft.custom || geoArmed) return;
