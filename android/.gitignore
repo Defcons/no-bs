@@ -98,4 +98,6 @@ app/src/main/assets/public
 # Generated Config files
 app/src/main/assets/capacitor.config.json
 app/src/main/assets/capacitor.plugins.json
+# Android developer-verification ownership token (account-tied, local-only — never commit; deleted after registration)
+app/src/main/assets/adi-registration.properties
 app/src/main/res/xml/config.xml
