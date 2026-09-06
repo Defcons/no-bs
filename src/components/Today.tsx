@@ -12,7 +12,7 @@ import { startGeofence, stopGeofence } from "../lib/geofence";
 import { exitPip, isInPip, onPipChange, setPipAutoEnter } from "../lib/pip";
 import { onMediaButton, onVolumeKey, setMediaButtonCapture, setPhoneKeyCapture, setVolumeCapture } from "../lib/hwButtons";
 import { currentTrack, startTracking, stopTracking } from "../lib/tracker";
-import { currentSteps, startSteps, stopSteps } from "../lib/pedometer";
+import { calibrateStride, currentSteps, startSteps, stopSteps } from "../lib/pedometer";
 import { computeRun, fmtDist, fmtPace, type RunStats } from "../lib/runStats";
 import { stepForExercise } from "../lib/steps";
 import { playBreakSkip, playBreakStart, playSoundChoice } from "../lib/sounds";
@@ -324,6 +324,7 @@ export function Today({
       cancelBreakNotification(); // no "Rest over!" minutes after the workout ended
       const track = draft?.trackGps ? await stopTracking() : undefined;
       const steps = await currentSteps(); // session total; the effect cleanup stops the sensor
+      void calibrateStride(track, steps); // learn the user's stride from a clean-GPS run (no-ops otherwise)
       const endedAt = auto ? draft?.lastActivityAt : undefined;
       // Capture whether mood still needs logging BEFORE finish() clears the draft.
       const moodIncomplete = draft ? draft.moodBefore == null || draft.moodAfter == null : false;

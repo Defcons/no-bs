@@ -3,7 +3,7 @@
 // notes, duration, HR and (for runs) the route map.
 import { Suspense, lazy, useMemo, useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
-import { db, type StoredWorkout } from "../db";
+import { db, getSetting, type StoredWorkout } from "../db";
 import { clockTime, daysAgoLabel, hhmmss, localDay, mmss, niceDate } from "../lib/format";
 import { computeRun, fmtDist, fmtPace } from "../lib/runStats";
 import { resolveExercise } from "../lib/exercises";
@@ -372,7 +372,7 @@ function LogRow({
 
       {full && (
         <div className="log-detail">
-          {w.track && w.track.length >= 2 && <RunDetail track={w.track} breaks={w.breaks} />}
+          {w.track && w.track.length >= 2 && <RunDetail track={w.track} breaks={w.breaks} steps={w.steps} />}
           {w.note && <div className="log-note">📝 {w.note}</div>}
           {w.exercises.map((e, i) => {
             const unit = resolveExercise(e.name, e.exerciseId).unit;
@@ -436,8 +436,9 @@ function LogRow({
   );
 }
 
-function RunDetail({ track, breaks }: { track: NonNullable<StoredWorkout["track"]>; breaks?: StoredWorkout["breaks"] }) {
+function RunDetail({ track, breaks, steps }: { track: NonNullable<StoredWorkout["track"]>; breaks?: StoredWorkout["breaks"]; steps?: number }) {
   const s = computeRun(track);
+  const stride = useLiveQuery(() => getSetting<number>("strideM", 0.74), [], 0.74);
   if (!s) return null;
   return (
     <div className="run-detail">
@@ -473,6 +474,14 @@ function RunDetail({ track, breaks }: { track: NonNullable<StoredWorkout["track"
           Distance &amp; route now smoothed · raw GPS measured {fmtDist(s.rawDistanceM)}
         </p>
       )}
+      {steps && steps > 0 ? (
+        <p className="muted tiny run-raw">
+          👟 {steps} steps ≈ {fmtDist(steps * stride)} at your {stride.toFixed(2)} m stride
+          {s.distanceM > 0 && steps * stride > s.distanceM * 1.12
+            ? " — more than GPS measured; a dropout likely cut the route short"
+            : ""}
+        </p>
+      ) : null}
     </div>
   );
 }
