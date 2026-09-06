@@ -136,6 +136,31 @@ export function smoothTrack(track: TrackPoint[]): TrackPoint[] {
   return track.map((p, i) => ({ ...p, lat: lat0 + sy[i] / mPerLat, lng: lng0 + sx[i] / mPerLng }));
 }
 
+const GAP_SEC = 20; // a jump over MORE time than this...
+const GAP_DIST_M = 50; // ...AND more distance than this = a GPS dropout, not real movement
+export type TrackSegment = { points: TrackPoint[]; gap: boolean };
+// Split a track into contiguous drawable segments, flagging the connectors that span a
+// GPS DROPOUT (you moved far with no fixes for a while) so the map can draw those dashed
+// — an honest "path unknown here" instead of a confident straight line across the water.
+// A long PAUSE (many seconds but tiny distance — standing still) is NOT a gap.
+export function segmentTrack(track: TrackPoint[]): TrackSegment[] {
+  if (track.length < 2) return track.length ? [{ points: track.slice(), gap: false }] : [];
+  const segs: TrackSegment[] = [];
+  let run: TrackPoint[] = [track[0]];
+  for (let i = 1; i < track.length; i++) {
+    const dt = (track[i].t - track[i - 1].t) / 1000;
+    if (dt > GAP_SEC && distanceM(track[i - 1], track[i]) > GAP_DIST_M) {
+      segs.push({ points: run, gap: false });
+      segs.push({ points: [track[i - 1], track[i]], gap: true }); // the dropout connector
+      run = [track[i]];
+    } else {
+      run.push(track[i]);
+    }
+  }
+  segs.push({ points: run, gap: false });
+  return segs;
+}
+
 export function fmtPace(secPerKm: number): string {
   if (!secPerKm || !Number.isFinite(secPerKm)) return "—";
   const total = Math.round(secPerKm); // round first so 59.6s carries to the minute

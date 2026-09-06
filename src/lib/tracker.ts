@@ -47,9 +47,11 @@ interface BackgroundGeolocationPlugin {
 
 const BackgroundGeolocation = registerPlugin<BackgroundGeolocationPlugin>("BackgroundGeolocation");
 
-const MAX_ACCURACY_M = 65; // drop obviously-bad fixes. Was 40, but that culled a lot of
-// legit multipath/screen-off fixes (water-surrounded routes) → straight "airline" gaps;
-// true position spikes are caught downstream by the speed test in runStats (cleanTrack).
+const MAX_ACCURACY_M = 100; // keep all but clearly-junk fixes. 40→65→100: the hard cutoff
+// used to drop legit multipath/screen-off fixes (water-surrounded routes) into "airline"
+// GAPS; now the Kalman smoother WEIGHTS each fix by its accuracy (a 100 m fix barely tugs
+// the line), so we keep marginal fixes to fill gaps and let the smoother temper them.
+// Spikes are still caught by the speed test in runStats (cleanTrack).
 const DRAIN_MS = 4000; // how often to pull the native buffer while foregrounded
 const HR_FRESH_MS = 8000; // only stamp HR on fixes that just arrived (foreground)
 
