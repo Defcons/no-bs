@@ -6,6 +6,7 @@
 import { getSetting } from "../db";
 import type { TrackPoint } from "../types";
 import { decodePolyline, downsample } from "./polyline";
+import { processTrack, segmentTrack } from "./runStats";
 
 export type Costing = "pedestrian" | "bicycle";
 
@@ -27,14 +28,25 @@ export async function mapMatchConfigured(): Promise<boolean> {
 
 type TraceResponse = { trip?: { legs?: { shape?: string }[] } };
 
-// POST the track to Valhalla /trace_route and return the snapped path as
-// [lat,lng] points. Valhalla encodes leg shapes at precision 1e6.
-export async function mapMatch(track: TrackPoint[], costing: Costing = "pedestrian"): Promise<[number, number][] | null> {
+// Snap the track to roads, returned as SEGMENTS (one per continuous GPS stretch).
+// A GPS dropout is a discontinuity Valhalla's map_snap can't bridge — it truncates
+// the match at the gap (only the first stretch would snap) — so split the track at
+// dropouts (`segmentTrack`, same split the map draws dashed) and match each stretch
+// on its own, leaving the gaps as gaps. Matches the de-spiked+smoothed `processTrack`
+// so the magenta corrects the same line the blue one shows. Null = nothing matched.
+export async function mapMatch(track: TrackPoint[], costing: Costing = "pedestrian"): Promise<[number, number][][] | null> {
   const { url, token } = await endpoint();
   if (!url || !token || track.length < 2) return null;
-  // Valhalla map-matches the SHAPE, so thinning a long track keeps the request
-  // small without changing which roads it snaps to.
-  const shape = downsample(track, 1000).map((p) => ({ lat: p.lat, lon: p.lng, time: Math.round(p.t / 1000) }));
+  const stretches = segmentTrack(processTrack(track)).filter((s) => !s.gap && s.points.length >= 2);
+  if (!stretches.length) return null;
+  const snapped = await Promise.all(stretches.map((s) => matchStretch(url, token, downsample(s.points, 1000), costing)));
+  const segs = snapped.filter((s): s is [number, number][] => !!s && s.length >= 2);
+  return segs.length ? segs : null;
+}
+
+// Map-match one continuous stretch. Valhalla encodes leg shapes at precision 1e6.
+async function matchStretch(url: string, token: string, pts: TrackPoint[], costing: Costing): Promise<[number, number][] | null> {
+  const shape = pts.map((p) => ({ lat: p.lat, lon: p.lng, time: Math.round(p.t / 1000) }));
   try {
     const res = await fetch(`${url}/trace_route`, {
       method: "POST",
@@ -43,8 +55,8 @@ export async function mapMatch(track: TrackPoint[], costing: Costing = "pedestri
     });
     if (!res.ok) return null;
     const json = (await res.json()) as TraceResponse;
-    const pts = (json.trip?.legs ?? []).flatMap((l) => (l.shape ? decodePolyline(l.shape, 1e6) : []));
-    return pts.length >= 2 ? pts : null;
+    const p = (json.trip?.legs ?? []).flatMap((l) => (l.shape ? decodePolyline(l.shape, 1e6) : []));
+    return p.length >= 2 ? p : null;
   } catch {
     return null; // offline / blocked / bad response → caller keeps the raw track
   }

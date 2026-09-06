@@ -466,7 +466,7 @@ function RunDetail({
   const s = computeRun(track);
   const stride = useLiveQuery(() => getSetting<number>("strideM", 0.74), [], 0.74);
   const [canSnap, setCanSnap] = useState(false);
-  const [snapped, setSnapped] = useState<[number, number][] | null>(null);
+  const [snapped, setSnapped] = useState<[number, number][][] | null>(null);
   const [snapping, setSnapping] = useState(false);
   const [snapErr, setSnapErr] = useState("");
   useEffect(() => {
