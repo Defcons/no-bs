@@ -75,4 +75,7 @@
 
     <!-- Notifications (break-timer alarm + reminders) -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <!-- Hardware step counter (workout step stats). Runtime-requested on Android 10+. -->
+    <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION" />
 </manifest>

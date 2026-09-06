@@ -339,6 +339,11 @@ function LogRow({
                 🔥 <span className="num">{kcal}</span> kcal
               </span>
             ) : null}
+            {w.steps ? (
+              <span className="chip">
+                👟 <span className="num">{w.steps}</span> steps
+              </span>
+            ) : null}
             {w.moodBefore || w.moodAfter ? (
               <span className="chip">
                 🙂{" "}

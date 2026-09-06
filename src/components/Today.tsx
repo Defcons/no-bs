@@ -12,6 +12,7 @@ import { startGeofence, stopGeofence } from "../lib/geofence";
 import { exitPip, isInPip, onPipChange, setPipAutoEnter } from "../lib/pip";
 import { onMediaButton, onVolumeKey, setMediaButtonCapture, setPhoneKeyCapture, setVolumeCapture } from "../lib/hwButtons";
 import { currentTrack, startTracking, stopTracking } from "../lib/tracker";
+import { currentSteps, startSteps, stopSteps } from "../lib/pedometer";
 import { computeRun, fmtDist, fmtPace, type RunStats } from "../lib/runStats";
 import { stepForExercise } from "../lib/steps";
 import { playBreakSkip, playBreakStart, playSoundChoice } from "../lib/sounds";
@@ -113,6 +114,7 @@ export function Today({
   const [pipMode, setPipMode] = useState(false);
   const [geoArmed, setGeoArmed] = useState(false); // leave-gym watcher armed (only near end of workout)
   const [liveRun, setLiveRun] = useState<RunStats | null>(null); // live GPS run stats shown while tracking
+  const [liveSteps, setLiveSteps] = useState(0); // session step count (native hardware step counter)
   const [editTpl, setEditTpl] = useState<DayTemplate | null>(null); // workout being created/edited
   const native = Capacitor.isNativePlatform();
   const bpmRef = useRef<number | null>(null);
@@ -321,10 +323,14 @@ export function Today({
     try {
       cancelBreakNotification(); // no "Rest over!" minutes after the workout ended
       const track = draft?.trackGps ? await stopTracking() : undefined;
+      const steps = await currentSteps(); // session total; the effect cleanup stops the sensor
       const endedAt = auto ? draft?.lastActivityAt : undefined;
       // Capture whether mood still needs logging BEFORE finish() clears the draft.
       const moodIncomplete = draft ? draft.moodBefore == null || draft.moodAfter == null : false;
-      const row = await finish(getHrStats(), track && track.length >= 2 ? { track } : undefined, { endedAt });
+      const extra: Partial<StoredWorkout> = {};
+      if (track && track.length >= 2) extra.track = track;
+      if (steps > 0) extra.steps = steps;
+      const row = await finish(getHrStats(), Object.keys(extra).length ? extra : undefined, { endedAt });
       if (row && !row.edited) {
         // Edits update the local record only — re-syncing would append a new column.
         const res = await syncWorkout(row);
@@ -494,6 +500,28 @@ export function Today({
     const id = window.setInterval(tick, 2000);
     return () => window.clearInterval(id);
   }, [trackGps]);
+  // Native step counter for the WHOLE session (all workouts, not just runs). Counts
+  // screen-off via the hardware sensor; polled every 5 s for the live badge, the total
+  // captured in finishNow. Released on session end (also covers cancel/delete/unmount).
+  useEffect(() => {
+    if (!draft?.startedAt) {
+      setLiveSteps(0);
+      return;
+    }
+    let active = true;
+    startSteps();
+    const tick = async () => {
+      const s = await currentSteps();
+      if (active) setLiveSteps(s);
+    };
+    tick();
+    const id = window.setInterval(tick, 5000);
+    return () => {
+      active = false;
+      window.clearInterval(id);
+      stopSteps();
+    };
+  }, [draft?.startedAt]);
 
   // Leave-gym auto-end. The background-location watcher forces a persistent Android
   // notification for its whole lifetime, so we DON'T run it for the entire session
@@ -858,6 +886,15 @@ export function Today({
             <span className="hr-col">
               <span className="hr-val num">{liveKcal}</span>
               <span className="hr-avg">kcal</span>
+            </span>
+          </div>
+        )}
+        {liveSteps > 0 && (
+          <div className="kcal-badge" title="Steps this session (phone step counter)">
+            <span className="kcal-flame">👟</span>
+            <span className="hr-col">
+              <span className="hr-val num">{liveSteps}</span>
+              <span className="hr-avg">steps</span>
             </span>
           </div>
         )}

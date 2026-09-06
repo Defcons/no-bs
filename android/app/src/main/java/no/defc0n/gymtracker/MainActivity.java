@@ -17,6 +17,7 @@ public class MainActivity extends BridgeActivity {
     public void onCreate(Bundle savedInstanceState) {
         registerPlugin(PipPlugin.class);
         registerPlugin(HwButtonsPlugin.class);
+        registerPlugin(StepCounterPlugin.class);
         super.onCreate(savedInstanceState);
     }
 
