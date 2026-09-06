@@ -6,7 +6,7 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { db, getSetting, type StoredWorkout } from "../db";
 import { clockTime, daysAgoLabel, hhmmss, localDay, mmss, niceDate } from "../lib/format";
 import { computeRun, fmtDist, fmtPace } from "../lib/runStats";
-import { costingForName, mapMatch, mapMatchConfigured } from "../lib/mapMatch";
+import { costingForName, mapMatch, mapMatchConfigured, type SnapResult } from "../lib/mapMatch";
 import { resolveExercise } from "../lib/exercises";
 import { liftRecords, workoutVolume } from "../lib/stats";
 import { sessionKcal } from "../lib/calories";
@@ -466,7 +466,7 @@ function RunDetail({
   const s = computeRun(track);
   const stride = useLiveQuery(() => getSetting<number>("strideM", 0.74), [], 0.74);
   const [canSnap, setCanSnap] = useState(false);
-  const [snapped, setSnapped] = useState<[number, number][][] | null>(null);
+  const [snapped, setSnapped] = useState<SnapResult | null>(null);
   const [snapping, setSnapping] = useState(false);
   const [snapErr, setSnapErr] = useState("");
   useEffect(() => {
@@ -492,6 +492,7 @@ function RunDetail({
             <>
               <span className="muted tiny">
                 <b style={{ color: "#ec4899" }}>Magenta</b> = snapped to road
+                {snapped.bridged.length > 0 ? " · dashed = best-guess across a GPS gap" : ""}
               </span>
               <button className="mini" onClick={() => setSnapped(null)}>
                 Hide

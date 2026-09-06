@@ -6,6 +6,7 @@ import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import type { TrackPoint, WorkoutBreak } from "../types";
 import { processTrack, segmentTrack } from "../lib/runStats";
+import type { SnapResult } from "../lib/mapMatch";
 import { mmss } from "../lib/format";
 
 // OpenTopoMap: topographic base (contours + hillshade) that shows TRAILS/paths
@@ -21,7 +22,7 @@ const LONG_BREAK_SEC = 60;
 // means GPS wasn't actually covering that moment, so any placement would be bogus.
 const MATCH_TOLERANCE_MS = 120_000;
 
-export function RunMap({ track, breaks, snapped }: { track: TrackPoint[]; breaks?: WorkoutBreak[]; snapped?: [number, number][][] }) {
+export function RunMap({ track, breaks, snapped }: { track: TrackPoint[]; breaks?: WorkoutBreak[]; snapped?: SnapResult }) {
   const el = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -43,11 +44,14 @@ export function RunMap({ track, breaks, snapped }: { track: TrackPoint[]; breaks
         { color: "#4f8cff", weight: 4, opacity: seg.gap ? 0.45 : 0.9, dashArray: seg.gap ? "3 9" : undefined },
       ).addTo(map);
     }
-    // Snap-to-road overlay (Valhalla map-matching) drawn on top in magenta so the
-    // divergence from the raw GPS line is obvious. One polyline PER continuous stretch
-    // (dropout gaps left as gaps, not a false line across them). Absent = unchanged map.
-    for (const seg of snapped ?? []) {
+    // Snap-to-road overlay (Valhalla map-matching), magenta over the raw line so the
+    // divergence is obvious. matched = recorded stretches, SOLID. bridged = the routed
+    // best-guess across a GPS dropout, DASHED so it reads as inferred, not recorded.
+    for (const seg of snapped?.matched ?? []) {
       if (seg.length >= 2) L.polyline(seg, { color: "#ec4899", weight: 4, opacity: 0.95 }).addTo(map);
+    }
+    for (const seg of snapped?.bridged ?? []) {
+      if (seg.length >= 2) L.polyline(seg, { color: "#ec4899", weight: 3, opacity: 0.8, dashArray: "6 8" }).addTo(map);
     }
     L.circleMarker(pts[0], { radius: 6, color: "#34d399", fillColor: "#34d399", fillOpacity: 1 }).addTo(map);
     L.circleMarker(pts[pts.length - 1], { radius: 6, color: "#ef4444", fillColor: "#ef4444", fillOpacity: 1 }).addTo(map);

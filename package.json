@@ -1,7 +1,7 @@
 {
   "name": "no-bs",
   "private": true,
-  "version": "1.67.1",
+  "version": "1.67.2",
   "license": "AGPL-3.0-only",
   "type": "module",
   "scripts": {

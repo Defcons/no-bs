@@ -10,6 +10,12 @@ import { processTrack, segmentTrack } from "./runStats";
 
 export type Costing = "pedestrian" | "bicycle";
 
+// matched = recorded GPS stretches snapped to the network (solid). bridged = the
+// routed best-guess of the path taken ACROSS a GPS dropout (dashed, inferred — a
+// guess, so kept separate and out of any distance calc).
+export type SnapResult = { matched: [number, number][][]; bridged: [number, number][][] };
+type Piece = { kind: "matched" | "bridged"; pts: [number, number][] | null };
+
 // Bikes snap to the road network; walk/run/hike snap to paths + roads.
 export function costingForName(name?: string): Costing {
   return /\b(bike|cycl|ride|riding|spin)/i.test(name ?? "") ? "bicycle" : "pedestrian";
@@ -28,20 +34,26 @@ export async function mapMatchConfigured(): Promise<boolean> {
 
 type TraceResponse = { trip?: { legs?: { shape?: string }[] } };
 
-// Snap the track to roads, returned as SEGMENTS (one per continuous GPS stretch).
-// A GPS dropout is a discontinuity Valhalla's map_snap can't bridge — it truncates
-// the match at the gap (only the first stretch would snap) — so split the track at
-// dropouts (`segmentTrack`, same split the map draws dashed) and match each stretch
-// on its own, leaving the gaps as gaps. Matches the de-spiked+smoothed `processTrack`
-// so the magenta corrects the same line the blue one shows. Null = nothing matched.
-export async function mapMatch(track: TrackPoint[], costing: Costing = "pedestrian"): Promise<[number, number][][] | null> {
+// Snap the track to roads. A GPS dropout is a discontinuity map_snap can't bridge
+// (it truncates the match at the gap), so split at dropouts (`segmentTrack`, the same
+// split the map draws dashed) and handle each piece: MATCH each continuous stretch on
+// its own, and BRIDGE each gap by ROUTING between its two ends (the best-guess of the
+// path taken while GPS was lost). Runs on the de-spiked+smoothed `processTrack` so the
+// magenta corrects the same line the blue one shows. Null = nothing snapped at all.
+export async function mapMatch(track: TrackPoint[], costing: Costing = "pedestrian"): Promise<SnapResult | null> {
   const { url, token } = await endpoint();
   if (!url || !token || track.length < 2) return null;
-  const stretches = segmentTrack(processTrack(track)).filter((s) => !s.gap && s.points.length >= 2);
-  if (!stretches.length) return null;
-  const snapped = await Promise.all(stretches.map((s) => matchStretch(url, token, downsample(s.points, 1000), costing)));
-  const segs = snapped.filter((s): s is [number, number][] => !!s && s.length >= 2);
-  return segs.length ? segs : null;
+  const segs = segmentTrack(processTrack(track));
+  const pieces = await Promise.all(
+    segs.map((s): Promise<Piece> => {
+      if (s.points.length < 2) return Promise.resolve({ kind: "matched", pts: null });
+      if (s.gap) return routeGap(url, token, s.points[0], s.points[s.points.length - 1], costing).then((pts) => ({ kind: "bridged", pts }));
+      return matchStretch(url, token, downsample(s.points, 1000), costing).then((pts) => ({ kind: "matched", pts }));
+    }),
+  );
+  const matched = pieces.filter((p) => p.kind === "matched" && p.pts).map((p) => p.pts as [number, number][]);
+  const bridged = pieces.filter((p) => p.kind === "bridged" && p.pts).map((p) => p.pts as [number, number][]);
+  return matched.length || bridged.length ? { matched, bridged } : null;
 }
 
 // Map-match one continuous stretch. Valhalla encodes leg shapes at precision 1e6.
@@ -59,6 +71,25 @@ async function matchStretch(url: string, token: string, pts: TrackPoint[], costi
     return p.length >= 2 ? p : null;
   } catch {
     return null; // offline / blocked / bad response → caller keeps the raw track
+  }
+}
+
+// Best-guess the path across a GPS dropout by ROUTING (Valhalla /route) between the
+// last point before and the first point after. Inferred, not recorded — the caller
+// draws it dashed and keeps it out of the distance.
+async function routeGap(url: string, token: string, a: TrackPoint, b: TrackPoint, costing: Costing): Promise<[number, number][] | null> {
+  try {
+    const res = await fetch(`${url}/route`, {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+      body: JSON.stringify({ costing, locations: [{ lat: a.lat, lon: a.lng }, { lat: b.lat, lon: b.lng }] }),
+    });
+    if (!res.ok) return null;
+    const json = (await res.json()) as TraceResponse;
+    const p = (json.trip?.legs ?? []).flatMap((l) => (l.shape ? decodePolyline(l.shape, 1e6) : []));
+    return p.length >= 2 ? p : null;
+  } catch {
+    return null;
   }
 }
 
