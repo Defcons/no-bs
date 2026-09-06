@@ -42,6 +42,23 @@ export function computeRun(track: TrackPoint[] | undefined): RunStats | null {
   };
 }
 
+// Drop GPS spikes from a track for DRAWING: a point implying more than
+// MAX_SEGMENT_SPEED_MS from the last kept point is multipath, not movement, so it
+// would draw as a teleport spike on the map. (computeRun already skips such segments
+// for distance; this cleans the polyline itself.) The first point is always kept.
+export function cleanTrack(track: TrackPoint[]): TrackPoint[] {
+  if (track.length < 2) return track;
+  const out: TrackPoint[] = [track[0]];
+  for (let i = 1; i < track.length; i++) {
+    const a = out[out.length - 1];
+    const b = track[i];
+    const dt = (b.t - a.t) / 1000;
+    if (dt > 0 && distanceM(a, b) / dt > MAX_SEGMENT_SPEED_MS) continue; // spike → skip
+    out.push(b);
+  }
+  return out;
+}
+
 export function fmtPace(secPerKm: number): string {
   if (!secPerKm || !Number.isFinite(secPerKm)) return "—";
   const total = Math.round(secPerKm); // round first so 59.6s carries to the minute

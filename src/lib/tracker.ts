@@ -47,7 +47,9 @@ interface BackgroundGeolocationPlugin {
 
 const BackgroundGeolocation = registerPlugin<BackgroundGeolocationPlugin>("BackgroundGeolocation");
 
-const MAX_ACCURACY_M = 40; // drop obviously-bad fixes
+const MAX_ACCURACY_M = 65; // drop obviously-bad fixes. Was 40, but that culled a lot of
+// legit multipath/screen-off fixes (water-surrounded routes) → straight "airline" gaps;
+// true position spikes are caught downstream by the speed test in runStats (cleanTrack).
 const DRAIN_MS = 4000; // how often to pull the native buffer while foregrounded
 const HR_FRESH_MS = 8000; // only stamp HR on fixes that just arrived (foreground)
 

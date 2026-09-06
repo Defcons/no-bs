@@ -1307,6 +1307,17 @@ button.chip {
   font-size: 10px;
   color: var(--muted);
 }
+/* Live running dashboard on Today (during GPS tracking) — bigger, glanceable
+   numbers; reuses the History run-stat tiles. */
+.live-run {
+  margin-top: 8px;
+}
+.live-run .run-stat {
+  padding: 10px 6px;
+}
+.live-run .run-stat-v {
+  font-size: 20px;
+}
 /* Leaflet controls/tiles sit on a dark surface — keep attribution legible. */
 .run-map .leaflet-control-attribution {
   background: rgba(0, 0, 0, 0.6);

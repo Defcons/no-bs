@@ -11,7 +11,8 @@ import { cancelBreakNotification, scheduleBreakNotification, showAutoEndNotifica
 import { startGeofence, stopGeofence } from "../lib/geofence";
 import { exitPip, isInPip, onPipChange, setPipAutoEnter } from "../lib/pip";
 import { onMediaButton, onVolumeKey, setMediaButtonCapture, setPhoneKeyCapture, setVolumeCapture } from "../lib/hwButtons";
-import { startTracking, stopTracking } from "../lib/tracker";
+import { currentTrack, startTracking, stopTracking } from "../lib/tracker";
+import { computeRun, fmtDist, fmtPace, type RunStats } from "../lib/runStats";
 import { stepForExercise } from "../lib/steps";
 import { playBreakSkip, playBreakStart, playSoundChoice } from "../lib/sounds";
 import { uid } from "../lib/uid";
@@ -111,6 +112,7 @@ export function Today({
   const moodNudgedRef = useRef(false); // once-per-session guard for that nudge
   const [pipMode, setPipMode] = useState(false);
   const [geoArmed, setGeoArmed] = useState(false); // leave-gym watcher armed (only near end of workout)
+  const [liveRun, setLiveRun] = useState<RunStats | null>(null); // live GPS run stats shown while tracking
   const [editTpl, setEditTpl] = useState<DayTemplate | null>(null); // workout being created/edited
   const native = Capacitor.isNativePlatform();
   const bpmRef = useRef<number | null>(null);
@@ -479,6 +481,18 @@ export function Today({
     return () => {
       stopTracking();
     };
+  }, [trackGps]);
+  // Live run dashboard: poll the in-progress track every 2 s so the Today screen shows
+  // distance/pace/speed as you run (native drains its GPS buffer every ~4 s).
+  useEffect(() => {
+    if (!trackGps) {
+      setLiveRun(null);
+      return;
+    }
+    const tick = () => setLiveRun(computeRun(currentTrack()));
+    tick();
+    const id = window.setInterval(tick, 2000);
+    return () => window.clearInterval(id);
   }, [trackGps]);
 
   // Leave-gym auto-end. The background-location watcher forces a persistent Android
@@ -865,14 +879,32 @@ export function Today({
       )}
 
       {draft.custom && native && (
-        <div className="pad gps-toggle-row">
-          <button
-            className={`mini ${draft.trackGps ? "active" : ""}`}
-            onClick={() => update((d) => ({ ...d, trackGps: !d.trackGps }))}
-          >
-            {draft.trackGps ? "◉ Tracking GPS route" : "○ Track GPS route"}
-          </button>
-          {draft.trackGps && <span className="muted tiny">Recording your route — map shows in History.</span>}
+        <div className="pad">
+          <div className="gps-toggle-row">
+            <button
+              className={`mini ${draft.trackGps ? "active" : ""}`}
+              onClick={() => update((d) => ({ ...d, trackGps: !d.trackGps }))}
+            >
+              {draft.trackGps ? "◉ Tracking GPS route" : "○ Track GPS route"}
+            </button>
+            {draft.trackGps && !liveRun && <span className="muted tiny">Acquiring GPS… live stats show here.</span>}
+          </div>
+          {draft.trackGps && liveRun && (
+            <div className="run-stats live-run">
+              <div className="run-stat">
+                <span className="run-stat-v">{fmtDist(liveRun.distanceM)}</span>
+                <span className="run-stat-l">distance</span>
+              </div>
+              <div className="run-stat">
+                <span className="run-stat-v">{fmtPace(liveRun.avgPaceSecPerKm)}</span>
+                <span className="run-stat-l">avg pace</span>
+              </div>
+              <div className="run-stat">
+                <span className="run-stat-v">{liveRun.avgSpeedKmh.toFixed(1)}</span>
+                <span className="run-stat-l">km/h</span>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
