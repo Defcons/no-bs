@@ -17,6 +17,7 @@ import { localDay } from "../lib/format";
 import { hrAvailable } from "../lib/hr";
 import { cancelTrainingReminders, notificationsSupported, requestNotifications, scheduleTrainingReminders } from "../lib/notify";
 import { importFromSheet, pendingCount, syncEnabled, syncPending, testSync } from "../lib/sheetSync";
+import { testMapMatch } from "../lib/mapMatch";
 import type { BwEntry, Sex } from "../lib/standards";
 import { type WeightUnit, displayStep, fromDisplayWeight, weightStr } from "../lib/units";
 import {
@@ -164,6 +165,9 @@ export function Settings({
   const [syncUrl, setSyncUrl] = useState("");
   const [syncSecret, setSyncSecret] = useState("");
   const [sheetViewUrl, setSheetViewUrl] = useState("");
+  const [mapMatchUrl, setMapMatchUrl] = useState("");
+  const [mapMatchToken, setMapMatchToken] = useState("");
+  const [mapMatchStatus, setMapMatchStatus] = useState("");
   const [theme, setTheme] = useState<"dark" | "light">("dark");
   const [autoBreak, setAutoBreak] = useState(false);
   const [volUpBreak, setVolUpBreak] = useState(false);
@@ -229,6 +233,8 @@ export function Settings({
     getSetting<string>("sheetSyncUrl", "").then(setSyncUrl);
     getSetting<string>("sheetSyncSecret", "").then(setSyncSecret);
     getSetting<string>("sheetViewUrl", "").then(setSheetViewUrl);
+    getSetting<string>("mapMatchUrl", "").then(setMapMatchUrl);
+    getSetting<string>("mapMatchToken", "").then(setMapMatchToken);
     getSetting<string>("theme", "dark").then((t) => setTheme(t === "light" ? "light" : "dark"));
     getSetting("autoBreakOnDone", false).then(setAutoBreak);
     getSetting("volumeUpBreak", false).then(setVolUpBreak);
@@ -266,6 +272,19 @@ export function Settings({
   const saveSheetViewUrl = (v: string) => {
     setSheetViewUrl(v);
     setSetting("sheetViewUrl", v.trim());
+  };
+  const saveMapMatchUrl = (v: string) => {
+    setMapMatchUrl(v);
+    setSetting("mapMatchUrl", v.trim());
+  };
+  const saveMapMatchToken = (v: string) => {
+    setMapMatchToken(v);
+    setSetting("mapMatchToken", v.trim());
+  };
+  const doTestMapMatch = async () => {
+    setMapMatchStatus("Testing…");
+    const r = await testMapMatch();
+    setMapMatchStatus(r.ok ? "✓ Reachable and the token works." : `✗ ${r.error ?? "failed"}`);
   };
 
   // Prominent disclosure + affirmative consent before any location permission
@@ -805,6 +824,42 @@ export function Settings({
             </p>
           </ToggleRow>
         )}
+      </details>
+
+      <details className="settings-group">
+        <summary>Route snapping (beta)</summary>
+
+        <div className="setting">
+          <label>Snap runs to roads &amp; trails</label>
+          <p className="muted tiny">
+            Optional. Point this at your own Valhalla map-matching server to snap a recorded route to the
+            road/path network (Strava-style) and read real elevation — GPS jitter and off-road drift get
+            corrected on the map. Open a run in History and tap “🛣 Snap to road”. Only the track points are
+            sent to the endpoint you set here; nothing is stored — it redraws on demand.
+          </p>
+          <input
+            type="text"
+            className="full"
+            style={{ marginTop: 8 }}
+            placeholder="Endpoint URL (e.g. https://route.agentas.net)"
+            value={mapMatchUrl}
+            onChange={(e) => saveMapMatchUrl(e.target.value)}
+          />
+          <input
+            type="password"
+            autoComplete="off"
+            className="full"
+            placeholder="Bearer token"
+            value={mapMatchToken}
+            onChange={(e) => saveMapMatchToken(e.target.value)}
+          />
+          <div className="row">
+            <button className="mini" onClick={doTestMapMatch}>
+              Test connection
+            </button>
+          </div>
+          {mapMatchStatus && <p className="muted tiny">{mapMatchStatus}</p>}
+        </div>
       </details>
 
       <details className="settings-group">

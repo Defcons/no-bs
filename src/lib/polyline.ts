@@ -26,7 +26,9 @@ export function encodePolyline(points: [number, number][]): string {
   return out;
 }
 
-export function decodePolyline(str: string): [number, number][] {
+// `factor` is 1e5 for our own routes (5-decimal precision); Valhalla encodes its
+// trace_route shapes at 1e6, so callers decoding those pass 1e6.
+export function decodePolyline(str: string, factor = 1e5): [number, number][] {
   const pts: [number, number][] = [];
   let i = 0;
   let lat = 0;
@@ -49,7 +51,7 @@ export function decodePolyline(str: string): [number, number][] {
       shift += 5;
     } while (b >= 0x20);
     lng += result & 1 ? ~(result >> 1) : result >> 1;
-    pts.push([lat / 1e5, lng / 1e5]);
+    pts.push([lat / factor, lng / factor]);
   }
   return pts;
 }

@@ -1,11 +1,12 @@
 // History: past workouts grouped into collapsible periods (week / month / year)
 // with type + text filtering. Tap a workout row to expand its exercises, sets,
 // notes, duration, HR and (for runs) the route map.
-import { Suspense, lazy, useMemo, useState } from "react";
+import { Suspense, lazy, useEffect, useMemo, useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db, getSetting, type StoredWorkout } from "../db";
 import { clockTime, daysAgoLabel, hhmmss, localDay, mmss, niceDate } from "../lib/format";
 import { computeRun, fmtDist, fmtPace } from "../lib/runStats";
+import { costingForName, mapMatch, mapMatchConfigured } from "../lib/mapMatch";
 import { resolveExercise } from "../lib/exercises";
 import { liftRecords, workoutVolume } from "../lib/stats";
 import { sessionKcal } from "../lib/calories";
@@ -385,7 +386,9 @@ function LogRow({
 
       {full && (
         <div className="log-detail">
-          {w.track && w.track.length >= 2 && <RunDetail track={w.track} breaks={w.breaks} steps={w.steps} />}
+          {w.track && w.track.length >= 2 && (
+            <RunDetail track={w.track} breaks={w.breaks} steps={w.steps} name={w.exercises[0]?.name} />
+          )}
           {w.note && <div className="log-note">📝 {w.note}</div>}
           {w.exercises.map((e, i) => {
             const unit = resolveExercise(e.name, e.exerciseId).unit;
@@ -449,15 +452,59 @@ function LogRow({
   );
 }
 
-function RunDetail({ track, breaks, steps }: { track: NonNullable<StoredWorkout["track"]>; breaks?: StoredWorkout["breaks"]; steps?: number }) {
+function RunDetail({
+  track,
+  breaks,
+  steps,
+  name,
+}: {
+  track: NonNullable<StoredWorkout["track"]>;
+  breaks?: StoredWorkout["breaks"];
+  steps?: number;
+  name?: string;
+}) {
   const s = computeRun(track);
   const stride = useLiveQuery(() => getSetting<number>("strideM", 0.74), [], 0.74);
+  const [canSnap, setCanSnap] = useState(false);
+  const [snapped, setSnapped] = useState<[number, number][] | null>(null);
+  const [snapping, setSnapping] = useState(false);
+  const [snapErr, setSnapErr] = useState("");
+  useEffect(() => {
+    mapMatchConfigured().then(setCanSnap);
+  }, []);
   if (!s) return null;
+  const doSnap = async () => {
+    setSnapping(true);
+    setSnapErr("");
+    const r = await mapMatch(track, costingForName(name));
+    setSnapping(false);
+    if (r) setSnapped(r);
+    else setSnapErr("Couldn't snap this route — endpoint unreachable, or no road match.");
+  };
   return (
     <div className="run-detail">
       <Suspense fallback={<div className="run-map" />}>
-        <RunMap track={track} breaks={breaks} />
+        <RunMap track={track} breaks={breaks} snapped={snapped ?? undefined} />
       </Suspense>
+      {canSnap && (
+        <div className="row snap-row">
+          {snapped ? (
+            <>
+              <span className="muted tiny">
+                <b style={{ color: "#ec4899" }}>Magenta</b> = snapped to road
+              </span>
+              <button className="mini" onClick={() => setSnapped(null)}>
+                Hide
+              </button>
+            </>
+          ) : (
+            <button className="mini" onClick={doSnap} disabled={snapping}>
+              {snapping ? "Snapping…" : "🛣 Snap to road"}
+            </button>
+          )}
+          {snapErr && <span className="muted tiny">{snapErr}</span>}
+        </div>
+      )}
       <div className="run-stats">
         <div className="run-stat">
           <span className="run-stat-v">{fmtDist(s.distanceM)}</span>

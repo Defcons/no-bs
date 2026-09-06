@@ -21,7 +21,7 @@ const LONG_BREAK_SEC = 60;
 // means GPS wasn't actually covering that moment, so any placement would be bogus.
 const MATCH_TOLERANCE_MS = 120_000;
 
-export function RunMap({ track, breaks }: { track: TrackPoint[]; breaks?: WorkoutBreak[] }) {
+export function RunMap({ track, breaks, snapped }: { track: TrackPoint[]; breaks?: WorkoutBreak[]; snapped?: [number, number][] }) {
   const el = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -42,6 +42,11 @@ export function RunMap({ track, breaks }: { track: TrackPoint[]; breaks?: Workou
         seg.points.map((p) => [p.lat, p.lng] as [number, number]),
         { color: "#4f8cff", weight: 4, opacity: seg.gap ? 0.45 : 0.9, dashArray: seg.gap ? "3 9" : undefined },
       ).addTo(map);
+    }
+    // Snap-to-road overlay (Valhalla map-matching) drawn on top in magenta so the
+    // divergence from the raw GPS line is obvious. Optional — absent = unchanged map.
+    if (snapped && snapped.length >= 2) {
+      L.polyline(snapped, { color: "#ec4899", weight: 4, opacity: 0.95 }).addTo(map);
     }
     L.circleMarker(pts[0], { radius: 6, color: "#34d399", fillColor: "#34d399", fillOpacity: 1 }).addTo(map);
     L.circleMarker(pts[pts.length - 1], { radius: 6, color: "#ef4444", fillColor: "#ef4444", fillOpacity: 1 }).addTo(map);
@@ -64,7 +69,7 @@ export function RunMap({ track, breaks }: { track: TrackPoint[]; breaks?: Workou
       window.clearTimeout(id);
       map.remove();
     };
-  }, [track, breaks]);
+  }, [track, breaks, snapped]);
 
   if (track.length < 2) return null;
   return <div ref={el} className="run-map" />;
