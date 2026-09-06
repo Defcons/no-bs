@@ -85,7 +85,7 @@ async function drain(id: string): Promise<void> {
   for (const p of batch) {
     if (p.accuracy > MAX_ACCURACY_M) continue;
     const hr = now - p.time <= HR_FRESH_MS ? (getHr?.() ?? undefined) : undefined;
-    points.push({ t: p.time, lat: p.latitude, lng: p.longitude, hr });
+    points.push({ t: p.time, lat: p.latitude, lng: p.longitude, hr, acc: p.accuracy });
   }
 }
 
@@ -112,7 +112,7 @@ export async function startTracking(getBpm: () => number | null): Promise<boolea
         if (recordMode === "native") return;
         if (error || !position || position.accuracy > MAX_ACCURACY_M) return;
         const hr = getHr?.() ?? undefined;
-        points.push({ t: position.time ?? Date.now(), lat: position.latitude, lng: position.longitude, hr });
+        points.push({ t: position.time ?? Date.now(), lat: position.latitude, lng: position.longitude, hr, acc: position.accuracy });
       },
     );
     if (gen !== myGen) {

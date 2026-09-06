@@ -59,6 +59,69 @@ export function cleanTrack(track: TrackPoint[]): TrackPoint[] {
   return out;
 }
 
+// Kalman-smooth a track for DRAWING. A constant-velocity filter (state = position +
+// velocity, covariance Pxx/Pxv/Pvv) runs independently on the two axes in local
+// metres, each fix weighted by its reported accuracy (`acc`) — so noisy fixes pull
+// the line less. This is the smoothing every serious tracker does; it turns jittery
+// raw fixes into a clean trajectory. DISTANCE/records deliberately stay on the raw
+// track (computeRun), so this only changes how the route is drawn.
+const ACCEL_NOISE = 1.5; // process noise σ_a (m/s²) — lower = smoother, higher = hugs turns tighter
+const DEFAULT_ACC_M = 20; // assumed accuracy for fixes recorded before `acc` was stored
+const MIN_ACC_M = 4; // floor so a fix claiming 1 m can't dominate the filter
+export function smoothTrack(track: TrackPoint[]): TrackPoint[] {
+  if (track.length < 3) return track;
+  const lat0 = track[0].lat;
+  const lng0 = track[0].lng;
+  const mPerLat = 111320;
+  const mPerLng = 111320 * Math.cos((lat0 * Math.PI) / 180);
+  const q = ACCEL_NOISE * ACCEL_NOISE;
+  const accOf = (p: TrackPoint) => Math.max(MIN_ACC_M, p.acc ?? DEFAULT_ACC_M);
+  const ts = track.map((p) => p.t);
+  const rs = track.map((p) => accOf(p) ** 2);
+
+  // One forward constant-velocity pass over an axis (local metres): state = position
+  // + velocity, covariance Pxx/Pxv/Pvv, each fix weighted by its variance rArr[i].
+  const cvPass = (vals: number[], tArr: number[], rArr: number[]): number[] => {
+    const out = new Array<number>(vals.length);
+    let X = vals[0];
+    let V = 0;
+    let Pxx = rArr[0];
+    let Pxv = 0;
+    let Pvv = 100;
+    out[0] = X;
+    for (let i = 1; i < vals.length; i++) {
+      const dt = Math.max(0.1, Math.abs(tArr[i] - tArr[i - 1]) / 1000);
+      X += V * dt; // predict (constant velocity + white-noise-acceleration process noise)
+      const pxx = Pxx + 2 * dt * Pxv + dt * dt * Pvv + (q * dt ** 3) / 3;
+      const pxv = Pxv + dt * Pvv + (q * dt * dt) / 2;
+      const pvv = Pvv + q * dt;
+      const S = pxx + rArr[i]; // update against the scalar position measurement
+      const K0 = pxx / S;
+      const K1 = pxv / S;
+      const inno = vals[i] - X;
+      X += K0 * inno;
+      V += K1 * inno;
+      Pxx = (1 - K0) * pxx;
+      Pvv = pvv - K1 * pxv;
+      Pxv = (1 - K0) * pxv;
+      out[i] = X;
+    }
+    return out;
+  };
+  // Bidirectional: average a forward and a backward pass so neither the constant-
+  // velocity lag nor its corner overshoot survives (we have the whole track offline,
+  // so we can look both ways — a forward-only filter would lag into every turn).
+  const bidi = (vals: number[]): number[] => {
+    const f = cvPass(vals, ts, rs);
+    const b = cvPass(vals.slice().reverse(), ts.slice().reverse(), rs.slice().reverse()).reverse();
+    return vals.map((_, i) => (f[i] + b[i]) / 2);
+  };
+
+  const sx = bidi(track.map((p) => (p.lng - lng0) * mPerLng));
+  const sy = bidi(track.map((p) => (p.lat - lat0) * mPerLat));
+  return track.map((p, i) => ({ ...p, lat: lat0 + sy[i] / mPerLat, lng: lng0 + sx[i] / mPerLng }));
+}
+
 export function fmtPace(secPerKm: number): string {
   if (!secPerKm || !Number.isFinite(secPerKm)) return "—";
   const total = Math.round(secPerKm); // round first so 59.6s carries to the minute

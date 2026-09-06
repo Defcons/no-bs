@@ -5,7 +5,7 @@ import { useEffect, useRef } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import type { TrackPoint, WorkoutBreak } from "../types";
-import { cleanTrack } from "../lib/runStats";
+import { cleanTrack, smoothTrack } from "../lib/runStats";
 import { mmss } from "../lib/format";
 
 export const TILE_URL = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
@@ -24,7 +24,9 @@ export function RunMap({ track, breaks }: { track: TrackPoint[]; breaks?: Workou
     // De-spike the line so a stray multipath fix doesn't draw a teleport spike.
     let clean = cleanTrack(track);
     if (clean.length < 2) clean = track; // pathological — better a raw line than none
-    const pts = clean.map((p) => [p.lat, p.lng] as [number, number]);
+    // Kalman-smooth the (de-spiked) fixes so the drawn route is a clean trajectory,
+    // not a jitter of raw points. Distance stays on the raw track (computeRun).
+    const pts = smoothTrack(clean).map((p) => [p.lat, p.lng] as [number, number]);
     const map = L.map(el.current, { attributionControl: true, zoomControl: true });
     L.tileLayer(TILE_URL, { maxZoom: 19, attribution: "© OpenStreetMap" }).addTo(map);
     const line = L.polyline(pts, { color: "#4f8cff", weight: 4, opacity: 0.9 }).addTo(map);

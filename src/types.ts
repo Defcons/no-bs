@@ -49,6 +49,7 @@ export type TrackPoint = {
   lat: number;
   lng: number;
   hr?: number; // heart rate at this point, if a monitor was connected
+  acc?: number; // reported horizontal accuracy (m) — weights the Kalman map smoother
 };
 
 // One recorded rest/break taken during a session — for break stats in History and
