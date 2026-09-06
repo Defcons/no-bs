@@ -463,6 +463,11 @@ function RunDetail({ track, breaks }: { track: NonNullable<StoredWorkout["track"
           </div>
         )}
       </div>
+      {Math.abs(s.rawDistanceM - s.distanceM) > 5 && (
+        <p className="muted tiny run-raw">
+          Distance &amp; route now smoothed · raw GPS measured {fmtDist(s.rawDistanceM)}
+        </p>
+      )}
     </div>
   );
 }

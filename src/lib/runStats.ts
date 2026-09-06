@@ -3,7 +3,8 @@ import type { TrackPoint } from "../types";
 import { distanceM } from "./geofence";
 
 export type RunStats = {
-  distanceM: number;
+  distanceM: number; // measured from the clean+smoothed route (matches what RunMap draws)
+  rawDistanceM: number; // measured from the raw GPS fixes — for the History before/after
   durationSec: number;
   avgSpeedKmh: number;
   avgPaceSecPerKm: number;
@@ -18,21 +19,34 @@ export type RunStats = {
 // permanent fake pace PB (runPBs keeps the minimum forever).
 const MAX_SEGMENT_SPEED_MS = 20;
 
-export function computeRun(track: TrackPoint[] | undefined): RunStats | null {
-  if (!track || track.length < 2) return null;
+// Sum segment distances, skipping teleport segments (multipath spikes) so one bad
+// fix can't inflate the total.
+function sumDistance(track: TrackPoint[]): number {
   let dist = 0;
   for (let i = 1; i < track.length; i++) {
-    const a = track[i - 1];
-    const b = track[i];
-    const d = distanceM(a, b);
-    const dt = (b.t - a.t) / 1000;
+    const d = distanceM(track[i - 1], track[i]);
+    const dt = (track[i].t - track[i - 1].t) / 1000;
     if (dt <= 0 || d / dt > MAX_SEGMENT_SPEED_MS) continue; // teleport → drop the segment
     dist += d;
   }
+  return dist;
+}
+
+// The clean + smoothed track — what RunMap draws AND what distance is measured from,
+// so the reported distance matches the line you see (de-spike, then Kalman-smooth).
+export function processTrack(track: TrackPoint[]): TrackPoint[] {
+  return smoothTrack(cleanTrack(track));
+}
+
+export function computeRun(track: TrackPoint[] | undefined): RunStats | null {
+  if (!track || track.length < 2) return null;
+  const rawDistanceM = sumDistance(track); // raw GPS — kept for the History before/after
+  const dist = sumDistance(processTrack(track)); // distance from the SMOOTHED route
   const durationSec = Math.max(1, (track[track.length - 1].t - track[0].t) / 1000);
   const hrs = track.map((p) => p.hr).filter((h): h is number => h != null);
   return {
     distanceM: dist,
+    rawDistanceM,
     durationSec,
     avgSpeedKmh: (dist / durationSec) * 3.6,
     avgPaceSecPerKm: dist > 0 ? durationSec / (dist / 1000) : 0,
