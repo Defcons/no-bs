@@ -19,12 +19,25 @@ type GroupBy = "week" | "month" | "year";
 // Custom/"Alternative" sessions often keep the generic "Alternative" name — surface
 // what the session actually was (a GPS run with its distance, or its exercises) so
 // History reads "5.2 km run" / "Burpees, Box jumps" instead of just "Alternative".
+// The activity verb for a GPS session — from the exercise name the user typed
+// ("Walking"/"Cycling"/…), falling back to pace (a slow pace reads as a walk).
+function cardioVerb(w: StoredWorkout, paceSecPerKm: number): string {
+  const name = (w.exercises[0]?.name ?? "").toLowerCase();
+  if (/walk/.test(name)) return "walk";
+  if (/run|jog/.test(name)) return "run";
+  if (/cycl|bike|bicycl|spin|\bride\b/.test(name)) return "ride";
+  if (/swim/.test(name)) return "swim";
+  if (/hik/.test(name)) return "hike";
+  if (/row/.test(name)) return "row";
+  if (/ski/.test(name)) return "ski";
+  return paceSecPerKm > 9 * 60 ? "walk" : "run"; // no telling name → guess from pace (>9:00/km ≈ a walk)
+}
 function activityLabel(w: StoredWorkout): string {
   const dn = (w.dayName ?? "").trim();
   if (dn && dn.toLowerCase() !== "alternative") return dn;
   if (w.track && w.track.length > 1) {
     const run = computeRun(w.track);
-    if (run) return `${fmtDist(run.distanceM)} run`;
+    if (run) return `${fmtDist(run.distanceM)} ${cardioVerb(w, run.avgPaceSecPerKm)}`;
   }
   const names = w.exercises.map((e) => e.name.trim()).filter(Boolean);
   if (names.length) return names.slice(0, 3).join(", ") + (names.length > 3 ? "…" : "");
