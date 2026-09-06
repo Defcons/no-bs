@@ -7,7 +7,7 @@ import "leaflet/dist/leaflet.css";
 import { decodePolyline } from "../lib/polyline";
 import { distanceM } from "../lib/geofence";
 import { fmtDist } from "../lib/runStats";
-import { TILE_URL } from "./RunMap";
+import { TILE_ATTRIBUTION, TILE_MAX_ZOOM, TILE_URL } from "./RunMap";
 
 export function RouteViewer({ encoded, onClose }: { encoded: string; onClose: () => void }) {
   const el = useRef<HTMLDivElement>(null);
@@ -34,7 +34,7 @@ export function RouteViewer({ encoded, onClose }: { encoded: string; onClose: ()
   useEffect(() => {
     if (!el.current || pts.length < 2) return;
     const map = L.map(el.current, { attributionControl: true });
-    L.tileLayer(TILE_URL, { maxZoom: 19, attribution: "© OpenStreetMap" }).addTo(map);
+    L.tileLayer(TILE_URL, { maxZoom: TILE_MAX_ZOOM, attribution: TILE_ATTRIBUTION }).addTo(map);
     const line = L.polyline(pts, { color: "#4f8cff", weight: 4, opacity: 0.9 }).addTo(map);
     L.circleMarker(pts[0], { radius: 6, color: "#34d399", fillColor: "#34d399", fillOpacity: 1 }).addTo(map);
     L.circleMarker(pts[pts.length - 1], { radius: 6, color: "#ef4444", fillColor: "#ef4444", fillOpacity: 1 }).addTo(map);

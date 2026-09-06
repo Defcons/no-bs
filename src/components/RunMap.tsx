@@ -1,6 +1,6 @@
-// Leaflet map of a recorded GPS route: the path as a polyline over an OpenStreetMap
+// Leaflet map of a recorded GPS route: the path as a polyline over a topographic
 // basemap, with green start / red end markers. Tiles are fetched over the network
-// (swap TILE_URL for a self-hosted tileserver later if you'd rather not hit OSM).
+// (self-host from the Valhalla elevation DEM later if you'd rather not hit OSM).
 import { useEffect, useRef } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -8,7 +8,12 @@ import type { TrackPoint, WorkoutBreak } from "../types";
 import { processTrack, segmentTrack } from "../lib/runStats";
 import { mmss } from "../lib/format";
 
-export const TILE_URL = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
+// OpenTopoMap: topographic base (contours + hillshade) that shows TRAILS/paths
+// prominently — the right basemap for trail runs and hikes. Free tiles, fair-use;
+// self-host from the same DEM as the Valhalla elevation build later for full privacy.
+export const TILE_URL = "https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png";
+export const TILE_MAX_ZOOM = 17; // OpenTopoMap's max native zoom
+export const TILE_ATTRIBUTION = "© OpenStreetMap · SRTM | © OpenTopoMap (CC-BY-SA)";
 
 // Only rests at least this long are worth marking on the route (skip quick skips).
 const LONG_BREAK_SEC = 60;
@@ -28,7 +33,7 @@ export function RunMap({ track, breaks }: { track: TrackPoint[]; breaks?: Workou
     if (processed.length < 2) processed = track; // pathological — better a raw line than none
     const pts = processed.map((p) => [p.lat, p.lng] as [number, number]);
     const map = L.map(el.current, { attributionControl: true, zoomControl: true });
-    L.tileLayer(TILE_URL, { maxZoom: 19, attribution: "© OpenStreetMap" }).addTo(map);
+    L.tileLayer(TILE_URL, { maxZoom: TILE_MAX_ZOOM, attribution: TILE_ATTRIBUTION }).addTo(map);
     // Draw recorded stretches solid; draw GPS-dropout connectors dashed + faded so a
     // lost-signal gap doesn't read as a confident straight line across the water.
     for (const seg of segmentTrack(processed)) {
