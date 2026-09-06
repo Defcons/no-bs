@@ -47,11 +47,10 @@ interface BackgroundGeolocationPlugin {
 
 const BackgroundGeolocation = registerPlugin<BackgroundGeolocationPlugin>("BackgroundGeolocation");
 
-const MAX_ACCURACY_M = 100; // keep all but clearly-junk fixes. 40→65→100: the hard cutoff
-// used to drop legit multipath/screen-off fixes (water-surrounded routes) into "airline"
-// GAPS; now the Kalman smoother WEIGHTS each fix by its accuracy (a 100 m fix barely tugs
-// the line), so we keep marginal fixes to fill gaps and let the smoother temper them.
-// Spikes are still caught by the speed test in runStats (cleanTrack).
+const MAX_ACCURACY_M = 65; // drop clearly-bad fixes. 40→65→100→65: raising to 100 to "fill
+// gaps" didn't help TRUE signal-loss dropouts (no fix arrives at any accuracy) and risked
+// noisier lines, so back to 65. The Kalman still weights each KEPT fix by its accuracy, and
+// time-based sampling (distanceFilter 0) now supplies the density. Spikes → cleanTrack.
 const DRAIN_MS = 4000; // how often to pull the native buffer while foregrounded
 const HR_FRESH_MS = 8000; // only stamp HR on fixes that just arrived (foreground)
 
@@ -106,7 +105,12 @@ export async function startTracking(getBpm: () => number | null): Promise<boolea
         backgroundMessage: "Recording your route.",
         requestPermissions: true,
         stale: false,
-        distanceFilter: 5,
+        // 0 = TIME-based sampling: a fix every ~1 s (the plugin's LocationRequest interval)
+        // REGARDLESS of movement. A >0 distanceFilter maps to Android setSmallestDisplacement,
+        // which SUPPRESSES fixes the OS can't confirm as that much movement — exactly what
+        // drops marginal-signal fixes into gaps. (A true dropout — no fix at all — is still a
+        // gap; segmentTrack dashes it.) 1 s cadence also gives the smoother denser input.
+        distanceFilter: 0,
       },
       // In "native" mode the buffer is the source of truth, so this no-ops; in
       // "legacy"/"pending" mode it records fixes the old way (foreground only).
