@@ -6,7 +6,7 @@
 import { getSetting } from "../db";
 import type { TrackPoint } from "../types";
 import { decodePolyline, downsample } from "./polyline";
-import { processTrack, segmentTrack } from "./runStats";
+import { cleanTrack, segmentTrack } from "./runStats";
 
 export type Costing = "pedestrian" | "bicycle";
 
@@ -38,17 +38,17 @@ type TraceResponse = { trip?: { legs?: { shape?: string }[] } };
 // (it truncates the match at the gap), so split at dropouts (`segmentTrack`, the same
 // split the map draws dashed) and handle each piece: MATCH each continuous stretch on
 // its own, and BRIDGE each gap by ROUTING between its two ends (the best-guess of the
-// path taken while GPS was lost). Runs on the de-spiked+smoothed `processTrack` so the
-// magenta corrects the same line the blue one shows. Null = nothing snapped at all.
+// path taken while GPS was lost). Runs on the DE-SPIKED raw track (`cleanTrack` — spikes
+// removed, real GPS positions kept: what map_snap wants; pre-SMOOTHING fights the matcher).
 export async function mapMatch(track: TrackPoint[], costing: Costing = "pedestrian"): Promise<SnapResult | null> {
   const { url, token } = await endpoint();
   if (!url || !token || track.length < 2) return null;
-  const segs = segmentTrack(processTrack(track));
+  const segs = segmentTrack(cleanTrack(track));
   const pieces = await Promise.all(
     segs.map((s): Promise<Piece> => {
       if (s.points.length < 2) return Promise.resolve({ kind: "matched", pts: null });
       if (s.gap) return routeGap(url, token, s.points[0], s.points[s.points.length - 1], costing).then((pts) => ({ kind: "bridged", pts }));
-      return matchStretch(url, token, downsample(s.points, 1000), costing).then((pts) => ({ kind: "matched", pts }));
+      return matchStretch(url, token, downsample(s.points, 4000), costing).then((pts) => ({ kind: "matched", pts }));
     }),
   );
   const matched = pieces.filter((p) => p.kind === "matched" && p.pts).map((p) => p.pts as [number, number][]);
@@ -63,7 +63,12 @@ async function matchStretch(url: string, token: string, pts: TrackPoint[], costi
     const res = await fetch(`${url}/trace_route`, {
       method: "POST",
       headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
-      body: JSON.stringify({ costing, shape_match: "map_snap", shape }),
+      // gps_accuracy tells the matcher the fixes are noisy (default 5 m is far too
+      // tight for phone GPS ±10–20 m — it then hugs each jittery point and zigzags
+      // between parallel roads/sidewalks). Higher = smoother, road-following. search_radius
+      // lets it consider roads a bit further from each fix. TUNABLE (a hard urban run may
+      // want gps_accuracy 15–20).
+      body: JSON.stringify({ costing, shape_match: "map_snap", shape, trace_options: { gps_accuracy: 12, search_radius: 50 } }),
     });
     if (!res.ok) return null;
     const json = (await res.json()) as TraceResponse;
