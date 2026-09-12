@@ -9,7 +9,8 @@ import { Capacitor, CapacitorHttp } from "@capacitor/core";
 import { db, getSetting, setSetting, type StoredWorkout } from "../db";
 import { localDay } from "./format";
 import { parseBodyweightTab, parseSheet } from "./sheet";
-import { computeRun, fmtDist, fmtPace } from "./runStats";
+import { breakSec, computeRun, fmtDist, fmtPace, withMovingPace } from "./runStats";
+import { strideM } from "./pedometer";
 import { downsample, encodePolyline } from "./polyline";
 import type { BwEntry } from "./standards";
 import type { ExercisePerf } from "../types";
@@ -207,7 +208,16 @@ async function syncWorkoutNow(row: StoredWorkout): Promise<SyncResult | null> {
     const live = await db.workouts.get(row.id);
     if (live?.synced) return { ok: true };
   }
-  const run = computeRun(row.track); // GPS-tracked cardio → distance/pace/speed/route
+  // Pace/speed honour the same "exclude rest breaks" setting the app's tiles + records use.
+  const exclBreaks = await getSetting<boolean>("paceExcludesBreaks", true);
+  const rawRun = computeRun(row.track); // GPS-tracked cardio → distance/pace/speed/route
+  const run = rawRun ? withMovingPace(rawRun, breakSec(row.breaks), exclBreaks) : null;
+  // Treadmill sessions carry no GPS track (run == null) — derive distance from the entered
+  // machine distance (ground truth) or steps × stride, on the same moving-pace basis, so a
+  // treadmill run still lands distance/pace/speed in the sheet.
+  const tmDistM = !run && row.treadmill ? (row.treadmillM ?? (row.steps ?? 0) * (await strideM())) : 0;
+  const tmMovingSec = Math.max(1, (row.durationSec ?? 0) - (exclBreaks ? breakSec(row.breaks) : 0));
+  const tmKm = tmDistM / 1000;
   // Encode the whole path (thinned) into a link that opens our in-app map viewer.
   const routeLink =
     run && row.track && row.track.length >= 2
@@ -225,9 +235,9 @@ async function syncWorkoutNow(row: StoredWorkout): Promise<SyncResult | null> {
     time: durationStr(row.durationSec),
     timeOfDay: timeOfDayStr(row.date),
     hr: row.avgHr != null ? String(row.avgHr) : "",
-    distance: run ? fmtDist(run.distanceM) : "",
-    pace: run ? fmtPace(run.avgPaceSecPerKm) : "",
-    speed: run ? `${run.avgSpeedKmh.toFixed(1)} km/h` : "",
+    distance: run ? fmtDist(run.distanceM) : tmKm > 0 ? fmtDist(tmDistM) : "",
+    pace: run ? fmtPace(run.avgPaceSecPerKm) : tmKm > 0 ? fmtPace(tmMovingSec / tmKm) : "",
+    speed: run ? `${run.avgSpeedKmh.toFixed(1)} km/h` : tmKm > 0 ? `${(tmKm / (tmMovingSec / 3600)).toFixed(1)} km/h` : "",
     route: routeLink,
     allowCreate: true, // Alternative/free-form sessions → auto-create a named block
     exercises: row.exercises.map((e) => ({ name: e.name, cell: cellFor(e) })).filter((e) => e.cell !== ""),

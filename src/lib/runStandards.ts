@@ -2,16 +2,21 @@
 //   1. ABSOLUTE pace tiers — fixed pace targets, the same for everyone.
 //   2. PERSONAL-BEST medals — each run rated against the user's own fastest.
 // A "run" is any saved workout that carries a GPS track (Alternative + Track GPS).
-import { computeRun, type RunStats } from "./runStats";
+import { breakSec, computeRun, withMovingPace, type RunStats } from "./runStats";
 import type { StoredWorkout } from "../db";
 
 export type RunSummary = { date: string; run: RunStats };
 
-// Every GPS-tracked run (newest first), dropping sub-50 m noise.
-export function runsFrom(workouts: StoredWorkout[]): RunSummary[] {
+// Every GPS-tracked run (newest first), dropping sub-50 m noise. When exclBreaks is on
+// (the paceExcludesBreaks setting), each run's pace/speed is recomputed on moving time —
+// so the PBs + medals below rank on the SAME basis the run tiles/History now show.
+export function runsFrom(workouts: StoredWorkout[], exclBreaks = false): RunSummary[] {
   return workouts
     .filter((w) => w.track && w.track.length > 1)
-    .map((w) => ({ date: w.date, run: computeRun(w.track) }))
+    .map((w) => {
+      const raw = computeRun(w.track);
+      return { date: w.date, run: raw ? withMovingPace(raw, breakSec(w.breaks), exclBreaks) : null };
+    })
     .filter((r): r is RunSummary => r.run != null && r.run.distanceM > 50)
     .sort((a, b) => (a.date < b.date ? 1 : -1));
 }

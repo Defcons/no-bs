@@ -41,7 +41,9 @@ export function Records({
     const weekly = includeAltInWeekly ? workouts : workouts.filter((w) => !w.custom);
     return { summary, records, byCat, perWeek: sessionsPerWeek(weekly, 12) };
   }, [workouts, includeAltInWeekly]);
-  const runs = useMemo(() => runsFrom(workouts ?? []), [workouts]);
+  // Pace PBs/medals honour the same "exclude rest breaks" setting the live tiles + History use.
+  const paceExclBreaks = useLiveQuery(() => getSetting<boolean>("paceExcludesBreaks", true), [], true);
+  const runs = useMemo(() => runsFrom(workouts ?? [], paceExclBreaks), [workouts, paceExclBreaks]);
   const form = useMemo(() => currentForm(workouts ?? []), [workouts]);
   if (!workouts) return <div className="pad">Loading…</div>;
   if (workouts.length === 0) return <div className="pad muted">No workouts yet — log your first one!</div>;

@@ -11,7 +11,7 @@ import type { BwEntry } from "./standards";
 import type { DayTemplate, Scheme } from "../types";
 import { localDay } from "./format";
 import { cellFor, sessionKey, sessionKeys } from "./sheetSync";
-import { computeRun, fmtDist, fmtPace } from "./runStats";
+import { breakSec, computeRun, fmtDist, fmtPace, withMovingPace } from "./runStats";
 import { parseBodyweightTab, parseSheet } from "./sheet";
 
 export type SheetTab = { name: string; rows: string[][] };
@@ -149,7 +149,7 @@ function metaRow(label: string, cells: string[]): string[] | null {
   return cells.some((c) => c !== "") ? [label, ...cells] : null;
 }
 
-function yearRows(list: StoredWorkout[]): string[][] {
+function yearRows(list: StoredWorkout[], exclBreaks: boolean): string[][] {
   const rows: string[][] = [];
   const byDay = new Map<string, StoredWorkout[]>();
   for (const w of list) {
@@ -190,8 +190,12 @@ function yearRows(list: StoredWorkout[]): string[][] {
     ])
       if (r) rows.push(r);
 
-    // Cardio rows only if any session in the block has a GPS track.
-    const runs = sessions.map((s) => computeRun(s.track));
+    // Cardio rows only if any session in the block has a GPS track. Pace/speed honour
+    // the "exclude rest breaks" setting so the .xlsx matches the Google Sheet + records.
+    const runs = sessions.map((s) => {
+      const raw = computeRun(s.track);
+      return raw ? withMovingPace(raw, breakSec(s.breaks), exclBreaks) : null;
+    });
     if (runs.some(Boolean)) {
       rows.push(["Distance", ...runs.map((r) => (r ? fmtDist(r.distanceM) : ""))]);
       rows.push(["Pace", ...runs.map((r) => (r ? fmtPace(r.avgPaceSecPerKm) : ""))]);
@@ -205,6 +209,7 @@ export function workbookTabs(
   workouts: StoredWorkout[],
   bwHistory: BwEntry[],
   settings?: Record<string, unknown>,
+  exclBreaks = false,
 ): SheetTab[] {
   const byYear = new Map<string, StoredWorkout[]>();
   for (const w of workouts) {
@@ -214,7 +219,7 @@ export function workbookTabs(
     byYear.set(y, arr);
   }
   const tabs: SheetTab[] = [];
-  for (const y of [...byYear.keys()].sort()) tabs.push({ name: y, rows: yearRows(byYear.get(y)!) });
+  for (const y of [...byYear.keys()].sort()) tabs.push({ name: y, rows: yearRows(byYear.get(y)!, exclBreaks) });
   const bw = [...bwHistory].sort((a, b) => a.year - b.year);
   if (bw.length) {
     tabs.push({
@@ -242,8 +247,9 @@ export async function exportXlsx(
 ): Promise<Blob> {
   const XLSX = await import("xlsx");
   const settings = await collectSettings();
+  const exclBreaks = await getSetting<boolean>("paceExcludesBreaks", true);
   const wb = XLSX.utils.book_new();
-  for (const tab of workbookTabs(workouts, bwHistory, settings)) {
+  for (const tab of workbookTabs(workouts, bwHistory, settings, exclBreaks)) {
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(tab.rows), tab.name.slice(0, 31));
   }
   // Lossless JSON, chunked across rows — a single cell can't exceed 32,767 chars.
