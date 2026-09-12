@@ -6,6 +6,7 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { db, getSetting, type StoredWorkout } from "../db";
 import { clockTime, daysAgoLabel, hhmmss, localDay, mmss, niceDate } from "../lib/format";
 import { breakSec, computeRun, fmtDist, fmtPace, withMovingPace } from "../lib/runStats";
+import { type MoveKind, segmentTotals, segmentsFromTrack } from "../lib/segments";
 import { calibrateStrideFromDistance } from "../lib/pedometer";
 import { costingForName, mapMatch, mapMatchConfigured, type SnapResult } from "../lib/mapMatch";
 import { resolveExercise } from "../lib/exercises";
@@ -613,6 +614,7 @@ function RunDetail({
           </div>
         )}
       </div>
+      <SegmentTimeline track={track} />
       {Math.abs(s.rawDistanceM - s.distanceM) > 5 && (
         <p className="muted tiny run-raw">
           Distance &amp; route now smoothed · raw GPS measured {fmtDist(s.rawDistanceM)}
@@ -626,6 +628,47 @@ function RunDetail({
             : ""}
         </p>
       ) : null}
+    </div>
+  );
+}
+
+// run/walk/stop → the label + the CSS colour band (accent / warn / muted).
+const SEG_META: Record<MoveKind, { verb: string }> = {
+  run: { verb: "Ran" },
+  walk: { verb: "Walked" },
+  stop: { verb: "Paused" },
+};
+const SEG_ORDER: MoveKind[] = ["run", "walk", "stop"];
+
+// Automatic interval breakdown for an outdoor run: a proportional band showing WHERE
+// you ran / walked / stopped, plus a per-kind time+distance total. Hidden for a steady
+// effort (a single segment) — nothing to break down.
+function SegmentTimeline({ track }: { track: NonNullable<StoredWorkout["track"]> }) {
+  const segs = useMemo(() => segmentsFromTrack(track), [track]);
+  if (segs.length < 2) return null;
+  const totals = segmentTotals(segs);
+  return (
+    <div className="seg-intervals">
+      <div className="seg-bar" role="img" aria-label="Movement breakdown (run / walk / stopped)">
+        {segs.map((s, i) => (
+          <span
+            key={i}
+            className={`seg-cell seg-${s.kind}`}
+            style={{ flexGrow: Math.max(1, Math.round((s.endMs - s.startMs) / 1000)) }}
+            title={`${SEG_META[s.kind].verb} ${mmss(Math.round((s.endMs - s.startMs) / 1000))}${
+              s.kind === "stop" ? "" : ` · ${fmtDist(s.distanceM)}`
+            }`}
+          />
+        ))}
+      </div>
+      <div className="seg-legend tiny muted">
+        {SEG_ORDER.filter((k) => totals[k].sec >= 1).map((k) => (
+          <span key={k} className="seg-leg">
+            <span className={`seg-dot seg-${k}`} /> {SEG_META[k].verb} {mmss(Math.round(totals[k].sec))}
+            {k !== "stop" && totals[k].distanceM > 0 ? ` · ${fmtDist(totals[k].distanceM)}` : ""}
+          </span>
+        ))}
+      </div>
     </div>
   );
 }

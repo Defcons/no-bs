@@ -1307,6 +1307,50 @@ button.chip {
   font-size: 10px;
   color: var(--muted);
 }
+/* Automatic interval breakdown (History run detail): a time-proportional run/walk/stop
+   band + a per-kind legend. Colours are semantic — accent=run, warn=walk, muted=stop. */
+.seg-intervals {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.seg-bar {
+  display: flex;
+  height: 12px;
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--surface-2);
+}
+.seg-cell {
+  min-width: 3px;
+}
+.seg-run {
+  background: var(--accent);
+}
+.seg-walk {
+  background: var(--warn);
+}
+.seg-stop {
+  background: var(--muted);
+}
+.seg-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  justify-content: center;
+}
+.seg-leg {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.seg-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  display: inline-block;
+}
 /* Live running dashboard on Today (during GPS tracking) — bigger, glanceable
    numbers; reuses the History run-stat tiles. */
 .live-run {
