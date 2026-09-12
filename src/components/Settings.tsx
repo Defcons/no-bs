@@ -370,9 +370,12 @@ export function Settings({
   };
   const doSyncNow = async () => {
     setStatus("Syncing…");
-    const { done, failed } = await syncPending();
+    const { done, failed, errors } = await syncPending();
     setPending(await pendingCount());
-    setStatus(`Synced ${done}${failed ? `, ${failed} failed` : ""}.`);
+    // Say WHY it failed (usually a name mismatch — the sheet has no row for an
+    // exercise), not just a count. First distinct reason; a bare timeout stays vague.
+    const why = failed && errors.length ? ` — ${[...new Set(errors)][0]}` : "";
+    setStatus(`Synced ${done}${failed ? `, ${failed} failed${why}` : ""}.`);
   };
 
   const doImport = async () => {

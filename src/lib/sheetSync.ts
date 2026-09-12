@@ -264,20 +264,25 @@ export async function pendingCount(): Promise<number> {
   return rows.filter((r) => !r.synced).length;
 }
 
-// Retry all unsynced app sessions (oldest first).
-export async function syncPending(): Promise<{ done: number; failed: number }> {
-  if (!(await syncEnabled())) return { done: 0, failed: 0 };
+// Retry all unsynced app sessions (oldest first). `errors` carries each failure's
+// reason (e.g. a name mismatch) so the UI can say WHY, not just a count.
+export async function syncPending(): Promise<{ done: number; failed: number; errors: string[] }> {
+  if (!(await syncEnabled())) return { done: 0, failed: 0, errors: [] };
   const rows = (await db.workouts.where("source").equals("app").toArray())
     .filter((r) => !r.synced)
     .sort((a, b) => a.date.localeCompare(b.date));
   let done = 0;
   let failed = 0;
+  const errors: string[] = [];
   for (const r of rows) {
     const res = await syncWorkout(r);
     if (res?.ok) done++;
-    else failed++;
+    else {
+      failed++;
+      if (res?.error) errors.push(res.error);
+    }
   }
-  return { done, failed };
+  return { done, failed, errors };
 }
 
 // Pull every workout from the sheet and add any this device is missing

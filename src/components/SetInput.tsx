@@ -145,6 +145,16 @@ export function SetInput({ index, set, step, unit = "weight", units = "kg", defa
   // tint on the reps field (only until you log this set's reps).
   const repsPrevBeat = set.reps == null && prevReps != null && defaultReps != null && prevReps > defaultReps;
 
+  // Weight vs last time on this set → border cue (green heavier, red lighter),
+  // mirroring the reps-vs-target cue. The prefill seeds your recent best, so a set
+  // above last time greens by default. Neutral when there's no prior weight to beat.
+  const weightCmp =
+    set.weight != null && prevWeight != null && set.weight !== prevWeight
+      ? set.weight > prevWeight
+        ? "weight-over"
+        : "weight-under"
+      : "";
+
   return (
     <div className={`setrow ${done ? "done" : ""} ${active && !done ? "active" : ""} ${isPr ? "pr" : ""}`}>
       <button className="set-badge" aria-label="toggle set done" onClick={() => onChange({ done: !done })}>
@@ -214,6 +224,7 @@ export function SetInput({ index, set, step, unit = "weight", units = "kg", defa
               placeholder={bodyweight ? "BW" : prevWeight != null ? weightStr(prevWeight, units) : "—"}
               unit={bodyweight ? `+${units}` : units}
               fieldClass="weight-field"
+              extraClass={weightCmp}
             />
             <button className="stepper" aria-label="increase" onClick={() => bump(1)}>
               +

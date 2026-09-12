@@ -94,39 +94,41 @@ export function wElapsedMs(d: Pick<Draft, "wAccumMs" | "wRunning" | "wSegStart">
   return d.wAccumMs + (d.wRunning ? Date.now() - d.wSegStart : 0);
 }
 
-// Build fresh exercises for a day, pre-filling each set with last week's number
-// for that exercise. `history` is this day-type's past sessions, newest first;
-// if the most recent session left an exercise empty, we walk back to the most
-// recent session that actually logged a weight for it.
+// Build fresh exercises for a day, pre-filling each set POSITION with the heaviest
+// NORMAL-reps weight lifted at that position across the last 4 sessions of this
+// exercise (so set 1 gets its own recent best, etc. — keeping your ramp). Guidance
+// only: since 1.56.0 only DONE sets save their numbers. `history` = this day-type's
+// past sessions, newest first.
 function buildExercises(tpl: DayTemplate, history: StoredWorkout[]): ExercisePerf[] {
   return tpl.exercises.map((e) => {
-    // Most recent past sets (with any weight) for this exercise (matched by
-    // resolved catalog id so name/spelling variants still line up).
     const eid = resolveExercise(e.name, e.exerciseId).id;
-    let prevSets: SetEntry[] | undefined;
+    const nSets = e.scheme.sets ?? 3;
+    const defReps = typeof e.scheme.reps === "number" ? e.scheme.reps : null;
+    // The last 4 sessions that actually logged a weight for this exercise (newest
+    // first; matched by resolved catalog id so spelling variants still line up).
+    const recent: SetEntry[][] = [];
     for (const w of history) {
       const p = w.exercises.find((x) => resolveExercise(x.name, x.exerciseId).id === eid);
       if (p && p.sets.some((s) => s.weight != null)) {
-        prevSets = p.sets;
-        break;
+        recent.push(p.sets);
+        if (recent.length >= 4) break;
       }
     }
-    const weighted = prevSets?.filter((s) => s.weight != null).map((s) => s.weight as number) ?? [];
-    const lastKnown = weighted.at(-1) ?? null;
-    const nSets = e.scheme.sets ?? 3;
-    const defReps = typeof e.scheme.reps === "number" ? e.scheme.reps : null;
-    // If last session logged MORE sets than the scheme's default, keep the heaviest
-    // N but IN THE ORDER THEY WERE PERFORMED — a 70-80-90-100 ramp must seed
-    // 80-90-100, not 100-90-80. Otherwise carry each set's weight across position.
-    const seed: (number | null)[] =
-      weighted.length > nSets
-        ? weighted
-            .map((w, i) => ({ w, i }))
-            .sort((a, b) => b.w - a.w)
-            .slice(0, nSets)
-            .sort((a, b) => a.i - b.i)
-            .map((x) => x.w)
-        : Array.from({ length: nSets }, (_, i) => prevSets?.[i]?.weight ?? lastKnown);
+    const prevSets = recent[0]; // most recent = the "last time" reference + fallback
+    const lastKnown = prevSets?.filter((s) => s.weight != null).map((s) => s.weight as number).at(-1) ?? null;
+    // A "normal working set": a real weight taken for AT LEAST the scheme's target
+    // reps — so a heavy sub-target grind or a light back-off set doesn't seed the prefill.
+    const normal = (s: SetEntry) => s.weight != null && (defReps == null || (s.reps != null && s.reps >= defReps));
+    // Per position: heaviest normal-reps weight at that position over the last 4
+    // sessions; fall back to last time's weight there, then the last known weight.
+    const seed: (number | null)[] = Array.from({ length: nSets }, (_, i) => {
+      let best: number | null = null;
+      for (const sets of recent) {
+        const s = sets[i];
+        if (s && normal(s) && (best == null || (s.weight as number) > best)) best = s.weight as number;
+      }
+      return best ?? prevSets?.[i]?.weight ?? lastKnown;
+    });
     const sets: SetEntry[] = seed.map((w) => ({ id: uid(), weight: w ?? lastKnown, reps: defReps }));
     return { id: uid(), name: e.name, exerciseId: e.exerciseId, scheme: e.scheme, step: e.step, sets };
   });
