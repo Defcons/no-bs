@@ -382,7 +382,11 @@ export function useActiveWorkout() {
   // Persist the finished session and clear the draft. HR stats + extra fields
   // (e.g. a recorded GPS track) optional.
   const finish = useCallback(
-    async (hr?: { avg?: number; max?: number }, extra?: Partial<StoredWorkout>, opts?: { endedAt?: number }) => {
+    async (
+      hr?: { avg?: number; max?: number },
+      extra?: Partial<StoredWorkout>,
+      opts?: { endedAt?: number; autoBreaks?: WorkoutBreak[] },
+    ) => {
       if (!draft || finishing.current) return;
       window.clearTimeout(saveTimer.current); // same ghost-draft guard as cancel()
       // Manual finish → wall-clock. Auto-end → up to the last logged set (opts.endedAt),
@@ -391,9 +395,15 @@ export function useActiveWorkout() {
         opts?.endedAt != null
           ? Math.max(60, Math.floor((opts.endedAt - draft.startedAt) / 1000))
           : Math.floor(wElapsedMs(draft) / 1000);
-      // Bank a break still running at finish, then keep the session's breaks (if any).
+      // Bank a break still running at finish, then keep the session's breaks (if any),
+      // plus any auto-detected rest breaks the caller passed (Today's movement auto-pause).
       const lastBreak = closeCurrentBreak(draft);
-      const breaks = lastBreak ? [...(draft.breaks ?? []), lastBreak] : draft.breaks;
+      const merged = [
+        ...(draft.breaks ?? []),
+        ...(lastBreak ? [lastBreak] : []),
+        ...(opts?.autoBreaks ?? []),
+      ];
+      const breaks = merged.length ? merged : undefined;
       // Interval/cardio sessions (custom, ≥2 rests) get a one-line interval breakdown
       // auto-appended to the note. Gated on editId == null: beginEdit sets custom:true
       // purely for editability, so without the gate a History edit of a STRENGTH

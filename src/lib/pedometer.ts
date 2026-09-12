@@ -6,13 +6,14 @@
 import { Capacitor, registerPlugin } from "@capacitor/core";
 import { getSetting, setSetting } from "../db";
 import { computeRun, segmentTrack } from "./runStats";
-import type { TrackPoint } from "../types";
+import type { StepSample, TrackPoint } from "../types";
 
 interface StepCounterPlugin {
   available(): Promise<{ available: boolean }>;
   start(): Promise<void>;
   getCount(): Promise<{ steps: number }>;
   stop(): Promise<{ steps: number }>;
+  getSamples?(): Promise<{ samples: StepSample[] }>; // patched APK only (1.72+); OTA-safe
 }
 
 const StepCounter = registerPlugin<StepCounterPlugin>("StepCounter");
@@ -37,6 +38,19 @@ export async function currentSteps(): Promise<number> {
     return (await StepCounter.getCount()).steps;
   } catch {
     return 0;
+  }
+}
+
+// Drain the native timestamped cadence buffer (cumulative steps at each sensor event)
+// collected this session. Empty on web, an un-updated APK (getSamples not implemented →
+// the call rejects), or when the sensor reported nothing. Call before stopSteps() (the
+// sensor must still be listening). Feeds cadence-based walk/run segmentation (segments.ts).
+export async function drainStepSamples(): Promise<StepSample[]> {
+  if (!native()) return [];
+  try {
+    return (await StepCounter.getSamples?.())?.samples ?? [];
+  } catch {
+    return []; // old APK without getSamples → no cadence stream, just the total
   }
 }
 

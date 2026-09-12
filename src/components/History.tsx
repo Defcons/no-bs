@@ -6,7 +6,7 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { db, getSetting, type StoredWorkout } from "../db";
 import { clockTime, daysAgoLabel, hhmmss, localDay, mmss, niceDate } from "../lib/format";
 import { breakSec, computeRun, fmtDist, fmtPace, withMovingPace } from "../lib/runStats";
-import { type MoveKind, segmentTotals, segmentsFromTrack } from "../lib/segments";
+import { type MoveKind, type MoveSegment, segmentTotals, segmentsFromCadence, segmentsFromTrack } from "../lib/segments";
 import { calibrateStrideFromDistance } from "../lib/pedometer";
 import { costingForName, mapMatch, mapMatchConfigured, type SnapResult } from "../lib/mapMatch";
 import { resolveExercise } from "../lib/exercises";
@@ -392,7 +392,7 @@ function LogRow({
           {w.track && w.track.length >= 2 ? (
             <RunDetail track={w.track} breaks={w.breaks} steps={w.steps} name={w.exercises[0]?.name} />
           ) : w.treadmill ? (
-            <TreadmillDetail id={w.id} steps={w.steps} durationSec={w.durationSec} breaks={w.breaks} treadmillM={w.treadmillM} />
+            <TreadmillDetail id={w.id} steps={w.steps} durationSec={w.durationSec} breaks={w.breaks} treadmillM={w.treadmillM} stepSamples={w.stepSamples} />
           ) : null}
           {w.note && <div className="log-note">📝 {w.note}</div>}
           {w.exercises.map((e, i) => {
@@ -466,16 +466,21 @@ function TreadmillDetail({
   durationSec,
   breaks,
   treadmillM,
+  stepSamples,
 }: {
   id?: number;
   steps?: number;
   durationSec?: number;
   breaks?: StoredWorkout["breaks"];
   treadmillM?: number;
+  stepSamples?: StoredWorkout["stepSamples"];
 }) {
   const stride = useLiveQuery(() => getSetting<number>("strideM", 0.74), [], 0.74);
   const excl = useLiveQuery(() => getSetting<boolean>("paceExcludesBreaks", true), [], true);
   const [raw, setRaw] = useState<string | null>(null); // editing buffer for the actual-distance field
+  // Walk/run/stop from the step-CADENCE stream (no GPS indoors). Empty until an APK that
+  // records timestamped samples (1.72+) — older sessions just won't show a band.
+  const segs = useMemo(() => segmentsFromCadence(stepSamples, stride), [stepSamples, stride]);
   if (!steps || steps <= 0) return null;
   const entered = treadmillM != null;
   const distM = treadmillM ?? steps * stride; // an entered ACTUAL distance wins over the estimate
@@ -510,6 +515,7 @@ function TreadmillDetail({
           <span className="run-stat-l">km/h</span>
         </div>
       </div>
+      <SegmentTimeline segs={segs} />
       <div className="row treadmill-actual">
         <span className="muted tiny">Treadmill showed</span>
         <input
@@ -546,6 +552,7 @@ function RunDetail({
   name?: string;
 }) {
   const raw = computeRun(track);
+  const segs = useMemo(() => segmentsFromTrack(track), [track]);
   const stride = useLiveQuery(() => getSetting<number>("strideM", 0.74), [], 0.74);
   const excl = useLiveQuery(() => getSetting<boolean>("paceExcludesBreaks", true), [], true);
   const [canSnap, setCanSnap] = useState(false);
@@ -614,7 +621,7 @@ function RunDetail({
           </div>
         )}
       </div>
-      <SegmentTimeline track={track} />
+      <SegmentTimeline segs={segs} />
       {Math.abs(s.rawDistanceM - s.distanceM) > 5 && (
         <p className="muted tiny run-raw">
           Distance &amp; route now smoothed · raw GPS measured {fmtDist(s.rawDistanceM)}
@@ -640,11 +647,10 @@ const SEG_META: Record<MoveKind, { verb: string }> = {
 };
 const SEG_ORDER: MoveKind[] = ["run", "walk", "stop"];
 
-// Automatic interval breakdown for an outdoor run: a proportional band showing WHERE
-// you ran / walked / stopped, plus a per-kind time+distance total. Hidden for a steady
-// effort (a single segment) — nothing to break down.
-function SegmentTimeline({ track }: { track: NonNullable<StoredWorkout["track"]> }) {
-  const segs = useMemo(() => segmentsFromTrack(track), [track]);
+// Automatic interval breakdown (shared by outdoor GPS runs + treadmill cadence): a
+// proportional band showing WHERE you ran / walked / stopped, plus a per-kind time+
+// distance total. Hidden for a steady effort (a single segment) — nothing to break down.
+function SegmentTimeline({ segs }: { segs: MoveSegment[] }) {
   if (segs.length < 2) return null;
   const totals = segmentTotals(segs);
   return (

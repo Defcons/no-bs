@@ -1,7 +1,7 @@
 // IndexedDB (via Dexie) is the local-first source of truth for the running app.
 // The Google Sheet history is imported once on first run for the History/PR views.
 import Dexie, { type Table } from "dexie";
-import type { DayTemplate, ExercisePerf, Scheme, TrackPoint, WorkoutBreak } from "./types";
+import type { DayTemplate, ExercisePerf, Scheme, StepSample, TrackPoint, WorkoutBreak } from "./types";
 import type { Exercise } from "./lib/exercises";
 
 export interface StoredWorkout {
@@ -18,6 +18,7 @@ export interface StoredWorkout {
   moodAfter?: number; // 1-10 feeling after the session
   track?: TrackPoint[]; // GPS route for tracked cardio (e.g. a run)
   steps?: number; // hardware step-counter total for the session (native only, since 1.65)
+  stepSamples?: StepSample[]; // timestamped cadence stream → walk/run/stop when there's no GPS (native, 1.72)
   treadmill?: boolean; // indoor/treadmill cardio — distance estimated from steps × stride, no GPS track (1.69)
   treadmillM?: number; // user-entered ACTUAL treadmill distance (m) — overrides the step estimate + calibrates stride (1.69.1)
   breaks?: WorkoutBreak[]; // rest periods taken during the session (break stats + map markers)

@@ -3,7 +3,7 @@
 // an OUTDOOR run derives them from the GPS track (per-point speed, here); a treadmill /
 // indoor session will derive them from the step-cadence stream (× stride) once the
 // native counter batches timestamped samples (step Phase 2b). Same classifier both ways.
-import type { TrackPoint } from "../types";
+import type { StepSample, TrackPoint, WorkoutBreak } from "../types";
 import { distanceM } from "./geofence";
 import { processTrack } from "./runStats";
 
@@ -91,6 +91,39 @@ export function segmentsFromTrack(track: TrackPoint[] | undefined): MoveSegment[
     const d = distanceM(t[i - 1], t[i]);
     if (d / dt > MAX_SPEED_MS) continue; // teleport spike
     steps.push({ t0: t[i - 1].t, t1: t[i].t, dist: d });
+  }
+  return classifySteps(steps);
+}
+
+// Auto-pause: turn detected STOP segments into rest breaks, skipping any that overlap a
+// break the user already banked manually (so a real, tapped rest isn't double-counted).
+// The result feeds the moving-pace + "⏱ Intervals" machinery exactly like a manual break.
+// Gated by the `autoDetectBreaks` setting; the caller supplies the segments + existing breaks.
+export function autoBreaksFromSegments(segs: MoveSegment[], existing: WorkoutBreak[] | undefined): WorkoutBreak[] {
+  const manual = (existing ?? []).map((b) => ({ start: b.at, end: b.at + b.sec * 1000 }));
+  const out: WorkoutBreak[] = [];
+  for (const s of segs) {
+    if (s.kind !== "stop") continue;
+    const sec = Math.round((s.endMs - s.startMs) / 1000);
+    if (sec < MIN_SEG_SEC) continue; // too short to count as a rest
+    if (manual.some((m) => s.startMs < m.end && s.endMs > m.start)) continue; // already a manual break here
+    out.push({ at: s.startMs, sec });
+  }
+  return out;
+}
+
+// Indoor / treadmill adapter: build the speed profile from the step-CADENCE stream
+// (cumulative steps at each sample × stride) so walk/run/stop fall out of the same
+// classifier when there's no GPS. Samples are cumulative + monotonic; a counter reset or
+// out-of-order sample (dSteps<0 / dt≤0) is skipped. Feeds History's TreadmillDetail.
+export function segmentsFromCadence(samples: StepSample[] | undefined, strideM: number): MoveSegment[] {
+  if (!samples || samples.length < 2 || !(strideM > 0)) return [];
+  const steps: MoveStep[] = [];
+  for (let i = 1; i < samples.length; i++) {
+    const dt = (samples[i].t - samples[i - 1].t) / 1000;
+    const dSteps = samples[i].steps - samples[i - 1].steps;
+    if (dt <= 0 || dSteps < 0) continue;
+    steps.push({ t0: samples[i - 1].t, t1: samples[i].t, dist: dSteps * strideM });
   }
   return classifySteps(steps);
 }

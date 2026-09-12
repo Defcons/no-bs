@@ -6,7 +6,9 @@ import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
 import android.hardware.SensorManager;
 import android.os.Build;
+import android.os.SystemClock;
 
+import com.getcapacitor.JSArray;
 import com.getcapacitor.JSObject;
 import com.getcapacitor.PermissionState;
 import com.getcapacitor.Plugin;
@@ -36,6 +38,14 @@ public class StepCounterPlugin extends Plugin implements SensorEventListener {
     private float latest = -1f; // latest cumulative-since-boot reading (-1 = none yet)
     private float base = -1f;   // baseline captured at start (-1 = pending first reading)
     private boolean listening = false;
+    // Timestamped cadence samples for the active session: each = { epochMs, stepsSinceBase }.
+    // Drained by getSamples() (1.72+). Lets the app derive walk/run/stop CADENCE indoors
+    // (no GPS) and, later, fill a GPS dropout's distance from the steps taken across it.
+    // event.timestamp (not wall-clock-on-delivery) keeps times honest when the OS batches
+    // sensor events to the next wake with the screen off. Guarded — the sensor callback
+    // runs on a different thread than the plugin methods.
+    private final java.util.ArrayList<long[]> samples = new java.util.ArrayList<>();
+    private static final int MAX_SAMPLES = 20000; // safety cap (~a very long session)
 
     @Override
     public void load() {
@@ -77,6 +87,9 @@ public class StepCounterPlugin extends Plugin implements SensorEventListener {
 
     private void begin(PluginCall call) {
         base = -1f; // the next sensor reading becomes the baseline
+        synchronized (samples) {
+            samples.clear();
+        }
         if (!listening) {
             sensorManager.registerListener(this, stepSensor, SensorManager.SENSOR_DELAY_NORMAL);
             listening = true;
@@ -88,6 +101,26 @@ public class StepCounterPlugin extends Plugin implements SensorEventListener {
     public void getCount(PluginCall call) {
         JSObject ret = new JSObject();
         ret.put("steps", steps());
+        call.resolve(ret);
+    }
+
+    // Drain + clear the timestamped cadence buffer collected since start (or the last
+    // drain). Present only on the patched APK; older shells don't expose it (OTA-safe —
+    // the JS side falls back to no cadence stream, just the session total).
+    @PluginMethod
+    public void getSamples(PluginCall call) {
+        JSArray arr = new JSArray();
+        synchronized (samples) {
+            for (long[] s : samples) {
+                JSObject o = new JSObject();
+                o.put("t", s[0]);
+                o.put("steps", s[1]);
+                arr.put(o);
+            }
+            samples.clear();
+        }
+        JSObject ret = new JSObject();
+        ret.put("samples", arr);
         call.resolve(ret);
     }
 
@@ -112,6 +145,13 @@ public class StepCounterPlugin extends Plugin implements SensorEventListener {
     public void onSensorChanged(SensorEvent event) {
         latest = event.values[0];
         if (base < 0) base = latest; // first reading after start = the baseline
+        // Convert the event's boot-relative timestamp to epoch ms so batched screen-off
+        // events keep the time they actually OCCURRED, not the time they were delivered.
+        long tMs = System.currentTimeMillis() - (SystemClock.elapsedRealtimeNanos() - event.timestamp) / 1_000_000L;
+        synchronized (samples) {
+            samples.add(new long[] { tMs, steps() });
+            if (samples.size() > MAX_SAMPLES) samples.remove(0);
+        }
     }
 
     @Override

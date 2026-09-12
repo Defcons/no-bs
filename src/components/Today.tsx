@@ -12,8 +12,9 @@ import { startGeofence, stopGeofence } from "../lib/geofence";
 import { exitPip, isInPip, onPipChange, setPipAutoEnter } from "../lib/pip";
 import { onMediaButton, onVolumeKey, setMediaButtonCapture, setPhoneKeyCapture, setVolumeCapture } from "../lib/hwButtons";
 import { currentTrack, startTracking, stopTracking } from "../lib/tracker";
-import { calibrateStride, currentSteps, startSteps, stopSteps } from "../lib/pedometer";
+import { calibrateStride, currentSteps, drainStepSamples, startSteps, stopSteps } from "../lib/pedometer";
 import { breakSec, computeRun, fmtDist, fmtPace, type RunStats, withMovingPace } from "../lib/runStats";
+import { autoBreaksFromSegments, segmentsFromTrack } from "../lib/segments";
 import { stepForExercise } from "../lib/steps";
 import { playBreakSkip, playBreakStart, playSoundChoice } from "../lib/sounds";
 import { uid } from "../lib/uid";
@@ -203,6 +204,7 @@ export function Today({
   // Treadmill/indoor cardio: step-based distance + moving-time pace.
   const strideVal = useLiveQuery(() => getSetting<number>("strideM", 0.74), [], 0.74);
   const paceExclBreaks = useLiveQuery(() => getSetting<boolean>("paceExcludesBreaks", true), [], true);
+  const autoDetectBreaks = useLiveQuery(() => getSetting<boolean>("autoDetectBreaks", false), [], false);
   const lowHrSoundRef = useRef(lowHrSound);
   lowHrSoundRef.current = lowHrSound;
   const lowHrArmedRef = useRef(false); // seen HR above the threshold since last fire/start
@@ -327,6 +329,7 @@ export function Today({
       cancelBreakNotification(); // no "Rest over!" minutes after the workout ended
       const track = draft?.trackGps ? await stopTracking() : undefined;
       const steps = await currentSteps(); // session total; the effect cleanup stops the sensor
+      const stepSamples = await drainStepSamples(); // timestamped cadence (patched APK only; [] otherwise)
       void calibrateStride(track, steps); // learn the user's stride from a clean-GPS run (no-ops otherwise)
       const endedAt = auto ? draft?.lastActivityAt : undefined;
       // Capture whether mood still needs logging BEFORE finish() clears the draft.
@@ -338,8 +341,18 @@ export function Today({
       const extra: Partial<StoredWorkout> = {};
       if (!treadmill && track && track.length >= 2) extra.track = track;
       if (steps > 0) extra.steps = steps;
+      if (stepSamples.length > 1) extra.stepSamples = stepSamples; // cadence stream (indoor segments + gap-fill)
       if (treadmill) extra.treadmill = true;
-      const row = await finish(getHrStats(), Object.keys(extra).length ? extra : undefined, { endedAt });
+      // Auto-pause: on a GPS run, log detected STOP stretches as rest breaks (unless one is
+      // already there manually) so moving pace + the interval note count them. Opt-in setting.
+      const autoBreaks =
+        autoDetectBreaks && !treadmill && track && track.length >= 2
+          ? autoBreaksFromSegments(segmentsFromTrack(track), draft?.breaks)
+          : undefined;
+      const row = await finish(getHrStats(), Object.keys(extra).length ? extra : undefined, {
+        endedAt,
+        autoBreaks: autoBreaks?.length ? autoBreaks : undefined,
+      });
       if (row && !row.edited) {
         // Edits update the local record only — re-syncing would append a new column.
         const res = await syncWorkout(row);

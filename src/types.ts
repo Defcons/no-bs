@@ -52,6 +52,14 @@ export type TrackPoint = {
   acc?: number; // reported horizontal accuracy (m) — weights the Kalman map smoother
 };
 
+// One timestamped reading from the hardware step counter — cumulative steps since the
+// session baseline, at that instant. A session's series lets us derive walk/run/stop
+// cadence when there's no GPS (treadmill) and, later, fill a GPS dropout's distance.
+export type StepSample = {
+  t: number; // epoch ms of the sensor event
+  steps: number; // cumulative steps since the session started
+};
+
 // One recorded rest/break taken during a session — for break stats in History and
 // long-rest markers on the GPS route map. Its map location is derived by matching
 // `at` to the nearest track point in time, so no location is stored here.

@@ -179,6 +179,7 @@ export function Settings({
   const [breakNotify, setBreakNotify] = useState(false);
   const [includeAltWeekly, setIncludeAltWeekly] = useState(false);
   const [paceExclBreaks, setPaceExclBreaks] = useState(true);
+  const [autoDetectBreaks, setAutoDetectBreaks] = useState(false);
   const [haptics, setHaptics] = useState(true);
   const [lowHrWarn, setLowHrWarn] = useState(false);
   const [lowHrWarnBpm, setLowHrWarnBpm] = useState(100);
@@ -246,6 +247,7 @@ export function Settings({
     getSetting<boolean>("breakNotify", false).then(setBreakNotify);
     getSetting<boolean>("includeAltInWeekly", false).then(setIncludeAltWeekly);
     getSetting<boolean>("paceExcludesBreaks", true).then(setPaceExclBreaks);
+    getSetting<boolean>("autoDetectBreaks", false).then(setAutoDetectBreaks);
     getSetting<boolean>("haptics", true).then(setHaptics);
     getSetting<boolean>("lowHrWarn", false).then(setLowHrWarn);
     getSetting<number>("lowHrWarnBpm", 100).then(setLowHrWarnBpm);
@@ -644,6 +646,22 @@ export function Settings({
           <p className="muted tiny">
             On by default. Shows your <b>moving pace</b> for runs, walks and treadmill — rest-break time is subtracted
             from pace &amp; speed (distance and total time are unchanged). Turn off for whole-session pace.
+          </p>
+        </ToggleRow>
+
+        <ToggleRow
+          label="Auto-detect rest breaks from movement"
+          checked={autoDetectBreaks}
+          onChange={() => {
+            const v = !autoDetectBreaks;
+            setAutoDetectBreaks(v);
+            setSetting("autoDetectBreaks", v);
+          }}
+        >
+          <p className="muted tiny">
+            Off by default. On a GPS run/walk, stretches where you stopped moving are logged as rest breaks by
+            themselves — so <b>moving pace</b> and the interval breakdown count them without you tapping rest. A rest you
+            started manually is never double-counted.
           </p>
         </ToggleRow>
 
