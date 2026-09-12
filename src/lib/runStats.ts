@@ -1,5 +1,5 @@
 // Derived stats for a recorded GPS route (distance, pace/speed, HR).
-import type { TrackPoint } from "../types";
+import type { TrackPoint, WorkoutBreak } from "../types";
 import { distanceM } from "./geofence";
 
 export type RunStats = {
@@ -12,6 +12,21 @@ export type RunStats = {
   maxHr: number | null;
   points: number;
 };
+
+// Total recorded rest-break seconds in a session (0 when none).
+export function breakSec(breaks?: WorkoutBreak[]): number {
+  return (breaks ?? []).reduce((a, b) => a + (b.sec || 0), 0);
+}
+
+// "Moving-time" pace/speed: recompute a run's pace + speed EXCLUDING rest-break time,
+// when the user's "Pace excludes rest breaks" setting is on. distanceM + durationSec
+// (total wall-clock) are UNCHANGED — only pace/speed derive from the moving time.
+export function withMovingPace(run: RunStats, breaksSec: number, exclude: boolean): RunStats {
+  if (!exclude || breaksSec <= 0 || run.distanceM <= 0) return run;
+  const movingSec = Math.max(1, run.durationSec - breaksSec);
+  const km = run.distanceM / 1000;
+  return { ...run, avgPaceSecPerKm: movingSec / km, avgSpeedKmh: km / (movingSec / 3600) };
+}
 
 // A segment implying more than this speed is a GPS teleport (multipath spike), not
 // movement — 72 km/h is beyond any running/cycling this app records. Without the

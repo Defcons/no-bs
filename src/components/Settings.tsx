@@ -178,6 +178,7 @@ export function Settings({
   const [breakCountdown, setBreakCountdown] = useState(false);
   const [breakNotify, setBreakNotify] = useState(false);
   const [includeAltWeekly, setIncludeAltWeekly] = useState(false);
+  const [paceExclBreaks, setPaceExclBreaks] = useState(true);
   const [haptics, setHaptics] = useState(true);
   const [lowHrWarn, setLowHrWarn] = useState(false);
   const [lowHrWarnBpm, setLowHrWarnBpm] = useState(100);
@@ -244,6 +245,7 @@ export function Settings({
     getSetting("breakCountdown", false).then(setBreakCountdown);
     getSetting<boolean>("breakNotify", false).then(setBreakNotify);
     getSetting<boolean>("includeAltInWeekly", false).then(setIncludeAltWeekly);
+    getSetting<boolean>("paceExcludesBreaks", true).then(setPaceExclBreaks);
     getSetting<boolean>("haptics", true).then(setHaptics);
     getSetting<boolean>("lowHrWarn", false).then(setLowHrWarn);
     getSetting<number>("lowHrWarnBpm", 100).then(setLowHrWarnBpm);
@@ -627,6 +629,21 @@ export function Settings({
           <p className="muted tiny">
             Off by default — the “workouts per week” bars in Records count only your planned template workouts. Turn on
             to also include free-form Alternative sessions (runs, CrossFit, etc.).
+          </p>
+        </ToggleRow>
+
+        <ToggleRow
+          label="Pace excludes rest breaks"
+          checked={paceExclBreaks}
+          onChange={() => {
+            const v = !paceExclBreaks;
+            setPaceExclBreaks(v);
+            setSetting("paceExcludesBreaks", v);
+          }}
+        >
+          <p className="muted tiny">
+            On by default. Shows your <b>moving pace</b> for runs, walks and treadmill — rest-break time is subtracted
+            from pace &amp; speed (distance and total time are unchanged). Turn off for whole-session pace.
           </p>
         </ToggleRow>
 

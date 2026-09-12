@@ -5,7 +5,7 @@ import { Suspense, lazy, useEffect, useMemo, useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db, getSetting, type StoredWorkout } from "../db";
 import { clockTime, daysAgoLabel, hhmmss, localDay, mmss, niceDate } from "../lib/format";
-import { computeRun, fmtDist, fmtPace } from "../lib/runStats";
+import { breakSec, computeRun, fmtDist, fmtPace, withMovingPace } from "../lib/runStats";
 import { costingForName, mapMatch, mapMatchConfigured, type SnapResult } from "../lib/mapMatch";
 import { resolveExercise } from "../lib/exercises";
 import { liftRecords, workoutVolume } from "../lib/stats";
@@ -40,6 +40,7 @@ function activityLabel(w: StoredWorkout): string {
     const run = computeRun(w.track);
     if (run) return `${fmtDist(run.distanceM)} ${cardioVerb(w, run.avgPaceSecPerKm)}`;
   }
+  if (w.treadmill) return `Treadmill ${cardioVerb(w, 0)}`;
   const names = w.exercises.map((e) => e.name.trim()).filter(Boolean);
   if (names.length) return names.slice(0, 3).join(", ") + (names.length > 3 ? "…" : "");
   return dn || "Alternative";
@@ -386,9 +387,11 @@ function LogRow({
 
       {full && (
         <div className="log-detail">
-          {w.track && w.track.length >= 2 && (
+          {w.track && w.track.length >= 2 ? (
             <RunDetail track={w.track} breaks={w.breaks} steps={w.steps} name={w.exercises[0]?.name} />
-          )}
+          ) : w.treadmill ? (
+            <TreadmillDetail steps={w.steps} durationSec={w.durationSec} breaks={w.breaks} />
+          ) : null}
           {w.note && <div className="log-note">📝 {w.note}</div>}
           {w.exercises.map((e, i) => {
             const unit = resolveExercise(e.name, e.exerciseId).unit;
@@ -452,6 +455,45 @@ function LogRow({
   );
 }
 
+// Indoor/treadmill cardio has no GPS track — distance is estimated from steps × stride,
+// pace on moving time. No map. (Entering the machine's real distance to calibrate stride
+// is the planned follow-up — see ToDo.)
+function TreadmillDetail({ steps, durationSec, breaks }: { steps?: number; durationSec?: number; breaks?: StoredWorkout["breaks"] }) {
+  const stride = useLiveQuery(() => getSetting<number>("strideM", 0.74), [], 0.74);
+  const excl = useLiveQuery(() => getSetting<boolean>("paceExcludesBreaks", true), [], true);
+  if (!steps || steps <= 0) return null;
+  const distM = steps * stride;
+  const movingSec = Math.max(1, excl ? (durationSec ?? 0) - breakSec(breaks) : durationSec ?? 0);
+  const km = distM / 1000;
+  const pace = km > 0 ? movingSec / km : 0;
+  const speed = km > 0 ? km / (movingSec / 3600) : 0;
+  return (
+    <div className="run-detail">
+      <div className="run-stats">
+        <div className="run-stat">
+          <span className="run-stat-v">~{fmtDist(distM)}</span>
+          <span className="run-stat-l">distance · steps</span>
+        </div>
+        <div className="run-stat">
+          <span className="run-stat-v">{durationSec ? hhmmss(durationSec) : "—"}</span>
+          <span className="run-stat-l">time</span>
+        </div>
+        <div className="run-stat">
+          <span className="run-stat-v">{fmtPace(pace)}</span>
+          <span className="run-stat-l">{excl ? "moving pace" : "avg pace"}</span>
+        </div>
+        <div className="run-stat">
+          <span className="run-stat-v">{speed.toFixed(1)}</span>
+          <span className="run-stat-l">km/h</span>
+        </div>
+      </div>
+      <p className="muted tiny run-raw">
+        🏃 Treadmill · {steps} steps × {stride.toFixed(2)} m stride (estimate).
+      </p>
+    </div>
+  );
+}
+
 function RunDetail({
   track,
   breaks,
@@ -463,8 +505,9 @@ function RunDetail({
   steps?: number;
   name?: string;
 }) {
-  const s = computeRun(track);
+  const raw = computeRun(track);
   const stride = useLiveQuery(() => getSetting<number>("strideM", 0.74), [], 0.74);
+  const excl = useLiveQuery(() => getSetting<boolean>("paceExcludesBreaks", true), [], true);
   const [canSnap, setCanSnap] = useState(false);
   const [snapped, setSnapped] = useState<SnapResult | null>(null);
   const [snapping, setSnapping] = useState(false);
@@ -472,7 +515,8 @@ function RunDetail({
   useEffect(() => {
     mapMatchConfigured().then(setCanSnap);
   }, []);
-  if (!s) return null;
+  if (!raw) return null;
+  const s = withMovingPace(raw, breakSec(breaks), excl); // moving-time pace when the setting is on
   const doSnap = async () => {
     setSnapping(true);
     setSnapErr("");
@@ -517,7 +561,7 @@ function RunDetail({
         </div>
         <div className="run-stat">
           <span className="run-stat-v">{fmtPace(s.avgPaceSecPerKm)}</span>
-          <span className="run-stat-l">avg pace</span>
+          <span className="run-stat-l">{excl ? "moving pace" : "avg pace"}</span>
         </div>
         <div className="run-stat">
           <span className="run-stat-v">{s.avgSpeedKmh.toFixed(1)}</span>

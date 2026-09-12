@@ -19,6 +19,7 @@ export type Draft = {
   breaks?: WorkoutBreak[]; // rest periods taken this session (banked as each break ends)
   custom?: boolean; // "Alternative" free-form session (editable name/exercises)
   trackGps?: boolean; // record a GPS route for this (cardio) session
+  treadmill?: boolean; // treadmill/indoor mode — step-based distance/pace instead of GPS
   editId?: number; // when set, finishing UPDATES this existing workout (History edit)
   // Full workout timer: pure WALL-CLOCK since it started (user decision 2026-07-08 —
   // no pause/reset/idle-cap). wRunning = "has started" (Start button / first edit),

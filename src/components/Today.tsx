@@ -13,7 +13,7 @@ import { exitPip, isInPip, onPipChange, setPipAutoEnter } from "../lib/pip";
 import { onMediaButton, onVolumeKey, setMediaButtonCapture, setPhoneKeyCapture, setVolumeCapture } from "../lib/hwButtons";
 import { currentTrack, startTracking, stopTracking } from "../lib/tracker";
 import { calibrateStride, currentSteps, startSteps, stopSteps } from "../lib/pedometer";
-import { computeRun, fmtDist, fmtPace, type RunStats } from "../lib/runStats";
+import { breakSec, computeRun, fmtDist, fmtPace, type RunStats, withMovingPace } from "../lib/runStats";
 import { stepForExercise } from "../lib/steps";
 import { playBreakSkip, playBreakStart, playSoundChoice } from "../lib/sounds";
 import { uid } from "../lib/uid";
@@ -200,6 +200,9 @@ export function Today({
   const lowHrMode = useLiveQuery(() => getSetting<string>("lowHrMode", "absolute"), [], "absolute");
   const lowHrRelDelta = useLiveQuery(() => getSetting<number>("lowHrRelDelta", 10), [], 10);
   const lowHrSound = useLiveQuery(() => getSetting<string>("lowHrSound", "alarm"), [], "alarm");
+  // Treadmill/indoor cardio: step-based distance + moving-time pace.
+  const strideVal = useLiveQuery(() => getSetting<number>("strideM", 0.74), [], 0.74);
+  const paceExclBreaks = useLiveQuery(() => getSetting<boolean>("paceExcludesBreaks", true), [], true);
   const lowHrSoundRef = useRef(lowHrSound);
   lowHrSoundRef.current = lowHrSound;
   const lowHrArmedRef = useRef(false); // seen HR above the threshold since last fire/start
@@ -328,9 +331,14 @@ export function Today({
       const endedAt = auto ? draft?.lastActivityAt : undefined;
       // Capture whether mood still needs logging BEFORE finish() clears the draft.
       const moodIncomplete = draft ? draft.moodBefore == null || draft.moodAfter == null : false;
+      // Treadmill = manual toggle, or GPS was on but captured almost none of the movement
+      // the steps imply (indoor/stationary). Then distance comes from steps × stride, not GPS.
+      const gpsDist = track && track.length >= 2 ? computeRun(track)?.distanceM ?? 0 : 0;
+      const treadmill = !!draft?.treadmill || (!!draft?.trackGps && steps * strideVal > 200 && gpsDist < steps * strideVal * 0.4);
       const extra: Partial<StoredWorkout> = {};
-      if (track && track.length >= 2) extra.track = track;
+      if (!treadmill && track && track.length >= 2) extra.track = track;
       if (steps > 0) extra.steps = steps;
+      if (treadmill) extra.treadmill = true;
       const row = await finish(getHrStats(), Object.keys(extra).length ? extra : undefined, { endedAt });
       if (row && !row.edited) {
         // Edits update the local record only — re-syncing would append a new column.
@@ -804,6 +812,21 @@ export function Today({
   // Live calorie estimate (avg HR × elapsed). null when HR/profile missing → hidden.
   const liveKcal = sessionKcal(hr.avg, elapsed, bodyweightKg, age, sex);
 
+  // Treadmill / indoor cardio: distance from steps × stride; pace on moving time.
+  const liveBreakSec = breakSec(draft?.breaks);
+  const stepDistM = liveSteps * strideVal;
+  const gpsDistM = liveRun?.distanceM ?? 0;
+  // Auto-detect: GPS is on but captured almost none of the distance the steps imply (you
+  // aren't moving through space) → treadmill. A gappy OUTDOOR run still covers real ground,
+  // so gpsDistM stays comparable to stepDistM and this never trips. Manual toggle overrides.
+  const autoTreadmill = !!draft?.trackGps && !draft?.treadmill && elapsed > 120 && stepDistM > 200 && gpsDistM < stepDistM * 0.4;
+  const treadmillMode = !!draft?.treadmill || autoTreadmill;
+  const tmMovingSec = Math.max(1, paceExclBreaks ? elapsed - liveBreakSec : elapsed);
+  const tmKm = stepDistM / 1000;
+  const tmPace = tmKm > 0 ? tmMovingSec / tmKm : 0;
+  const tmSpeed = tmKm > 0 ? tmKm / (tmMovingSec / 3600) : 0;
+  const liveRunShown = liveRun ? withMovingPace(liveRun, liveBreakSec, paceExclBreaks) : null;
+
   return (
     <div className="today">
       <div className="wb-sticky">
@@ -925,24 +948,53 @@ export function Today({
             >
               {draft.trackGps ? "◉ Tracking GPS route" : "○ Track GPS route"}
             </button>
-            {draft.trackGps && !liveRun && <span className="muted tiny">Acquiring GPS… live stats show here.</span>}
+            <button
+              className={`mini ${draft.treadmill ? "active" : ""}`}
+              onClick={() => update((d) => ({ ...d, treadmill: !d.treadmill }))}
+            >
+              {draft.treadmill ? "◉ Treadmill" : "🏃 Treadmill"}
+            </button>
+            {draft.trackGps && !treadmillMode && !liveRun && (
+              <span className="muted tiny">Acquiring GPS… live stats show here.</span>
+            )}
           </div>
-          {draft.trackGps && liveRun && (
+          {treadmillMode ? (
+            <>
+              <div className="run-stats live-run">
+                <div className="run-stat">
+                  <span className="run-stat-v">~{fmtDist(stepDistM)}</span>
+                  <span className="run-stat-l">distance · steps</span>
+                </div>
+                <div className="run-stat">
+                  <span className="run-stat-v">{fmtPace(tmPace)}</span>
+                  <span className="run-stat-l">{paceExclBreaks ? "moving pace" : "avg pace"}</span>
+                </div>
+                <div className="run-stat">
+                  <span className="run-stat-v">{tmSpeed.toFixed(1)}</span>
+                  <span className="run-stat-l">km/h</span>
+                </div>
+              </div>
+              <p className="muted tiny">
+                {draft.treadmill ? "Treadmill" : "No GPS movement — estimating from steps"} · {liveSteps} steps ×{" "}
+                {strideVal.toFixed(2)} m stride.
+              </p>
+            </>
+          ) : draft.trackGps && liveRunShown ? (
             <div className="run-stats live-run">
               <div className="run-stat">
-                <span className="run-stat-v">{fmtDist(liveRun.distanceM)}</span>
+                <span className="run-stat-v">{fmtDist(liveRunShown.distanceM)}</span>
                 <span className="run-stat-l">distance</span>
               </div>
               <div className="run-stat">
-                <span className="run-stat-v">{fmtPace(liveRun.avgPaceSecPerKm)}</span>
-                <span className="run-stat-l">avg pace</span>
+                <span className="run-stat-v">{fmtPace(liveRunShown.avgPaceSecPerKm)}</span>
+                <span className="run-stat-l">{paceExclBreaks ? "moving pace" : "avg pace"}</span>
               </div>
               <div className="run-stat">
-                <span className="run-stat-v">{liveRun.avgSpeedKmh.toFixed(1)}</span>
+                <span className="run-stat-v">{liveRunShown.avgSpeedKmh.toFixed(1)}</span>
                 <span className="run-stat-l">km/h</span>
               </div>
             </div>
-          )}
+          ) : null}
         </div>
       )}
 
