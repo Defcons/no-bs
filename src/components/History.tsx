@@ -6,6 +6,7 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { db, getSetting, type StoredWorkout } from "../db";
 import { clockTime, daysAgoLabel, hhmmss, localDay, mmss, niceDate } from "../lib/format";
 import { breakSec, computeRun, fmtDist, fmtPace, withMovingPace } from "../lib/runStats";
+import { calibrateStrideFromDistance } from "../lib/pedometer";
 import { costingForName, mapMatch, mapMatchConfigured, type SnapResult } from "../lib/mapMatch";
 import { resolveExercise } from "../lib/exercises";
 import { liftRecords, workoutVolume } from "../lib/stats";
@@ -40,7 +41,7 @@ function activityLabel(w: StoredWorkout): string {
     const run = computeRun(w.track);
     if (run) return `${fmtDist(run.distanceM)} ${cardioVerb(w, run.avgPaceSecPerKm)}`;
   }
-  if (w.treadmill) return `Treadmill ${cardioVerb(w, 0)}`;
+  if (w.treadmill) return w.treadmillM != null ? `${fmtDist(w.treadmillM)} ${cardioVerb(w, 0)}` : `Treadmill ${cardioVerb(w, 0)}`;
   const names = w.exercises.map((e) => e.name.trim()).filter(Boolean);
   if (names.length) return names.slice(0, 3).join(", ") + (names.length > 3 ? "…" : "");
   return dn || "Alternative";
@@ -390,7 +391,7 @@ function LogRow({
           {w.track && w.track.length >= 2 ? (
             <RunDetail track={w.track} breaks={w.breaks} steps={w.steps} name={w.exercises[0]?.name} />
           ) : w.treadmill ? (
-            <TreadmillDetail steps={w.steps} durationSec={w.durationSec} breaks={w.breaks} />
+            <TreadmillDetail id={w.id} steps={w.steps} durationSec={w.durationSec} breaks={w.breaks} treadmillM={w.treadmillM} />
           ) : null}
           {w.note && <div className="log-note">📝 {w.note}</div>}
           {w.exercises.map((e, i) => {
@@ -456,23 +457,44 @@ function LogRow({
 }
 
 // Indoor/treadmill cardio has no GPS track — distance is estimated from steps × stride,
-// pace on moving time. No map. (Entering the machine's real distance to calibrate stride
-// is the planned follow-up — see ToDo.)
-function TreadmillDetail({ steps, durationSec, breaks }: { steps?: number; durationSec?: number; breaks?: StoredWorkout["breaks"] }) {
+// pace on moving time, no map. Entering the machine's own distance sets the REAL distance
+// AND calibrates your stride (ground truth), so future estimates sharpen.
+function TreadmillDetail({
+  id,
+  steps,
+  durationSec,
+  breaks,
+  treadmillM,
+}: {
+  id?: number;
+  steps?: number;
+  durationSec?: number;
+  breaks?: StoredWorkout["breaks"];
+  treadmillM?: number;
+}) {
   const stride = useLiveQuery(() => getSetting<number>("strideM", 0.74), [], 0.74);
   const excl = useLiveQuery(() => getSetting<boolean>("paceExcludesBreaks", true), [], true);
+  const [raw, setRaw] = useState<string | null>(null); // editing buffer for the actual-distance field
   if (!steps || steps <= 0) return null;
-  const distM = steps * stride;
+  const entered = treadmillM != null;
+  const distM = treadmillM ?? steps * stride; // an entered ACTUAL distance wins over the estimate
   const movingSec = Math.max(1, excl ? (durationSec ?? 0) - breakSec(breaks) : durationSec ?? 0);
   const km = distM / 1000;
   const pace = km > 0 ? movingSec / km : 0;
   const speed = km > 0 ? km / (movingSec / 3600) : 0;
+  const saveActual = async (v: string) => {
+    const kmVal = parseFloat(v.replace(",", "."));
+    if (id == null || !Number.isFinite(kmVal) || kmVal <= 0) return;
+    const m = Math.round(kmVal * 1000);
+    await db.workouts.update(id, { treadmillM: m });
+    await calibrateStrideFromDistance(m, steps); // ground truth → sharpen the stride
+  };
   return (
     <div className="run-detail">
       <div className="run-stats">
         <div className="run-stat">
-          <span className="run-stat-v">~{fmtDist(distM)}</span>
-          <span className="run-stat-l">distance · steps</span>
+          <span className="run-stat-v">{entered ? fmtDist(distM) : `~${fmtDist(distM)}`}</span>
+          <span className="run-stat-l">{entered ? "distance" : "distance · steps"}</span>
         </div>
         <div className="run-stat">
           <span className="run-stat-v">{durationSec ? hhmmss(durationSec) : "—"}</span>
@@ -487,8 +509,25 @@ function TreadmillDetail({ steps, durationSec, breaks }: { steps?: number; durat
           <span className="run-stat-l">km/h</span>
         </div>
       </div>
+      <div className="row treadmill-actual">
+        <span className="muted tiny">Treadmill showed</span>
+        <input
+          type="text"
+          inputMode="decimal"
+          className="bw-input"
+          placeholder="km"
+          value={raw != null ? raw : entered ? String(Number((treadmillM / 1000).toFixed(2))) : ""}
+          onFocus={(e) => setRaw(e.currentTarget.value)}
+          onChange={(e) => setRaw(e.target.value)}
+          onBlur={(e) => {
+            void saveActual(e.target.value);
+            setRaw(null);
+          }}
+        />
+        <span className="muted tiny">km → sets the real distance &amp; calibrates your stride</span>
+      </div>
       <p className="muted tiny run-raw">
-        🏃 Treadmill · {steps} steps × {stride.toFixed(2)} m stride (estimate).
+        🏃 Treadmill · {steps} steps × {stride.toFixed(2)} m stride {entered ? "(calibrated to your entry)" : "(estimate)"}.
       </p>
     </div>
   );

@@ -79,3 +79,15 @@ export async function calibrateStride(track: TrackPoint[] | undefined, steps: nu
   const cur = await getSetting<number>("strideM", DEFAULT_STRIDE_M);
   await setSetting("strideM", Math.round((cur * 0.75 + stride * 0.25) * 1000) / 1000);
 }
+
+// Learn the stride from a treadmill's OWN displayed distance (ground truth the user
+// types in) ÷ steps. More reliable than a GPS-learned stride, so weighted a bit heavier
+// in the rolling average. Same plausibility guards. Called when the user enters a
+// treadmill session's real distance in History.
+export async function calibrateStrideFromDistance(distanceM: number, steps: number): Promise<void> {
+  if (!(distanceM > 0) || steps < 200) return;
+  const stride = distanceM / steps;
+  if (stride < 0.4 || stride > 1.2) return; // implausible (bad steps or a mistyped distance)
+  const cur = await getSetting<number>("strideM", DEFAULT_STRIDE_M);
+  await setSetting("strideM", Math.round((cur * 0.6 + stride * 0.4) * 1000) / 1000);
+}

@@ -19,6 +19,7 @@ export interface StoredWorkout {
   track?: TrackPoint[]; // GPS route for tracked cardio (e.g. a run)
   steps?: number; // hardware step-counter total for the session (native only, since 1.65)
   treadmill?: boolean; // indoor/treadmill cardio — distance estimated from steps × stride, no GPS track (1.69)
+  treadmillM?: number; // user-entered ACTUAL treadmill distance (m) — overrides the step estimate + calibrates stride (1.69.1)
   breaks?: WorkoutBreak[]; // rest periods taken during the session (break stats + map markers)
   source: string; // "app" for new sessions, "sheet:2026" etc. for imports
   synced?: boolean; // written back to the Google Sheet
