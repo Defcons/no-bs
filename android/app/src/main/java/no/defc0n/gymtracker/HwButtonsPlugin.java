@@ -82,21 +82,6 @@ public class HwButtonsPlugin extends Plugin {
     private volatile boolean suppressVolumeObserver = false;
     private final Runnable clearSuppress = () -> suppressVolumeObserver = false;
 
-    // Configurable earbud actions: each press carries its DIRECTION (up/down), and — only
-    // when JS maps a DOUBLE action (detectDouble) — is classified single vs double within
-    // DOUBLE_MS. With detectDouble off, a press fires instantly (the confirmed break path).
-    private static final long DOUBLE_MS = 350;
-    private volatile boolean detectDouble = false;
-    private int pendingDir = 0; // first press's direction while we wait for a possible 2nd
-    private final Runnable firePendingSingle = new Runnable() {
-        @Override
-        public void run() {
-            int d = pendingDir;
-            pendingDir = 0;
-            if (d != 0) emitVolumeKey(d, false);
-        }
-    };
-
     // --- Audio-focus ducking ---
     private AudioFocusRequest duckRequest;
     private final Handler main = new Handler(Looper.getMainLooper());
@@ -144,8 +129,7 @@ public class HwButtonsPlugin extends Plugin {
     @PluginMethod
     public void setCapture(PluginCall call) {
         captureVolume = Boolean.TRUE.equals(call.getBoolean("enabled", false));
-        detectDouble = Boolean.TRUE.equals(call.getBoolean("detectDouble", false));
-        log("setCapture enabled=" + captureVolume + " detectDouble=" + detectDouble);
+        log("setCapture enabled=" + captureVolume);
         getActivity().runOnUiThread(() -> {
             if (captureVolume) startVolumeObserver();
             else stopVolumeObserver();
@@ -232,13 +216,12 @@ public class HwButtonsPlugin extends Plugin {
                     //      the `now == lastMusicVol` no-op path above. The old 400 ms
                     //      snap-back suppress swallowed a fast SECOND press ("double-tap
                     //      did nothing"); without it, a quick second press fires normally.
-                    final int dir = now > lastMusicVol ? 1 : -1; // capture BEFORE the restore rewrites lastMusicVol
                     int max = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
                     final int restore = Math.max(1, Math.min(max - 1, lastMusicVol));
-                    log("  -> earbud press dir=" + (dir > 0 ? "up" : "down") + "; restoring vol to " + restore + " (was " + lastMusicVol + ")");
+                    log("  -> EARBUD BREAK fire; restoring vol to " + restore + " (was " + lastMusicVol + ")");
                     lastMusicVol = restore;
                     audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, restore, 0);
-                    handleEarbudPress(dir);
+                    notifyVolumeKey();
                 } else {
                     lastMusicVol = now;
                 }
@@ -249,8 +232,6 @@ public class HwButtonsPlugin extends Plugin {
     }
 
     private void stopVolumeObserver() {
-        main.removeCallbacks(firePendingSingle);
-        pendingDir = 0;
         if (volumeObserver != null) {
             try {
                 getContext().getContentResolver().unregisterContentObserver(volumeObserver);
@@ -258,33 +239,6 @@ public class HwButtonsPlugin extends Plugin {
             }
             volumeObserver = null;
         }
-    }
-
-    // A real earbud rocker press (direction = dir). With detectDouble OFF, emit instantly
-    // (the confirmed break path). With it ON, a second press within DOUBLE_MS is a double;
-    // otherwise the single fires when the window expires.
-    private void handleEarbudPress(int dir) {
-        if (!detectDouble) {
-            emitVolumeKey(dir, false);
-            return;
-        }
-        if (pendingDir != 0) {
-            main.removeCallbacks(firePendingSingle);
-            int firstDir = pendingDir;
-            pendingDir = 0;
-            emitVolumeKey(firstDir, true); // double
-        } else {
-            pendingDir = dir;
-            main.postDelayed(firePendingSingle, DOUBLE_MS);
-        }
-    }
-
-    private void emitVolumeKey(int dir, boolean dbl) {
-        log("emit volumeKey dir=" + (dir > 0 ? "up" : "down") + " double=" + dbl);
-        JSObject o = new JSObject();
-        o.put("dir", dir > 0 ? "up" : "down");
-        o.put("double", dbl);
-        notifyListeners("volumeKey", o);
     }
 
     // --- Audio-focus ducking ----------------------------------------------------

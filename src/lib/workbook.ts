@@ -25,7 +25,6 @@ export type SheetTab = { name: string; rows: string[][] };
 export const BACKUP_SETTINGS = [
   "age", "sex",
   "autoBreakOnDone", "volumeUpBreak", "phoneVolumeBreak",
-  "earbudActionUp", "earbudActionDown", "earbudActionDouble",
   "breakCountdown", "breakSound",
   "restDefaultSec", "weightStep", "daysPerWeek",
   "units", "theme",
@@ -72,9 +71,6 @@ const SETTING_CHECKS: Record<(typeof BACKUP_SETTINGS)[number], Check> = {
   autoBreakOnDone: bool,
   volumeUpBreak: bool,
   phoneVolumeBreak: bool,
-  earbudActionUp: oneOf("break", "markdone", "addrest", "none"),
-  earbudActionDown: oneOf("break", "markdone", "addrest", "none"),
-  earbudActionDouble: oneOf("break", "markdone", "addrest", "none"),
   breakCountdown: bool,
   breakSound: str,
   restDefaultSec: num,
