@@ -215,32 +215,63 @@ export function Today({
   // The button action: start a break, or skip/dismiss the one that's running.
   // Reassigned every render (below) so it sees the live draft.
   const hwBreakRef = useRef<() => void>(() => {});
-  // Earbud volume rocker → break (AVRCP volume-observer path).
+  // Earbud volume rocker → break (AVRCP volume-observer path). Arm from a FRESH read, not
+  // the live-query value: on a cold start the live query hands back its default (false) and
+  // — on the Android WebView — doesn't deliver the persisted value until a write, which left
+  // the capture disarmed while the toggle showed ON (needed a re-toggle). The fresh read
+  // closes that gap; `volUpBreak` stays in deps so a mid-workout toggle still re-arms.
   useEffect(() => {
-    setVolumeCapture(!!draft && volUpBreak);
+    if (!draft) {
+      setVolumeCapture(false);
+      return;
+    }
+    let on = true;
+    void getSetting<boolean>("volumeUpBreak", false).then((v) => {
+      if (on) setVolumeCapture(v);
+    });
     return () => {
+      on = false;
       setVolumeCapture(false);
     };
   }, [draft == null, volUpBreak]);
-  // Phone volume buttons → break (key-consume path; opt-in, removes volume control).
+  // Phone volume buttons → break (key-consume path). Fresh read for the same cold-start reason.
   useEffect(() => {
-    setPhoneKeyCapture(!!draft && phoneVolBreak);
+    if (!draft) {
+      setPhoneKeyCapture(false);
+      return;
+    }
+    let on = true;
+    void getSetting<boolean>("phoneVolumeBreak", false).then((v) => {
+      if (on) setPhoneKeyCapture(v);
+    });
     return () => {
+      on = false;
       setPhoneKeyCapture(false);
     };
   }, [draft == null, phoneVolBreak]);
-  // Both paths emit the same "volumeKey" event — one listener handles either.
+  // Both paths emit the same "volumeKey" event — attach one listener for the WHOLE workout
+  // (not gated on the toggles, which can read stale on a cold start); it's inert unless a
+  // capture path is armed and actually emits.
   useEffect(() => {
-    if (!draft || (!volUpBreak && !phoneVolBreak)) return;
+    if (!draft) return;
     const off = onVolumeKey(() => hwBreakRef.current());
     return () => off();
-  }, [draft == null, volUpBreak, phoneVolBreak]);
+  }, [draft == null]);
+  // Headphone media button → break. Fresh read + conditional listener (same cold-start fix).
   useEffect(() => {
-    const armed = !!draft && mediaBtnBreak;
-    setMediaButtonCapture(armed);
-    if (!armed) return;
-    const off = onMediaButton(() => hwBreakRef.current());
+    if (!draft) {
+      setMediaButtonCapture(false);
+      return;
+    }
+    let on = true;
+    let off = () => {};
+    void getSetting<boolean>("mediaBtnBreak", false).then((v) => {
+      if (!on) return;
+      setMediaButtonCapture(v);
+      if (v) off = onMediaButton(() => hwBreakRef.current());
+    });
     return () => {
+      on = false;
       off();
       setMediaButtonCapture(false);
     };
