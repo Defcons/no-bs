@@ -157,10 +157,16 @@ public class HwButtonsPlugin extends Plugin {
 
     // --- Volume-change observer -------------------------------------------------
 
-    // An earbud (AVRCP) press moves the media level by one — occasionally two —
-    // steps. Anything bigger is the user actually SETTING volume (system slider
-    // drag, Spotify Connect / Cast remote volume, app-driven change).
-    private static final int MAX_EARBUD_STEP = 2;
+    // An earbud (AVRCP) press moves the media level by one — occasionally two — steps on
+    // most devices. Anything bigger is normally the user SETTING volume (system slider drag,
+    // Spotify Connect / Cast remote volume, app-driven change), which we re-baseline instead
+    // of firing. RAISED 2 → 4 (David, 2026-09-13): on 1.72 Extended the break "very often
+    // didn't detect", and the prime suspect is an earbud whose rocker moves >2 steps/press —
+    // the old gate read those as user intent and silently dropped them. Trade-off: a genuine
+    // 3–4-step volume change now fires a false break (recoverable — just Skip it). If false
+    // fires get annoying, dial back toward 3; to KNOW the real per-press delta, set
+    // DEBUG_LOG=true and watch `adb logcat -s HwBreak:D`.
+    private static final int MAX_EARBUD_STEP = 4;
 
     private void startVolumeObserver() {
         if (volumeObserver != null || audioManager == null) return;
