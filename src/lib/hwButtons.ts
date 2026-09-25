@@ -4,12 +4,15 @@
 // No-op on the web and on APKs older than the plugin (calls just reject).
 import { Capacitor, registerPlugin, type PluginListenerHandle } from "@capacitor/core";
 
+// Earbud volume-rocker event: direction of the press, and whether it was a double-press
+// (only classified when `detectDouble` is armed; the phone-key path emits neither → break).
+export type VolumeKeyEvent = { dir?: "up" | "down"; double?: boolean };
+
 interface HwButtonsPlugin {
-  setCapture(options: { enabled: boolean }): Promise<void>;
-  setMediaCapture(options: { enabled: boolean }): Promise<void>;
+  setCapture(options: { enabled: boolean; detectDouble?: boolean }): Promise<void>;
   setPhoneKeyCapture(options: { enabled: boolean }): Promise<void>;
   duck(options: { durationMs: number }): Promise<void>;
-  addListener(event: "volumeKey" | "mediaButton", cb: () => void): Promise<PluginListenerHandle>;
+  addListener(event: "volumeKey", cb: (data: VolumeKeyEvent) => void): Promise<PluginListenerHandle>;
 }
 
 const HwButtons = registerPlugin<HwButtonsPlugin>("HwButtons");
@@ -20,21 +23,10 @@ const native = () => Capacitor.isNativePlatform();
 // active — while armed the volume keys no longer change media volume. Only works
 // while the app is in the FOREGROUND (Android doesn't deliver volume keys to a
 // backgrounded/PiP app).
-export async function setVolumeCapture(enabled: boolean): Promise<void> {
+export async function setVolumeCapture(enabled: boolean, detectDouble = false): Promise<void> {
   if (!native()) return;
   try {
-    await HwButtons.setCapture({ enabled });
-  } catch {
-    /* plugin missing (old APK) */
-  }
-}
-
-// Arm/disarm headphone/media-button capture. While armed, the headset button
-// starts the break INSTEAD of controlling music — a deliberate, opt-in trade-off.
-export async function setMediaButtonCapture(enabled: boolean): Promise<void> {
-  if (!native()) return;
-  try {
-    await HwButtons.setMediaCapture({ enabled });
+    await HwButtons.setCapture({ enabled, detectDouble });
   } catch {
     /* plugin missing (old APK) */
   }
@@ -64,7 +56,7 @@ export async function duckAudio(durationMs: number): Promise<void> {
   }
 }
 
-function listen(event: "volumeKey" | "mediaButton", cb: () => void): () => void {
+function listen(event: "volumeKey", cb: (data: VolumeKeyEvent) => void): () => void {
   if (!native()) return () => {};
   let handle: PluginListenerHandle | null = null;
   let cancelled = false;
@@ -82,5 +74,6 @@ function listen(event: "volumeKey" | "mediaButton", cb: () => void): () => void 
   };
 }
 
-export const onVolumeKey = (cb: () => void): (() => void) => listen("volumeKey", cb);
-export const onMediaButton = (cb: () => void): (() => void) => listen("mediaButton", cb);
+// The volumeKey callback receives {dir, double} for an earbud press; the phone-key path
+// sends an empty object (treat as a single break).
+export const onVolumeKey = (cb: (data: VolumeKeyEvent) => void): (() => void) => listen("volumeKey", cb);

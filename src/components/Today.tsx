@@ -10,7 +10,7 @@ import { daysAgo, daysAgoLabel, hhmmss, mmss, niceDate } from "../lib/format";
 import { cancelBreakNotification, scheduleBreakNotification, showAutoEndNotification, showReminder } from "../lib/notify";
 import { startGeofence, stopGeofence } from "../lib/geofence";
 import { exitPip, isInPip, onPipChange, setPipAutoEnter } from "../lib/pip";
-import { onMediaButton, onVolumeKey, setMediaButtonCapture, setPhoneKeyCapture, setVolumeCapture } from "../lib/hwButtons";
+import { onVolumeKey, setPhoneKeyCapture, setVolumeCapture, type VolumeKeyEvent } from "../lib/hwButtons";
 import { currentTrack, startTracking, stopTracking } from "../lib/tracker";
 import { calibrateStride, currentSteps, drainStepSamples, isRunningCadence, startSteps, stopSteps, strideRunM, strideWalkM } from "../lib/pedometer";
 import { useSetting } from "../lib/useSetting";
@@ -189,13 +189,18 @@ export function Today({
   // Settings takes effect immediately — even mid-workout (was mount/start-only).
   const autoBreakOnDone = useSetting("autoBreakOnDone", false);
 
-  // Optional hands-free break starts (both default off, armed ONLY while a
-  // workout is active). Native only; older APKs without the plugin silently no-op.
-  // - volumeUpBreak: volume-up key (phone or headphone volume buttons)
-  // - mediaBtnBreak: headphone play/pause button (takes it over from music!)
+  // Optional hands-free break controls (default off, armed ONLY while a workout is active).
+  // Native only; older APKs without the plugin silently no-op.
+  // - volumeUpBreak: the Bluetooth EARBUD volume rocker → configurable actions (below)
+  // - phoneVolumeBreak: the PHONE's own volume keys → start/skip the break
   const volUpBreak = useSetting("volumeUpBreak", false);
   const phoneVolBreak = useSetting("phoneVolumeBreak", false);
-  const mediaBtnBreak = useSetting("mediaBtnBreak", false);
+  // Earbud rocker actions (active only while volUpBreak is on): which action each trigger runs.
+  const earbudActionUp = useSetting<string>("earbudActionUp", "break");
+  const earbudActionDown = useSetting<string>("earbudActionDown", "markdone");
+  const earbudActionDouble = useSetting<string>("earbudActionDouble", "addrest");
+  // Only classify single-vs-double presses (adds a small delay) when a double action is mapped.
+  const detectDouble = earbudActionDouble !== "none";
   // Low heart-rate warning (default off): sound when live BPM dips below a threshold.
   const lowHrWarn = useSetting("lowHrWarn", false);
   const lowHrWarnBpm = useSetting("lowHrWarnBpm", 100);
@@ -216,6 +221,8 @@ export function Today({
   // The button action: start a break, or skip/dismiss the one that's running.
   // Reassigned every render (below) so it sees the live draft.
   const hwBreakRef = useRef<() => void>(() => {});
+  // Routes an earbud rocker event {dir, double} to its configured action. Reassigned below.
+  const hwActionRef = useRef<(data?: VolumeKeyEvent) => void>(() => {});
   // Earbud volume rocker → break (AVRCP volume-observer path). Arm from a FRESH read, not
   // the live-query value: on a cold start the live query hands back its default (false) and
   // — on the Android WebView — doesn't deliver the persisted value until a write, which left
@@ -228,13 +235,13 @@ export function Today({
     }
     let on = true;
     void getSetting<boolean>("volumeUpBreak", false).then((v) => {
-      if (on) setVolumeCapture(v);
+      if (on) setVolumeCapture(v, detectDouble);
     });
     return () => {
       on = false;
       setVolumeCapture(false);
     };
-  }, [draft == null, volUpBreak]);
+  }, [draft == null, volUpBreak, detectDouble]);
   // Phone volume buttons → break (key-consume path). Fresh read for the same cold-start reason.
   useEffect(() => {
     if (!draft) {
@@ -255,28 +262,9 @@ export function Today({
   // capture path is armed and actually emits.
   useEffect(() => {
     if (!draft) return;
-    const off = onVolumeKey(() => hwBreakRef.current());
+    const off = onVolumeKey((data) => hwActionRef.current(data));
     return () => off();
   }, [draft == null]);
-  // Headphone media button → break. Fresh read + conditional listener (same cold-start fix).
-  useEffect(() => {
-    if (!draft) {
-      setMediaButtonCapture(false);
-      return;
-    }
-    let on = true;
-    let off = () => {};
-    void getSetting<boolean>("mediaBtnBreak", false).then((v) => {
-      if (!on) return;
-      setMediaButtonCapture(v);
-      if (v) off = onMediaButton(() => hwBreakRef.current());
-    });
-    return () => {
-      on = false;
-      off();
-      setMediaButtonCapture(false);
-    };
-  }, [draft == null, mediaBtnBreak]);
 
   // Android hardware back: on the Today tab with a workout in progress, confirm
   // discarding it and returning to the picker (instead of exiting the app).
@@ -838,6 +826,40 @@ export function Today({
   hwBreakRef.current = () => {
     if (draft?.restEndsAt != null) setRest(null);
     else startRest();
+  };
+  // Mark the next not-done set of the active exercise done (hands-free) + auto-break if the
+  // setting is on — mirrors tapping the set's ✓ badge. For the earbud "mark set done" action.
+  const markNextSetDone = () => {
+    if (!draft) return;
+    const exIdx = draft.exercises.findIndex((ex) => !ex.skipped && ex.sets.some((s) => !s.done));
+    if (exIdx < 0) return;
+    const ex = draft.exercises[exIdx];
+    const setIdx = ex.sets.findIndex((s) => !s.done);
+    if (setIdx < 0) return;
+    update((d) => ({
+      ...d,
+      exercises: d.exercises.map((e, i) =>
+        i === exIdx ? { ...e, sets: e.sets.map((s, j) => (j === setIdx ? { ...s, done: true } : s)) } : e,
+      ),
+    }));
+    if (autoBreakOnDone) autoStartRest(ex);
+  };
+  // +30s onto a running break; start one if none is running. For the earbud "+30s" action.
+  const addRest = () => {
+    if (!draft) return;
+    if (draft.restEndsAt != null && draft.restEndsAt > Date.now()) setRest(draft.restEndsAt + 30_000);
+    else startRest();
+  };
+  // Route an earbud rocker event to its configured action (phone-key path has no dir → break).
+  hwActionRef.current = (data) => {
+    if (!data?.dir) {
+      hwBreakRef.current();
+      return;
+    }
+    const action = data.double ? earbudActionDouble : data.dir === "up" ? earbudActionUp : earbudActionDown;
+    if (action === "break") hwBreakRef.current();
+    else if (action === "markdone") markNextSetDone();
+    else if (action === "addrest") addRest();
   };
   // Add an exercise to the running session. In a normal (template) session this is
   // an "alternative" — e.g. no bench available, do curls instead — flagged `added`

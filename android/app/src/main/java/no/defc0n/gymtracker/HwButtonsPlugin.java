@@ -1,13 +1,10 @@
 package no.defc0n.gymtracker;
 
 import android.content.Context;
-import android.content.Intent;
 import android.database.ContentObserver;
 import android.media.AudioAttributes;
 import android.media.AudioFocusRequest;
 import android.media.AudioManager;
-import android.media.session.MediaSession;
-import android.media.session.PlaybackState;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Handler;
@@ -15,7 +12,6 @@ import android.os.Looper;
 import android.os.SystemClock;
 import android.provider.Settings;
 import android.util.Log;
-import android.view.KeyEvent;
 
 import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
@@ -37,11 +33,6 @@ import com.getcapacitor.annotation.CapacitorPlugin;
  *   the observer from mistaking a phone-key change for an earbud press, MainActivity
  *   (foreground) and the accessibility service (locked) call suppressVolumeChange() first,
  *   so that one level change is ignored. Net: phone buttons = volume, earbud rocker = break.
- *
- * - Headphone/media button (optional, separate toggle): a foreground MediaSession
- *   claims media-button routing and emits "mediaButton" on play/pause/headset-hook
- *   presses. TRADE-OFF (shown in Settings): while armed, that button starts the
- *   break INSTEAD of controlling the user's music app.
  *
  * - duck(): request transient MAY_DUCK audio focus so a playing music app dims
  *   (not pauses) while a break sound / countdown plays over it, then release.
@@ -81,8 +72,6 @@ public class HwButtonsPlugin extends Plugin {
         return instance != null;
     }
 
-    private MediaSession session;
-
     // --- Volume-change observer (earbud AVRCP rocker) ---
     private AudioManager audioManager;
     private ContentObserver volumeObserver;
@@ -92,6 +81,21 @@ public class HwButtonsPlugin extends Plugin {
     // the break). volatile — set from the accessibility service's key thread, read on main.
     private volatile boolean suppressVolumeObserver = false;
     private final Runnable clearSuppress = () -> suppressVolumeObserver = false;
+
+    // Configurable earbud actions: each press carries its DIRECTION (up/down), and — only
+    // when JS maps a DOUBLE action (detectDouble) — is classified single vs double within
+    // DOUBLE_MS. With detectDouble off, a press fires instantly (the confirmed break path).
+    private static final long DOUBLE_MS = 350;
+    private volatile boolean detectDouble = false;
+    private int pendingDir = 0; // first press's direction while we wait for a possible 2nd
+    private final Runnable firePendingSingle = new Runnable() {
+        @Override
+        public void run() {
+            int d = pendingDir;
+            pendingDir = 0;
+            if (d != 0) emitVolumeKey(d, false);
+        }
+    };
 
     // --- Audio-focus ducking ---
     private AudioFocusRequest duckRequest;
@@ -140,7 +144,8 @@ public class HwButtonsPlugin extends Plugin {
     @PluginMethod
     public void setCapture(PluginCall call) {
         captureVolume = Boolean.TRUE.equals(call.getBoolean("enabled", false));
-        log("setCapture enabled=" + captureVolume);
+        detectDouble = Boolean.TRUE.equals(call.getBoolean("detectDouble", false));
+        log("setCapture enabled=" + captureVolume + " detectDouble=" + detectDouble);
         getActivity().runOnUiThread(() -> {
             if (captureVolume) startVolumeObserver();
             else stopVolumeObserver();
@@ -227,12 +232,13 @@ public class HwButtonsPlugin extends Plugin {
                     //      the `now == lastMusicVol` no-op path above. The old 400 ms
                     //      snap-back suppress swallowed a fast SECOND press ("double-tap
                     //      did nothing"); without it, a quick second press fires normally.
+                    final int dir = now > lastMusicVol ? 1 : -1; // capture BEFORE the restore rewrites lastMusicVol
                     int max = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
                     final int restore = Math.max(1, Math.min(max - 1, lastMusicVol));
-                    log("  -> EARBUD BREAK fire; restoring vol to " + restore + " (was " + lastMusicVol + ")");
+                    log("  -> earbud press dir=" + (dir > 0 ? "up" : "down") + "; restoring vol to " + restore + " (was " + lastMusicVol + ")");
                     lastMusicVol = restore;
                     audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, restore, 0);
-                    notifyVolumeKey();
+                    handleEarbudPress(dir);
                 } else {
                     lastMusicVol = now;
                 }
@@ -243,6 +249,8 @@ public class HwButtonsPlugin extends Plugin {
     }
 
     private void stopVolumeObserver() {
+        main.removeCallbacks(firePendingSingle);
+        pendingDir = 0;
         if (volumeObserver != null) {
             try {
                 getContext().getContentResolver().unregisterContentObserver(volumeObserver);
@@ -250,6 +258,33 @@ public class HwButtonsPlugin extends Plugin {
             }
             volumeObserver = null;
         }
+    }
+
+    // A real earbud rocker press (direction = dir). With detectDouble OFF, emit instantly
+    // (the confirmed break path). With it ON, a second press within DOUBLE_MS is a double;
+    // otherwise the single fires when the window expires.
+    private void handleEarbudPress(int dir) {
+        if (!detectDouble) {
+            emitVolumeKey(dir, false);
+            return;
+        }
+        if (pendingDir != 0) {
+            main.removeCallbacks(firePendingSingle);
+            int firstDir = pendingDir;
+            pendingDir = 0;
+            emitVolumeKey(firstDir, true); // double
+        } else {
+            pendingDir = dir;
+            main.postDelayed(firePendingSingle, DOUBLE_MS);
+        }
+    }
+
+    private void emitVolumeKey(int dir, boolean dbl) {
+        log("emit volumeKey dir=" + (dir > 0 ? "up" : "down") + " double=" + dbl);
+        JSObject o = new JSObject();
+        o.put("dir", dir > 0 ? "up" : "down");
+        o.put("double", dbl);
+        notifyListeners("volumeKey", o);
     }
 
     // --- Audio-focus ducking ----------------------------------------------------
@@ -300,65 +335,8 @@ public class HwButtonsPlugin extends Plugin {
         }
     }
 
-    // --- Media button (headset play/pause) --------------------------------------
-
-    @PluginMethod
-    public void setMediaCapture(PluginCall call) {
-        boolean enabled = Boolean.TRUE.equals(call.getBoolean("enabled", false));
-        getActivity().runOnUiThread(() -> {
-            if (enabled) startSession();
-            else stopSession();
-        });
-        call.resolve();
-    }
-
-    private void startSession() {
-        if (session != null) return;
-        try {
-            session = new MediaSession(getContext(), "nobs-break");
-            session.setCallback(new MediaSession.Callback() {
-                @Override
-                public boolean onMediaButtonEvent(Intent intent) {
-                    KeyEvent ev = intent.getParcelableExtra(Intent.EXTRA_KEY_EVENT);
-                    if (ev != null && ev.getAction() == KeyEvent.ACTION_DOWN) {
-                        int c = ev.getKeyCode();
-                        if (c == KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE
-                                || c == KeyEvent.KEYCODE_HEADSETHOOK
-                                || c == KeyEvent.KEYCODE_MEDIA_PLAY
-                                || c == KeyEvent.KEYCODE_MEDIA_PAUSE) {
-                            notifyListeners("mediaButton", new JSObject());
-                            return true;
-                        }
-                    }
-                    return super.onMediaButtonEvent(intent);
-                }
-            });
-            // STATE_PLAYING makes Android treat us as the active media target so
-            // the headset button routes here while armed.
-            session.setPlaybackState(new PlaybackState.Builder()
-                    .setActions(PlaybackState.ACTION_PLAY | PlaybackState.ACTION_PAUSE | PlaybackState.ACTION_PLAY_PAUSE)
-                    .setState(PlaybackState.STATE_PLAYING, 0, 1.0f)
-                    .build());
-            session.setActive(true);
-        } catch (Exception e) {
-            session = null; // never crash the workout over a media session
-        }
-    }
-
-    private void stopSession() {
-        if (session != null) {
-            try {
-                session.setActive(false);
-                session.release();
-            } catch (Exception ignored) {
-            }
-            session = null;
-        }
-    }
-
     @Override
     protected void handleOnDestroy() {
-        stopSession();
         stopVolumeObserver();
         abandonDuck();
         // Reset the statics WITH the activity: on the extended flavour the a11y

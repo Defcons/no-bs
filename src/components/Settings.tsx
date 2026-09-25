@@ -172,7 +172,15 @@ export function Settings({
   const [autoBreak, setAutoBreak] = useState(false);
   const [volUpBreak, setVolUpBreak] = useState(false);
   const [phoneVolBreak, setPhoneVolBreak] = useState(false);
-  const [mediaBtnBreak, setMediaBtnBreak] = useState(false);
+  const [earbudUp, setEarbudUp] = useState("break");
+  const [earbudDown, setEarbudDown] = useState("markdone");
+  const [earbudDouble, setEarbudDouble] = useState("addrest");
+  const earbudActions = [
+    { value: "break", label: "Start / skip break" },
+    { value: "markdone", label: "Mark set done" },
+    { value: "addrest", label: "+30s to break" },
+    { value: "none", label: "Nothing" },
+  ];
   // Break sound is a built-in id ("beep"…) OR "custom:<dbId>" (a user's file).
   const [breakSound, setBreakSound] = useState<string>("beep");
   const [breakCountdown, setBreakCountdown] = useState(false);
@@ -241,7 +249,9 @@ export function Settings({
     getSetting("autoBreakOnDone", false).then(setAutoBreak);
     getSetting("volumeUpBreak", false).then(setVolUpBreak);
     getSetting("phoneVolumeBreak", false).then(setPhoneVolBreak);
-    getSetting("mediaBtnBreak", false).then(setMediaBtnBreak);
+    getSetting<string>("earbudActionUp", "break").then(setEarbudUp);
+    getSetting<string>("earbudActionDown", "markdone").then(setEarbudDown);
+    getSetting<string>("earbudActionDouble", "addrest").then(setEarbudDouble);
     getSetting<string>("breakSound", "beep").then(setBreakSound);
     getSetting("breakCountdown", false).then(setBreakCountdown);
     getSetting<boolean>("breakNotify", false).then(setBreakNotify);
@@ -326,10 +336,9 @@ export function Settings({
     setPhoneVolBreak(v);
     setSetting("phoneVolumeBreak", v);
   };
-  const toggleMediaBtnBreak = () => {
-    const v = !mediaBtnBreak;
-    setMediaBtnBreak(v);
-    setSetting("mediaBtnBreak", v);
+  const saveEarbud = (key: string, set: (v: string) => void, v: string) => {
+    set(v);
+    void setSetting(key, v);
   };
 
   const setThemeChoice = (t: "dark" | "light") => {
@@ -668,15 +677,49 @@ export function Settings({
         {native && (
           <ToggleRow label="Earbud volume rocker starts the break" checked={volUpBreak} onChange={toggleVolUpBreak}>
             <p className="muted tiny">
-              During a workout, press your <b>Bluetooth earbud's</b> volume rocker (either direction) to start the break —
-              press again to skip/dismiss a running one. Works with the screen locked and music playing. Your{" "}
-              <b>phone's</b> volume buttons keep adjusting volume as normal. Needs a current APK.
+              During a workout, your <b>Bluetooth earbud's</b> volume rocker runs workout actions (set them below) instead
+              of changing volume — by default up = start/skip break, down = mark a set done, double-press = +30s. Works
+              with the screen locked and music playing; your <b>phone's</b> volume buttons keep adjusting volume. Needs a current APK.
             </p>
             <p className="muted tiny">
               On the <b>extended</b> build, also turn on <b>Accessibility → NoBS break button</b> — that's what keeps the
               phone's own volume buttons working as volume while a workout runs.
             </p>
           </ToggleRow>
+        )}
+
+        {native && volUpBreak && (
+          <div className="setting">
+            <label>Earbud rocker actions</label>
+            <p className="muted tiny">
+              What each press does. A <b>double-press</b> adds a small delay to the single-press actions. Change your
+              music <b>volume with the phone buttons</b> or your music app.
+            </p>
+            <div className="row">
+              <span className="muted tiny" style={{ minWidth: 96 }}>Volume up</span>
+              <select value={earbudUp} onChange={(e) => saveEarbud("earbudActionUp", setEarbudUp, e.target.value)}>
+                {earbudActions.map((a) => (
+                  <option key={a.value} value={a.value}>{a.label}</option>
+                ))}
+              </select>
+            </div>
+            <div className="row">
+              <span className="muted tiny" style={{ minWidth: 96 }}>Volume down</span>
+              <select value={earbudDown} onChange={(e) => saveEarbud("earbudActionDown", setEarbudDown, e.target.value)}>
+                {earbudActions.map((a) => (
+                  <option key={a.value} value={a.value}>{a.label}</option>
+                ))}
+              </select>
+            </div>
+            <div className="row">
+              <span className="muted tiny" style={{ minWidth: 96 }}>Double-press</span>
+              <select value={earbudDouble} onChange={(e) => saveEarbud("earbudActionDouble", setEarbudDouble, e.target.value)}>
+                {earbudActions.map((a) => (
+                  <option key={a.value} value={a.value}>{a.label}</option>
+                ))}
+              </select>
+            </div>
+          </div>
         )}
 
         {native && (
@@ -690,16 +733,6 @@ export function Settings({
           </ToggleRow>
         )}
 
-        {native && (
-          <ToggleRow label="Headphone button controls the break" checked={mediaBtnBreak} onChange={toggleMediaBtnBreak}>
-            <p className="muted tiny">
-              During a workout, your headphone's play/pause button starts the break (press again to skip it).{" "}
-              <b>Heads-up:</b> this only works when no other app holds the media button — if music is playing, Android
-              sends the button to that app, not here, so it may do nothing. The volume-button option above is the
-              reliable one. Needs a current APK.
-            </p>
-          </ToggleRow>
-        )}
 
         {native && (
           <ToggleRow
