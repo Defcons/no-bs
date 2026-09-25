@@ -94,7 +94,11 @@ export function ExerciseCard({ exercise, step, history, onChange, onSetDone, bes
     let sy = 0;
     let dir: "?" | "h" | "v" = "?";
     const onStart = (e: TouchEvent) => {
-      if (e.touches.length !== 1) {
+      // A drag that begins on a set NOTE is for scrolling that (single-line) note to
+      // its end — hand it to the browser instead of stealing it as a history swipe
+      // (dir "v" makes onMove bail: no preventDefault, no blur). Other fields still
+      // swipe, as designed.
+      if (e.touches.length !== 1 || (e.target as HTMLElement | null)?.closest?.(".set-note")) {
         dir = "v";
         return;
       }

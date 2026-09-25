@@ -1123,6 +1123,10 @@ button.chip {
 .set-note {
   width: 100%;
   margin-top: 8px;
+  /* Override the card's pan-y so a horizontal touch-drag scrolls a long note to its
+     end (the card swipe-handler also exempts this field). Inputs never show a
+     scrollbar, so it slides cleanly. */
+  touch-action: auto;
 }
 
 /* "Last time" READ-ONLY panel (swipe right on the card, or the ↺ header button).
