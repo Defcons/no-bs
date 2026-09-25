@@ -7,7 +7,7 @@ import { db, getSetting, type StoredWorkout } from "../db";
 import { clockTime, daysAgoLabel, hhmmss, localDay, mmss, niceDate } from "../lib/format";
 import { breakSec, computeRun, fmtDist, fmtPace, withMovingPace } from "../lib/runStats";
 import { type MoveKind, type MoveSegment, segmentTotals, segmentsFromCadence, segmentsFromTrack } from "../lib/segments";
-import { calibrateStrideFromDistance } from "../lib/pedometer";
+import { calibrateStrideFromDistance, isRunningCadence, strideRunM, strideWalkM } from "../lib/pedometer";
 import { costingForName, mapMatch, mapMatchConfigured, type SnapResult } from "../lib/mapMatch";
 import { resolveExercise } from "../lib/exercises";
 import { liftRecords, workoutVolume } from "../lib/stats";
@@ -475,16 +475,19 @@ function TreadmillDetail({
   treadmillM?: number;
   stepSamples?: StoredWorkout["stepSamples"];
 }) {
-  const stride = useLiveQuery(() => getSetting<number>("strideM", 0.74), [], 0.74);
+  const strideWalk = useLiveQuery(() => strideWalkM(), [], 0.72);
+  const strideRun = useLiveQuery(() => strideRunM(), [], 1.1);
   const excl = useLiveQuery(() => getSetting<boolean>("paceExcludesBreaks", true), [], true);
   const [raw, setRaw] = useState<string | null>(null); // editing buffer for the actual-distance field
+  const movingSec = Math.max(1, excl ? (durationSec ?? 0) - breakSec(breaks) : durationSec ?? 0);
+  // Pick the walk vs run stride by this session's cadence (steps / moving time).
+  const stride = isRunningCadence(steps ?? 0, movingSec) ? strideRun : strideWalk;
   // Walk/run/stop from the step-CADENCE stream (no GPS indoors). Empty until an APK that
   // records timestamped samples (1.72+) — older sessions just won't show a band.
   const segs = useMemo(() => segmentsFromCadence(stepSamples, stride), [stepSamples, stride]);
   if (!steps || steps <= 0) return null;
   const entered = treadmillM != null;
   const distM = treadmillM ?? steps * stride; // an entered ACTUAL distance wins over the estimate
-  const movingSec = Math.max(1, excl ? (durationSec ?? 0) - breakSec(breaks) : durationSec ?? 0);
   const km = distM / 1000;
   const pace = km > 0 ? movingSec / km : 0;
   const speed = km > 0 ? km / (movingSec / 3600) : 0;
@@ -493,7 +496,7 @@ function TreadmillDetail({
     if (id == null || !Number.isFinite(kmVal) || kmVal <= 0) return;
     const m = Math.round(kmVal * 1000);
     await db.workouts.update(id, { treadmillM: m });
-    await calibrateStrideFromDistance(m, steps); // ground truth → sharpen the stride
+    await calibrateStrideFromDistance(m, steps, movingSec); // ground truth → sharpen the walk/run stride
   };
   return (
     <div className="run-detail">
@@ -553,7 +556,8 @@ function RunDetail({
 }) {
   const raw = computeRun(track);
   const segs = useMemo(() => segmentsFromTrack(track), [track]);
-  const stride = useLiveQuery(() => getSetting<number>("strideM", 0.74), [], 0.74);
+  const strideWalk = useLiveQuery(() => strideWalkM(), [], 0.72);
+  const strideRun = useLiveQuery(() => strideRunM(), [], 1.1);
   const excl = useLiveQuery(() => getSetting<boolean>("paceExcludesBreaks", true), [], true);
   const [canSnap, setCanSnap] = useState(false);
   const [snapped, setSnapped] = useState<SnapResult | null>(null);
@@ -564,6 +568,8 @@ function RunDetail({
   }, []);
   if (!raw) return null;
   const s = withMovingPace(raw, breakSec(breaks), excl); // moving-time pace when the setting is on
+  // Steps×stride cross-check: pick walk vs run stride by cadence over moving time.
+  const stride = isRunningCadence(steps ?? 0, Math.max(1, raw.durationSec - breakSec(breaks))) ? strideRun : strideWalk;
   const doSnap = async () => {
     setSnapping(true);
     setSnapErr("");

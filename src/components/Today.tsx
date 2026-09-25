@@ -12,7 +12,7 @@ import { startGeofence, stopGeofence } from "../lib/geofence";
 import { exitPip, isInPip, onPipChange, setPipAutoEnter } from "../lib/pip";
 import { onMediaButton, onVolumeKey, setMediaButtonCapture, setPhoneKeyCapture, setVolumeCapture } from "../lib/hwButtons";
 import { currentTrack, startTracking, stopTracking } from "../lib/tracker";
-import { calibrateStride, currentSteps, drainStepSamples, startSteps, stopSteps } from "../lib/pedometer";
+import { calibrateStride, currentSteps, drainStepSamples, isRunningCadence, startSteps, stopSteps, strideRunM, strideWalkM } from "../lib/pedometer";
 import { breakSec, computeRun, fmtDist, fmtPace, type RunStats, withMovingPace } from "../lib/runStats";
 import { autoBreaksFromSegments, segmentsFromTrack } from "../lib/segments";
 import { stepForExercise } from "../lib/steps";
@@ -202,7 +202,10 @@ export function Today({
   const lowHrRelDelta = useLiveQuery(() => getSetting<number>("lowHrRelDelta", 10), [], 10);
   const lowHrSound = useLiveQuery(() => getSetting<string>("lowHrSound", "alarm"), [], "alarm");
   // Treadmill/indoor cardio: step-based distance + moving-time pace.
-  const strideVal = useLiveQuery(() => getSetting<number>("strideM", 0.74), [], 0.74);
+  // Two learned strides (walk/run); the live display + finish pick between them by cadence.
+  const strideWalk = useLiveQuery(() => strideWalkM(), [], 0.72);
+  const strideRun = useLiveQuery(() => strideRunM(), [], 1.1);
+  const strideValRef = useRef(0.72); // latest render-picked stride, for finishNow's treadmill heuristic
   const paceExclBreaks = useLiveQuery(() => getSetting<boolean>("paceExcludesBreaks", true), [], true);
   const autoDetectBreaks = useLiveQuery(() => getSetting<boolean>("autoDetectBreaks", false), [], false);
   const lowHrSoundRef = useRef(lowHrSound);
@@ -337,7 +340,7 @@ export function Today({
       // Treadmill = manual toggle, or GPS was on but captured almost none of the movement
       // the steps imply (indoor/stationary). Then distance comes from steps × stride, not GPS.
       const gpsDist = track && track.length >= 2 ? computeRun(track)?.distanceM ?? 0 : 0;
-      const treadmill = !!draft?.treadmill || (!!draft?.trackGps && steps * strideVal > 200 && gpsDist < steps * strideVal * 0.4);
+      const treadmill = !!draft?.treadmill || (!!draft?.trackGps && steps * strideValRef.current > 200 && gpsDist < steps * strideValRef.current * 0.4);
       const extra: Partial<StoredWorkout> = {};
       if (!treadmill && track && track.length >= 2) extra.track = track;
       if (steps > 0) extra.steps = steps;
@@ -839,6 +842,10 @@ export function Today({
 
   // Treadmill / indoor cardio: distance from steps × stride; pace on moving time.
   const liveBreakSec = breakSec(draft?.breaks);
+  const tmMovingSec = Math.max(1, paceExclBreaks ? elapsed - liveBreakSec : elapsed);
+  // Pick walk vs run stride by live cadence (steps / moving time); stabilises as steps accrue.
+  const strideVal = isRunningCadence(liveSteps, tmMovingSec) ? strideRun : strideWalk;
+  strideValRef.current = strideVal;
   const stepDistM = liveSteps * strideVal;
   const gpsDistM = liveRun?.distanceM ?? 0;
   // Auto-detect: GPS is on but captured almost none of the distance the steps imply (you
@@ -846,7 +853,6 @@ export function Today({
   // so gpsDistM stays comparable to stepDistM and this never trips. Manual toggle overrides.
   const autoTreadmill = !!draft?.trackGps && !draft?.treadmill && elapsed > 120 && stepDistM > 200 && gpsDistM < stepDistM * 0.4;
   const treadmillMode = !!draft?.treadmill || autoTreadmill;
-  const tmMovingSec = Math.max(1, paceExclBreaks ? elapsed - liveBreakSec : elapsed);
   const tmKm = stepDistM / 1000;
   const tmPace = tmKm > 0 ? tmMovingSec / tmKm : 0;
   const tmSpeed = tmKm > 0 ? tmKm / (tmMovingSec / 3600) : 0;

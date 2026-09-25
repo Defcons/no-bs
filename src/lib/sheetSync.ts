@@ -10,7 +10,7 @@ import { db, getSetting, setSetting, type StoredWorkout } from "../db";
 import { localDay } from "./format";
 import { parseBodyweightTab, parseSheet } from "./sheet";
 import { breakSec, computeRun, fmtDist, fmtPace, withMovingPace } from "./runStats";
-import { strideM } from "./pedometer";
+import { strideFor } from "./pedometer";
 import { downsample, encodePolyline } from "./polyline";
 import type { BwEntry } from "./standards";
 import type { ExercisePerf } from "../types";
@@ -215,8 +215,8 @@ async function syncWorkoutNow(row: StoredWorkout): Promise<SyncResult | null> {
   // Treadmill sessions carry no GPS track (run == null) — derive distance from the entered
   // machine distance (ground truth) or steps × stride, on the same moving-pace basis, so a
   // treadmill run still lands distance/pace/speed in the sheet.
-  const tmDistM = !run && row.treadmill ? (row.treadmillM ?? (row.steps ?? 0) * (await strideM())) : 0;
   const tmMovingSec = Math.max(1, (row.durationSec ?? 0) - (exclBreaks ? breakSec(row.breaks) : 0));
+  const tmDistM = !run && row.treadmill ? (row.treadmillM ?? (row.steps ?? 0) * (await strideFor(row.steps ?? 0, tmMovingSec))) : 0;
   const tmKm = tmDistM / 1000;
   // Encode the whole path (thinned) into a link that opens our in-app map viewer.
   const routeLink =
