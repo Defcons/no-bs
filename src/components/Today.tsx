@@ -555,7 +555,9 @@ export function Today({
   const IDLE_ARM_MS = 15 * 60 * 1000; // ...or no activity for 15 min
   useEffect(() => setGeoArmed(false), [draft?.startedAt]); // fresh session → disarm
   useEffect(() => {
-    if (!draft || draft.custom || geoArmed) return;
+    // trackGps → the GPS tracker owns the location watcher; the geofence (the other FGS
+    // geolocation watcher) must not also arm, or two watchers double-drain the battery.
+    if (!draft || draft.custom || draft.trackGps || geoArmed) return;
     const total = draft.exercises.reduce((n, e) => n + e.sets.length, 0);
     const done = draft.exercises.reduce((n, e) => n + e.sets.filter((s) => s.done).length, 0);
     if (total > 0 && done / total >= NEAR_END_FRACTION) {
@@ -574,8 +576,10 @@ export function Today({
     return () => window.clearTimeout(id);
   }, [draft, draft?.custom, geoArmed]);
   // Once armed, watch location in the background; leaving the gym saves + finishes.
+  // Stands down when the GPS tracker is running (trackGps) — they're mutually exclusive
+  // FGS geolocation watchers (re-runs on a mid-session GPS toggle via the dep).
   useEffect(() => {
-    if (!draft || draft.custom || !geoArmed) return;
+    if (!draft || draft.custom || draft.trackGps || !geoArmed) return;
     let active = true;
     startGeofence(() => {
       if (!active) return;
@@ -587,7 +591,7 @@ export function Today({
       active = false;
       stopGeofence();
     };
-  }, [geoArmed, draft?.startedAt, draft?.custom]);
+  }, [geoArmed, draft?.startedAt, draft?.custom, draft?.trackGps]);
 
   // Low-HR watchdog: after HR sits below the threshold for 10 min, ask if you're
   // still working out; if unanswered for 5 more min, auto-end. Driven by HR updates.
@@ -825,6 +829,14 @@ export function Today({
   // Live calorie estimate (avg HR × elapsed). null when HR/profile missing → hidden.
   const liveKcal = sessionKcal(hr.avg, elapsed, bodyweightKg, age, sex);
 
+  // Cardio config (GPS route / treadmill) was Alternative-session-only. Now it's ALSO
+  // offered in any session that holds a cardio (distance-unit) exercise — e.g. a treadmill
+  // run added as an alternative to a strength day — so that exercise is logged + configured
+  // the same way. Capture/finish/History already key off trackGps/treadmill (not custom);
+  // this just surfaces the controls, and the leave-gym geofence yields to the GPS tracker.
+  const hasCardioExercise = draft.exercises.some((ex) => resolveExercise(ex.name, ex.exerciseId).unit === "distance");
+  const showCardio = native && (draft.custom || hasCardioExercise);
+
   // Treadmill / indoor cardio: distance from steps × stride; pace on moving time.
   const liveBreakSec = breakSec(draft?.breaks);
   const stepDistM = liveSteps * strideVal;
@@ -952,7 +964,7 @@ export function Today({
         </button>
       )}
 
-      {draft.custom && native && (
+      {showCardio && (
         <div className="pad">
           <div className="gps-toggle-row">
             <button
