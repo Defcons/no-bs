@@ -18,6 +18,7 @@ import { saveFile } from "./lib/download";
 import { syncBodyweight, syncProfile } from "./lib/sheetSync";
 import type { BwEntry, Sex } from "./lib/standards";
 import { trainingDue } from "./lib/stats";
+import { useSetting } from "./lib/useSetting";
 import { History } from "./components/History";
 import { Records } from "./components/Records";
 // Lazy so Leaflet (+CSS) stays out of the cold-start bundle — only loaded on a map view.
@@ -175,7 +176,7 @@ export default function App() {
   // so the new JS never calls a plugin the installed APK doesn't have). Capture-phase
   // → fires even if a handler stops propagation. Text fields aren't buttons, so typing
   // never buzzes.
-  const haptics = useLiveQuery(() => getSetting("haptics", true), [], true);
+  const haptics = useSetting("haptics", true);
   useEffect(() => {
     if (!haptics) return;
     const nativeHaptics = Capacitor.isNativePlatform() && Capacitor.isPluginAvailable("Haptics");

@@ -3,11 +3,12 @@
 // notes, duration, HR and (for runs) the route map.
 import { Suspense, lazy, useEffect, useMemo, useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
-import { db, getSetting, type StoredWorkout } from "../db";
+import { db, type StoredWorkout } from "../db";
 import { clockTime, daysAgoLabel, hhmmss, localDay, mmss, niceDate } from "../lib/format";
 import { breakSec, computeRun, fmtDist, fmtPace, withMovingPace } from "../lib/runStats";
 import { type MoveKind, type MoveSegment, segmentTotals, segmentsFromCadence, segmentsFromTrack } from "../lib/segments";
 import { calibrateStrideFromDistance, isRunningCadence, strideRunM, strideWalkM } from "../lib/pedometer";
+import { useSetting } from "../lib/useSetting";
 import { costingForName, mapMatch, mapMatchConfigured, type SnapResult } from "../lib/mapMatch";
 import { resolveExercise } from "../lib/exercises";
 import { liftRecords, workoutVolume } from "../lib/stats";
@@ -477,7 +478,7 @@ function TreadmillDetail({
 }) {
   const strideWalk = useLiveQuery(() => strideWalkM(), [], 0.72);
   const strideRun = useLiveQuery(() => strideRunM(), [], 1.1);
-  const excl = useLiveQuery(() => getSetting<boolean>("paceExcludesBreaks", true), [], true);
+  const excl = useSetting<boolean>("paceExcludesBreaks", true);
   const [raw, setRaw] = useState<string | null>(null); // editing buffer for the actual-distance field
   const movingSec = Math.max(1, excl ? (durationSec ?? 0) - breakSec(breaks) : durationSec ?? 0);
   // Pick the walk vs run stride by this session's cadence (steps / moving time).
@@ -558,7 +559,7 @@ function RunDetail({
   const segs = useMemo(() => segmentsFromTrack(track), [track]);
   const strideWalk = useLiveQuery(() => strideWalkM(), [], 0.72);
   const strideRun = useLiveQuery(() => strideRunM(), [], 1.1);
-  const excl = useLiveQuery(() => getSetting<boolean>("paceExcludesBreaks", true), [], true);
+  const excl = useSetting<boolean>("paceExcludesBreaks", true);
   const [canSnap, setCanSnap] = useState(false);
   const [snapped, setSnapped] = useState<SnapResult | null>(null);
   const [snapping, setSnapping] = useState(false);

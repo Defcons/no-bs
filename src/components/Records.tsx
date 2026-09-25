@@ -2,7 +2,8 @@
 // against strength standards, and per-muscle collapsible personal records.
 import { useMemo, useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
-import { db, getSetting, type StoredWorkout } from "../db";
+import { useSetting } from "../lib/useSetting";
+import { db, type StoredWorkout } from "../db";
 import { hhmmss, localDay, mmss, niceDate } from "../lib/format";
 import { fmtDist, fmtPace } from "../lib/runStats";
 import { paceLadder, paceMedals, runPBs, runsFrom } from "../lib/runStandards";
@@ -28,7 +29,7 @@ export function Records({
   const currentYear = new Date().getFullYear();
   const workouts = useLiveQuery(() => db.workouts.toArray(), []);
   // Whether free-form "Alternative" sessions count toward the weekly bars (default off).
-  const includeAltInWeekly = useLiveQuery(() => getSetting("includeAltInWeekly", false), [], false);
+  const includeAltInWeekly = useSetting("includeAltInWeekly", false);
   // Derived records are an O(n·exercises) scan — memoize so unrelated re-renders
   // (settings tweaks) don't recompute the whole history every time.
   const derived = useMemo(() => {
@@ -42,7 +43,7 @@ export function Records({
     return { summary, records, byCat, perWeek: sessionsPerWeek(weekly, 12) };
   }, [workouts, includeAltInWeekly]);
   // Pace PBs/medals honour the same "exclude rest breaks" setting the live tiles + History use.
-  const paceExclBreaks = useLiveQuery(() => getSetting<boolean>("paceExcludesBreaks", true), [], true);
+  const paceExclBreaks = useSetting<boolean>("paceExcludesBreaks", true);
   const runs = useMemo(() => runsFrom(workouts ?? [], paceExclBreaks), [workouts, paceExclBreaks]);
   const form = useMemo(() => currentForm(workouts ?? []), [workouts]);
   if (!workouts) return <div className="pad">Loading…</div>;

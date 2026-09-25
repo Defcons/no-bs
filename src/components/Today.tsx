@@ -13,6 +13,7 @@ import { exitPip, isInPip, onPipChange, setPipAutoEnter } from "../lib/pip";
 import { onMediaButton, onVolumeKey, setMediaButtonCapture, setPhoneKeyCapture, setVolumeCapture } from "../lib/hwButtons";
 import { currentTrack, startTracking, stopTracking } from "../lib/tracker";
 import { calibrateStride, currentSteps, drainStepSamples, isRunningCadence, startSteps, stopSteps, strideRunM, strideWalkM } from "../lib/pedometer";
+import { useSetting } from "../lib/useSetting";
 import { breakSec, computeRun, fmtDist, fmtPace, type RunStats, withMovingPace } from "../lib/runStats";
 import { autoBreaksFromSegments, segmentsFromTrack } from "../lib/segments";
 import { stepForExercise } from "../lib/steps";
@@ -186,28 +187,28 @@ export function Today({
   // Optional: tapping a set's ✓ badge auto-starts the break timer (default off).
   // All break-trigger toggles are read REACTIVELY (useLiveQuery), so flipping one in
   // Settings takes effect immediately — even mid-workout (was mount/start-only).
-  const autoBreakOnDone = useLiveQuery(() => getSetting("autoBreakOnDone", false), [], false);
+  const autoBreakOnDone = useSetting("autoBreakOnDone", false);
 
   // Optional hands-free break starts (both default off, armed ONLY while a
   // workout is active). Native only; older APKs without the plugin silently no-op.
   // - volumeUpBreak: volume-up key (phone or headphone volume buttons)
   // - mediaBtnBreak: headphone play/pause button (takes it over from music!)
-  const volUpBreak = useLiveQuery(() => getSetting("volumeUpBreak", false), [], false);
-  const phoneVolBreak = useLiveQuery(() => getSetting("phoneVolumeBreak", false), [], false);
-  const mediaBtnBreak = useLiveQuery(() => getSetting("mediaBtnBreak", false), [], false);
+  const volUpBreak = useSetting("volumeUpBreak", false);
+  const phoneVolBreak = useSetting("phoneVolumeBreak", false);
+  const mediaBtnBreak = useSetting("mediaBtnBreak", false);
   // Low heart-rate warning (default off): sound when live BPM dips below a threshold.
-  const lowHrWarn = useLiveQuery(() => getSetting("lowHrWarn", false), [], false);
-  const lowHrWarnBpm = useLiveQuery(() => getSetting("lowHrWarnBpm", 100), [], 100);
-  const lowHrMode = useLiveQuery(() => getSetting<string>("lowHrMode", "absolute"), [], "absolute");
-  const lowHrRelDelta = useLiveQuery(() => getSetting<number>("lowHrRelDelta", 10), [], 10);
-  const lowHrSound = useLiveQuery(() => getSetting<string>("lowHrSound", "alarm"), [], "alarm");
+  const lowHrWarn = useSetting("lowHrWarn", false);
+  const lowHrWarnBpm = useSetting("lowHrWarnBpm", 100);
+  const lowHrMode = useSetting<string>("lowHrMode", "absolute");
+  const lowHrRelDelta = useSetting<number>("lowHrRelDelta", 10);
+  const lowHrSound = useSetting<string>("lowHrSound", "alarm");
   // Treadmill/indoor cardio: step-based distance + moving-time pace.
   // Two learned strides (walk/run); the live display + finish pick between them by cadence.
   const strideWalk = useLiveQuery(() => strideWalkM(), [], 0.72);
   const strideRun = useLiveQuery(() => strideRunM(), [], 1.1);
   const strideValRef = useRef(0.72); // latest render-picked stride, for finishNow's treadmill heuristic
-  const paceExclBreaks = useLiveQuery(() => getSetting<boolean>("paceExcludesBreaks", true), [], true);
-  const autoDetectBreaks = useLiveQuery(() => getSetting<boolean>("autoDetectBreaks", false), [], false);
+  const paceExclBreaks = useSetting<boolean>("paceExcludesBreaks", true);
+  const autoDetectBreaks = useSetting<boolean>("autoDetectBreaks", false);
   const lowHrSoundRef = useRef(lowHrSound);
   lowHrSoundRef.current = lowHrSound;
   const lowHrArmedRef = useRef(false); // seen HR above the threshold since last fire/start

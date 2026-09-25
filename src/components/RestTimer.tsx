@@ -3,10 +3,10 @@
 // the target time (endsAt) is stored on the workout draft.
 import { Capacitor } from "@capacitor/core";
 import { useEffect, useRef, useState } from "react";
-import { useLiveQuery } from "dexie-react-hooks";
+import { useSetting } from "../lib/useSetting";
 import { mmss } from "../lib/format";
 import { showReminder } from "../lib/notify";
-import { getCustomSound, getSetting } from "../db";
+import { getCustomSound } from "../db";
 import { type BreakSoundId, customIdOf, decodeSound, isCustom, playBreakSound, playBuffer, playCountdownTick } from "../lib/sounds";
 
 type Props = {
@@ -22,7 +22,7 @@ export function RestTimer({ endsAt, onChange }: Props) {
   // pre-decoded into an AudioBuffer here). Read REACTIVELY (same pattern as the
   // 1.53.0 break-trigger toggles): RestTimer stays mounted for the app's lifetime,
   // so a mount-once load meant a Settings change never applied mid-session.
-  const soundChoice = useLiveQuery(() => getSetting<string>("breakSound", "beep"), [], "beep");
+  const soundChoice = useSetting<string>("breakSound", "beep");
   const soundRef = useRef<BreakSoundId>("beep");
   const customBufRef = useRef<AudioBuffer | null>(null);
   useEffect(() => {
@@ -47,7 +47,7 @@ export function RestTimer({ endsAt, onChange }: Props) {
   }, [soundChoice]);
 
   // Optional faint 3-2-1 countdown before the break ends (default off) — reactive too.
-  const breakCountdown = useLiveQuery(() => getSetting<boolean>("breakCountdown", false), [], false);
+  const breakCountdown = useSetting<boolean>("breakCountdown", false);
   const countdownRef = useRef(false);
   countdownRef.current = breakCountdown;
   const tickedRef = useRef<Set<number>>(new Set());
