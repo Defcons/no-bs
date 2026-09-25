@@ -1627,9 +1627,9 @@ button.chip {
   border-color: var(--danger);
   box-shadow: inset 0 0 0 1px var(--danger);
 }
-/* Same border-only cue for WEIGHT, vs last time on this set: green heavier, red
-   lighter. The prefill seeds your recent best, so a set at/above last time greens
-   by default; drop below last time and it reds. */
+/* Same border-only cue for WEIGHT, vs this set's target (the seeded recent best): green
+   above the goal, red below, neutral at it. The field defaults to the target, so a fresh
+   set is neutral and only colours once you push above or drop below the suggestion. */
 .weight-field.weight-over {
   border-color: var(--accent-2);
   box-shadow: inset 0 0 0 1px var(--accent-2);
@@ -1637,6 +1637,12 @@ button.chip {
 .weight-field.weight-under {
   border-color: var(--danger);
   box-shadow: inset 0 0 0 1px var(--danger);
+}
+/* A weight that's still only the prefill guess (not edited, set not ticked done) reads
+   TENTATIVE: dim the number. It sits at target so the border is neutral anyway; editing
+   the kilos or marking the set done takes over with a confirmed value. */
+.weight-field.prefill-faint input {
+  color: var(--muted);
 }
 .more-toggle {
   width: 30px;

@@ -15,6 +15,8 @@ export type SetEntry = {
   distanceM?: number | null; // metres, for distance exercises (run/bike/swim/row)
   assist?: number | null; // extra/assisted reps → written as "(n)" in the sheet
   done?: boolean; // set completed (green) — toggled ONLY by the number badge (value edits deliberately don't; since 1.56.0 finish() records numbers only for done sets)
+  prefill?: boolean; // weight is an UNCONFIRMED prefill guess (buildExercises seed) — the UI dims its cue + number until you edit the weight or mark the set done. Transient guidance flag; stripped on save.
+  target?: number | null; // the goal weight (kg) for this set = the buildExercises seed (recent best at this position). Stays fixed as you edit `weight` so the border can green above / red below it. Transient guidance; stripped on save.
   note?: string;
   raw?: string; // original token from the sheet, kept for fidelity/debugging
 };

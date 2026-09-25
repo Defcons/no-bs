@@ -116,21 +116,35 @@ function buildExercises(tpl: DayTemplate, history: StoredWorkout[]): ExercisePer
       }
     }
     const prevSets = recent[0]; // most recent = the "last time" reference + fallback
-    const lastKnown = prevSets?.filter((s) => s.weight != null).map((s) => s.weight as number).at(-1) ?? null;
     // A "normal working set": a real weight taken for AT LEAST the scheme's target
-    // reps — so a heavy sub-target grind or a light back-off set doesn't seed the prefill.
+    // reps — so a heavy sub-target grind or a light back-off/drop set doesn't seed the prefill.
     const normal = (s: SetEntry) => s.weight != null && (defReps == null || (s.reps != null && s.reps >= defReps));
+    // Final fallback for a position with no data of its own: the heaviest NORMAL weight
+    // seen across the recent sessions — never the literal last set, which is often a
+    // lighter drop/back-off set (a 4th set below the template's count).
+    let topNormal: number | null = null;
+    for (const sets of recent) for (const s of sets) if (normal(s) && (topNormal == null || (s.weight as number) > topNormal)) topNormal = s.weight as number;
     // Per position: heaviest normal-reps weight at that position over the last 4
-    // sessions; fall back to last time's weight there, then the last known weight.
+    // sessions; fall back to last time's normal weight there, then the top normal weight.
+    // Only positions 0..nSets-1 (the template's set count) are prefilled, so an EXTRA
+    // 4th set (a drop set) logged last time is never carried into next time's prefill.
     const seed: (number | null)[] = Array.from({ length: nSets }, (_, i) => {
       let best: number | null = null;
       for (const sets of recent) {
         const s = sets[i];
         if (s && normal(s) && (best == null || (s.weight as number) > best)) best = s.weight as number;
       }
-      return best ?? prevSets?.[i]?.weight ?? lastKnown;
+      const prevAtPos = prevSets?.[i];
+      return best ?? (prevAtPos && normal(prevAtPos) ? (prevAtPos.weight as number) : null) ?? topNormal;
     });
-    const sets: SetEntry[] = seed.map((w) => ({ id: uid(), weight: w ?? lastKnown, reps: defReps }));
+    // Mark a seeded weight as an unconfirmed prefill so the card dims its cue + number
+    // until the user edits the weight or ticks the set done (SetInput).
+    const sets: SetEntry[] = seed.map((w) => {
+      const weight = w ?? topNormal;
+      // `target` = the same seed value, kept as the fixed goal so the set's weight
+      // border greens above / reds below it even after the user edits the kilos.
+      return { id: uid(), weight, reps: defReps, ...(weight != null ? { prefill: true, target: weight } : {}) };
+    });
     return { id: uid(), name: e.name, exerciseId: e.exerciseId, scheme: e.scheme, step: e.step, sets };
   });
 }
@@ -439,7 +453,8 @@ export function useActiveWorkout() {
               )
               .map((ex) => ({
                 ...ex,
-                sets: ex.sets.map((s) =>
+                // Drop the transient `prefill`/`target` UI guidance from every saved set.
+                sets: ex.sets.map(({ prefill: _pf, target: _t, ...s }) =>
                   s.done ? s : { ...s, weight: null, reps: null, seconds: null, distanceM: null, assist: null },
                 ),
               })),

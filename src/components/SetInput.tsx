@@ -60,6 +60,7 @@ function DecField({
   unit,
   fieldClass,
   extraClass,
+  onUserEdit,
 }: {
   value: number | null;
   format: (n: number) => string;
@@ -69,6 +70,7 @@ function DecField({
   unit: string;
   fieldClass: string;
   extraClass?: string;
+  onUserEdit?: () => void; // fired only on a real keystroke (not the focus/blur value dance)
 }) {
   const [raw, setRaw] = useState<string | null>(null); // non-null while the user is editing
   const stash = useRef<number | null>(null);
@@ -93,6 +95,7 @@ function DecField({
         onChange={(e) => {
           setRaw(e.target.value);
           onCommit(parse(e.target.value));
+          onUserEdit?.();
         }}
       />
       <span className="unit">{unit}</span>
@@ -126,7 +129,8 @@ export function SetInput({ index, set, step, unit = "weight", units = "kg", defa
   // sets you never performed.
   const bump = (dir: number) => {
     const curDisp = toDisplayWeight(set.weight ?? prevWeight ?? 0, units);
-    onChange({ weight: fromDisplayWeight(Math.max(0, curDisp + dir * dispStep), units) });
+    // Nudging the weight is a real edit → it's no longer an unconfirmed prefill.
+    onChange({ weight: fromDisplayWeight(Math.max(0, curDisp + dir * dispStep), units), prefill: false });
   };
 
   // Tap-to-edit for the INTEGER fields (reps/seconds): clear on focus (no highlighted
@@ -145,15 +149,21 @@ export function SetInput({ index, set, step, unit = "weight", units = "kg", defa
   // tint on the reps field (only until you log this set's reps).
   const repsPrevBeat = set.reps == null && prevReps != null && defaultReps != null && prevReps > defaultReps;
 
-  // Weight vs last time on this set → border cue (green heavier, red lighter),
-  // mirroring the reps-vs-target cue. The prefill seeds your recent best, so a set
-  // above last time greens by default. Neutral when there's no prior weight to beat.
+  // Weight vs this set's TARGET (the buildExercises seed = your recent best at this
+  // position) → border cue, a true mirror of the reps-vs-target cue: green above the
+  // goal, red below, neutral AT it. The field defaults to the target, so a fresh set is
+  // neutral until you actually deviate; the target stays put as you edit the kilos.
+  // Neutral when there's no seeded target (custom sessions, first-ever exercise).
   const weightCmp =
-    set.weight != null && prevWeight != null && set.weight !== prevWeight
-      ? set.weight > prevWeight
+    set.weight != null && set.target != null && set.weight !== set.target
+      ? set.weight > set.target
         ? "weight-over"
         : "weight-under"
       : "";
+  // A weight that's still just the prefilled guess (not edited, set not done) reads as
+  // TENTATIVE: dim the number (it sits at target, so it's neutral-bordered anyway) until
+  // a confirmed value — edited kilos (prefill cleared) or the set ticked done — takes over.
+  const weightFaint = !done && !!set.prefill;
 
   return (
     <div className={`setrow ${done ? "done" : ""} ${active && !done ? "active" : ""} ${isPr ? "pr" : ""}`}>
@@ -221,10 +231,11 @@ export function SetInput({ index, set, step, unit = "weight", units = "kg", defa
                 return d == null ? null : fromDisplayWeight(d, units);
               }}
               onCommit={(v) => onChange({ weight: v })}
+              onUserEdit={() => set.prefill && onChange({ prefill: false })}
               placeholder={bodyweight ? "BW" : prevWeight != null ? weightStr(prevWeight, units) : "—"}
               unit={bodyweight ? `+${units}` : units}
               fieldClass="weight-field"
-              extraClass={weightCmp}
+              extraClass={`${weightCmp}${weightFaint ? " prefill-faint" : ""}`.trim()}
             />
             <button className="stepper" aria-label="increase" onClick={() => bump(1)}>
               +
