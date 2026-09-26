@@ -17,6 +17,7 @@ type Props = {
 export function RestTimer({ endsAt, onChange }: Props) {
   const [remaining, setRemaining] = useState(0);
   const firedRef = useRef(false);
+  const dismissRef = useRef(0); // auto-dismiss timeout after the alarm fires
   // Pre-load the chosen alarm sound so it plays instantly when rest ends. The
   // setting is either a built-in id ("beep"…) or "custom:<id>" (a user's file,
   // pre-decoded into an AudioBuffer here). Read REACTIVELY (same pattern as the
@@ -54,10 +55,14 @@ export function RestTimer({ endsAt, onChange }: Props) {
 
   useEffect(() => {
     if (endsAt == null) return;
-    // Mounting onto an ALREADY-expired timer (tab switch back, reopening the app on a
-    // forgotten draft) must not REPLAY the alarm — it fired when it expired. It still
-    // keeps ticking below so the overtime counts up until dismissed.
-    firedRef.current = endsAt - Date.now() < -1000;
+    // Mounting onto an ALREADY-expired timer (tab switch back, reopening the app
+    // on a forgotten draft) must not replay the alarm — it fired when it expired.
+    if (endsAt - Date.now() < -5000) {
+      firedRef.current = true;
+      setRemaining(0);
+      return;
+    }
+    firedRef.current = false;
     tickedRef.current.clear();
     let id = 0;
     const tick = () => {
@@ -76,14 +81,17 @@ export function RestTimer({ endsAt, onChange }: Props) {
         // Native pre-schedules a notification for this moment (fires in background),
         // so only fire the web SW notification here to avoid a duplicate.
         if (!Capacitor.isNativePlatform()) showReminder("Rest over — go! 💪", "Time for your next set.");
+        window.clearInterval(id); // stop ticking once fired (no endless 250ms loop)
+        // Clear itself away shortly after the alarm — no manual "Dismiss" needed.
+        dismissRef.current = window.setTimeout(() => onChange(null), 5000);
       }
-      // Deliberately no auto-dismiss and no clearInterval: once the rest is over the
-      // timer STAYS, counting up in red ("+M:SS" overtime), until the user taps Dismiss
-      // (which clears endsAt → the effect cleanup stops the tick).
     };
     tick();
     id = window.setInterval(tick, 250);
-    return () => window.clearInterval(id);
+    return () => {
+      window.clearInterval(id);
+      window.clearTimeout(dismissRef.current);
+    };
     // onChange is stable enough here; re-running on every render would restart the tick.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [endsAt]);
@@ -97,9 +105,7 @@ export function RestTimer({ endsAt, onChange }: Props) {
     <div className={`rest-timer ${over ? "over" : ""}`} role="timer">
       <div className="rest-main">
         <span className="rest-label">{over ? "Rest over — go!" : "Rest"}</span>
-        {/* Once over, count the extended rest UP with a leading + (red) so it's clear
-            you're now into overtime — stays until you tap Dismiss. */}
-        <span className="rest-time">{over ? `+${mmss(-remaining)}` : mmss(remaining)}</span>
+        <span className="rest-time">{over ? "0:00" : mmss(remaining)}</span>
       </div>
       <div className="rest-controls">
         {/* Two rows: add on top, subtract below, aligned by size (15 | 30). */}

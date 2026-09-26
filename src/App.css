@@ -853,12 +853,8 @@ button.chip {
   border: 1px solid var(--accent);
 }
 .rest-timer.over {
-  border-color: var(--danger);
-  background: color-mix(in srgb, var(--danger) 16%, var(--surface));
-}
-/* Overtime counts up in red so the extended rest is unmistakable. */
-.rest-timer.over .rest-time {
-  color: var(--danger);
+  border-color: var(--accent-2);
+  background: color-mix(in srgb, var(--accent-2) 18%, var(--surface));
 }
 .rest-main {
   display: flex;
