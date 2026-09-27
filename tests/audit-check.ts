@@ -9,6 +9,7 @@ import { epley, liftRecords, summarize, weekNumbersForLast } from "../src/lib/st
 import { resolveExercise } from "../src/lib/exercises";
 import { breakSecInTrack, breakSecWithin, computeRun, withMovingPace, type RunStats } from "../src/lib/runStats";
 import { paceMedals, runPBs } from "../src/lib/runStandards";
+import { cleanTemplate, cleanWorkout, validBw } from "../src/lib/workbook";
 import { localDay } from "../src/lib/format";
 import type { StoredWorkout } from "../src/db";
 
@@ -170,6 +171,19 @@ console.log("— pace records need ≥ 1 km at a plausible pace (2026-09-27 LOG-
   check("distance records still count every run", pbs?.count === 3 && pbs.furthestM === 10_000);
   const m = paceMedals(runs, 330);
   check("only runs that count for pace earn medals", m.gold === 1 && m.silver === 0 && m.bronze === 0, JSON.stringify(m));
+}
+
+console.log("— restore skips records the UI would crash on (2026-09-27 UI-2 / SEC-3) —");
+{
+  const good = { dayName: "Push", date: "2026-09-01T17:00:00.000Z", exercises: [{ name: "Bench", scheme: { sets: 3, reps: 5 }, sets: [{ weight: 80, reps: 5 }] }] };
+  check("a normal workout passes", cleanWorkout(good) != null);
+  check("exercises: null is rejected", cleanWorkout({ ...good, exercises: null }) == null);
+  check("a string weight is rejected", cleanWorkout({ ...good, exercises: [{ name: "Bench", sets: [{ weight: "80", reps: 5 }] }] }) == null);
+  check("a broken GPS track is rejected", cleanWorkout({ ...good, track: [{ t: 1, lat: "x", lng: 5 }] }) == null);
+  check("a missing scheme is filled in", cleanWorkout({ ...good, exercises: [{ name: "Bench", sets: [] }] })?.exercises?.[0].scheme?.sets === null);
+  check("a template without an exercise list is rejected", cleanTemplate({ name: "X", order: 0 }) == null);
+  check("a normal template passes", cleanTemplate({ name: "Push", order: 1, exercises: [{ name: "Bench", scheme: { sets: 3, reps: 5 } }] }) != null);
+  check("a formula as bodyweight year is rejected", !validBw({ year: "=HYPERLINK(1)", kg: 80 }) && validBw({ year: 2025, kg: 80 }));
 }
 
 process.exitCode = fails ? 1 : 0;

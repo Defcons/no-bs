@@ -4,6 +4,7 @@ import { Capacitor } from "@capacitor/core";
 import "@fontsource-variable/archivo"; // self-hosted display face (bundled, no CDN)
 import "./index.css";
 import App from "./App.tsx";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 
 // The service worker is for the browser PWA only. On the native (Capacitor) app,
 // Capgo handles updates, and a precaching SW would keep serving an old bundle after
@@ -31,6 +32,8 @@ if (Capacitor.isNativePlatform()) {
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <App />
+    <ErrorBoundary name="NoBS">
+      <App />
+    </ErrorBoundary>
   </StrictMode>,
 );

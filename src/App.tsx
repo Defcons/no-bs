@@ -26,6 +26,7 @@ const RouteViewer = lazy(() => import("./components/RouteViewer").then((m) => ({
 import { Settings } from "./components/Settings";
 import { Today } from "./components/Today";
 import { MoodLogModal } from "./components/MoodLogModal";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 import { CalendarCheckIcon, DumbbellIcon, GearIcon, TrophyIcon } from "./components/icons";
 
 type Tab = "today" | "history" | "records" | "settings";
@@ -402,88 +403,96 @@ export default function App() {
       )}
 
       <div className="tabpanel" hidden={tab !== "today"} ref={(el) => { panelRefs.current.today = el; }}>
-        <Today
-          templates={templates}
-          restDefaultSec={restDefaultSec}
-          weightStep={weightStep}
-          units={units}
-          daysPerWeek={daysPerWeek}
-          hrLowThreshold={hrLowThreshold}
-          hr={hr}
-          bodyweightKg={bodyweightKg}
-          age={age}
-          sex={sex}
-          onWorkoutStart={() => {
-            hrAgg.current = { sum: 0, count: 0, max: 0 };
-            setHrAvg(null);
-          }}
-          getHrStats={getHrStats}
-          onFinished={() => {
-            go("history");
-            // Finishing a workout moves the next "due" date — reschedule.
-            maybeRemind(daysPerWeek);
-          }}
-          editWorkout={pendingEdit}
-          onEditConsumed={() => setPendingEdit(null)}
-          floatMode={floatMode}
-          activeTab={tab}
-          goToday={() => go("today")}
-        />
+        <ErrorBoundary name="Workout">
+          <Today
+            templates={templates}
+            restDefaultSec={restDefaultSec}
+            weightStep={weightStep}
+            units={units}
+            daysPerWeek={daysPerWeek}
+            hrLowThreshold={hrLowThreshold}
+            hr={hr}
+            bodyweightKg={bodyweightKg}
+            age={age}
+            sex={sex}
+            onWorkoutStart={() => {
+              hrAgg.current = { sum: 0, count: 0, max: 0 };
+              setHrAvg(null);
+            }}
+            getHrStats={getHrStats}
+            onFinished={() => {
+              go("history");
+              // Finishing a workout moves the next "due" date — reschedule.
+              maybeRemind(daysPerWeek);
+            }}
+            editWorkout={pendingEdit}
+            onEditConsumed={() => setPendingEdit(null)}
+            floatMode={floatMode}
+            activeTab={tab}
+            goToday={() => go("today")}
+          />
+        </ErrorBoundary>
       </div>
 
       <div className="tabpanel" hidden={tab !== "history"} ref={(el) => { panelRefs.current.history = el; }}>
-        <History
-          onEdit={async (w) => {
-            // Only one session lives in the editor at a time. Don't let editing a
-            // past workout clobber a live in-progress one.
-            const active = await getSetting<{ editId?: number } | null>("activeDraft", null);
-            if (active && active.editId == null) {
-              alert("Finish or reset your current workout first, then edit a past one.");
-              return;
-            }
-            setPendingEdit(w);
-            go("today");
-          }}
-          units={units}
-          bodyweightKg={bodyweightKg}
-          age={age}
-          sex={sex}
-        />
+        <ErrorBoundary name="History">
+          <History
+            onEdit={async (w) => {
+              // Only one session lives in the editor at a time. Don't let editing a
+              // past workout clobber a live in-progress one.
+              const active = await getSetting<{ editId?: number } | null>("activeDraft", null);
+              if (active && active.editId == null) {
+                alert("Finish or reset your current workout first, then edit a past one.");
+                return;
+              }
+              setPendingEdit(w);
+              go("today");
+            }}
+            units={units}
+            bodyweightKg={bodyweightKg}
+            age={age}
+            sex={sex}
+          />
+        </ErrorBoundary>
       </div>
 
       <div className="tabpanel" hidden={tab !== "records"} ref={(el) => { panelRefs.current.records = el; }}>
-        <Records bodyweightKg={bodyweightKg} age={age} sex={sex} units={units} bwHistory={bwHistory} />
+        <ErrorBoundary name="Records">
+          <Records bodyweightKg={bodyweightKg} age={age} sex={sex} units={units} bwHistory={bwHistory} />
+        </ErrorBoundary>
       </div>
 
       <div className="tabpanel" hidden={tab !== "settings"} ref={(el) => { panelRefs.current.settings = el; }}>
-        <Settings
-          restDefaultSec={restDefaultSec}
-          setRestDefaultSec={persistRest}
-          weightStep={weightStep}
-          setWeightStep={persistStep}
-          daysPerWeek={daysPerWeek}
-          setDaysPerWeek={persistDpw}
-          bodyweightKg={bodyweightKg}
-          setBodyweightKg={persistBw}
-          age={age}
-          setAge={persistAge}
-          sex={sex}
-          setSex={persistSex}
-          units={units}
-          setUnits={persistUnits}
-          bwHistory={bwHistory}
-          setBwHistory={persistBwHistory}
-          hrLowThreshold={hrLowThreshold}
-          setHrLowThreshold={persistHrLow}
-          hr={hr}
-          onImported={reloadBodyweight}
-          onExport={onExport}
-          onReset={onReset}
-          floatMode={floatMode}
-          setFloatMode={persistFloatMode}
-          keepScreenOn={keepScreenOn}
-          setKeepScreenOn={persistKeepScreenOn}
-        />
+        <ErrorBoundary name="Settings">
+          <Settings
+            restDefaultSec={restDefaultSec}
+            setRestDefaultSec={persistRest}
+            weightStep={weightStep}
+            setWeightStep={persistStep}
+            daysPerWeek={daysPerWeek}
+            setDaysPerWeek={persistDpw}
+            bodyweightKg={bodyweightKg}
+            setBodyweightKg={persistBw}
+            age={age}
+            setAge={persistAge}
+            sex={sex}
+            setSex={persistSex}
+            units={units}
+            setUnits={persistUnits}
+            bwHistory={bwHistory}
+            setBwHistory={persistBwHistory}
+            hrLowThreshold={hrLowThreshold}
+            setHrLowThreshold={persistHrLow}
+            hr={hr}
+            onImported={reloadBodyweight}
+            onExport={onExport}
+            onReset={onReset}
+            floatMode={floatMode}
+            setFloatMode={persistFloatMode}
+            keepScreenOn={keepScreenOn}
+            setKeepScreenOn={persistKeepScreenOn}
+          />
+        </ErrorBoundary>
       </div>
 
       <nav className="tabbar">

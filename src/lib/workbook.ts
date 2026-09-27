@@ -315,16 +315,57 @@ export async function importXlsx(buf: ArrayBuffer): Promise<ImportedBackup> {
   return { workouts, bwHistory, settings, lossy: true };
 }
 
+// ── Restore shape checks ──────────────────────────────────────────────────────
+// A backup is user-supplied (a hand-edited JSON, a file from someone else). Records the
+// UI would choke on (a template with no exercise list, sets that aren't a list, a
+// weight that's a string) are SKIPPED and counted, so one bad record can't break the
+// app on every launch.
+const isObj = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
+const finite = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
+const numOrNull = (v: unknown) => v == null || finite(v);
+const NO_SCHEME: Scheme = { sets: null, reps: null };
+
+function cleanSet(s: unknown): boolean {
+  return isObj(s) && numOrNull(s.weight) && numOrNull(s.reps) && numOrNull(s.seconds) && numOrNull(s.distanceM);
+}
+
+export function cleanWorkout(w: unknown): Partial<StoredWorkout> | null {
+  if (!isObj(w) || typeof w.dayName !== "string" || !w.dayName || typeof w.date !== "string" || Number.isNaN(Date.parse(w.date))) return null;
+  if (!Array.isArray(w.exercises)) return null;
+  if (!w.exercises.every((ex) => isObj(ex) && typeof ex.name === "string" && Array.isArray(ex.sets) && ex.sets.every(cleanSet))) return null;
+  if (w.track != null && !(Array.isArray(w.track) && w.track.every((p) => isObj(p) && finite(p.t) && finite(p.lat) && finite(p.lng)))) return null;
+  if (w.breaks != null && !(Array.isArray(w.breaks) && w.breaks.every((b) => isObj(b) && finite(b.at) && finite(b.sec)))) return null;
+  const exercises = (w.exercises as Record<string, unknown>[]).map((ex) => ({ ...ex, scheme: isObj(ex.scheme) ? ex.scheme : NO_SCHEME }));
+  return { ...w, exercises } as Partial<StoredWorkout>;
+}
+
+export function cleanTemplate(t: unknown): DayTemplate | null {
+  if (!isObj(t) || typeof t.name !== "string" || !t.name.trim() || !Array.isArray(t.exercises)) return null;
+  if (!t.exercises.every((e) => isObj(e) && typeof e.name === "string")) return null;
+  const exercises = (t.exercises as Record<string, unknown>[]).map((e) => ({ ...e, scheme: isObj(e.scheme) ? e.scheme : NO_SCHEME }));
+  return { ...t, order: finite(t.order) ? t.order : 0, exercises } as DayTemplate;
+}
+
+export const validBw = (e: unknown): e is BwEntry =>
+  isObj(e) && Number.isInteger(e.year) && (e.year as number) >= 1900 && (e.year as number) <= 2100 && finite(e.kg) && e.kg > 0 && e.kg < 500;
+
 // Apply a restore: add only workouts this device is missing (deduped by a
 // content-aware session key so two genuine same-day sessions both survive), plus
 // any templates the device doesn't have (matched by name), and merge bodyweight
 // years (imported wins per year). Never overwrites or deletes.
-export async function applyBackup(imported: ImportedBackup): Promise<{ added: number; bwYears: number; settings: number }> {
+export async function applyBackup(
+  imported: ImportedBackup,
+): Promise<{ added: number; bwYears: number; settings: number; skipped: number }> {
+  let skipped = 0;
   const existing = await db.workouts.toArray();
   const have = new Set(existing.flatMap(sessionKeys)); // incl. legacy UTC-day keys
   const toAdd: StoredWorkout[] = [];
-  for (const w of imported.workouts) {
-    if (!w.dayName || !w.date) continue;
+  for (const raw of Array.isArray(imported.workouts) ? imported.workouts : []) {
+    const w = cleanWorkout(raw);
+    if (!w) {
+      skipped++;
+      continue;
+    }
     const k = sessionKey(w as StoredWorkout);
     if (have.has(k)) continue;
     have.add(k);
@@ -345,33 +386,37 @@ export async function applyBackup(imported: ImportedBackup): Promise<{ added: nu
   if (toAdd.length) await db.workouts.bulkAdd(toAdd);
 
   // Restore custom templates the device lacks (by name; never overwrites existing).
-  if (imported.templates?.length) {
+  if (Array.isArray(imported.templates) && imported.templates.length) {
     const haveNames = new Set((await db.templates.toArray()).map((t) => t.name.trim().toLowerCase()));
-    const newTpls = imported.templates
-      .filter((t) => t?.name && !haveNames.has(t.name.trim().toLowerCase()))
+    const valid = imported.templates.map(cleanTemplate);
+    skipped += valid.filter((t) => t == null).length;
+    const newTpls = valid
+      .filter((t): t is DayTemplate => t != null && !haveNames.has(t.name.trim().toLowerCase()))
       .map(({ id: _tid, ...rest }) => rest as DayTemplate);
     if (newTpls.length) await db.templates.bulkAdd(newTpls);
   }
 
   let bwYears = 0;
-  if (imported.bwHistory?.length) {
+  const bwIn = Array.isArray(imported.bwHistory) ? imported.bwHistory.filter(validBw) : [];
+  if (Array.isArray(imported.bwHistory)) skipped += imported.bwHistory.length - bwIn.length;
+  if (bwIn.length) {
     const thisYear = new Date().getFullYear();
     const existingBw = await getSetting<BwEntry[]>("bwHistory", []);
     const byYear = new Map<number, number>(existingBw.map((e) => [e.year, e.kg]));
-    for (const e of imported.bwHistory) byYear.set(e.year, e.kg);
-    const cur = imported.bwHistory.find((e) => e.year === thisYear);
+    for (const e of bwIn) byYear.set(e.year, e.kg);
+    const cur = bwIn.find((e) => e.year === thisYear);
     if (cur) await setSetting("bodyweightKg", cur.kg);
     const hist = [...byYear.entries()]
       .filter(([y]) => y !== thisYear)
       .sort((a, b) => a[0] - b[0])
       .map(([year, kg]) => ({ year, kg }));
     await setSetting("bwHistory", hist);
-    bwYears = imported.bwHistory.length;
+    bwYears = bwIn.length;
   }
 
   // Restore preferences (break toggles, profile, rest defaults, …). Overwrites the
   // matching keys — the point is to bring a fresh install back to the user's setup.
   const settings = await applySettings(imported.settings);
 
-  return { added: toAdd.length, bwYears, settings };
+  return { added: toAdd.length, bwYears, settings, skipped };
 }

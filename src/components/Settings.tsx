@@ -412,9 +412,10 @@ export function Settings({
       } else {
         imported = await importXlsx(buf);
       }
-      const { added, bwYears, settings } = await applyBackup(imported);
+      const { added, bwYears, settings, skipped } = await applyBackup(imported);
       const bw = bwYears ? ` · ${bwYears} bodyweight year${bwYears === 1 ? "" : "s"}` : "";
       const set = settings ? ` · ${settings} setting${settings === 1 ? "" : "s"}` : "";
+      const bad = skipped ? ` · skipped ${skipped} damaged entr${skipped === 1 ? "y" : "ies"}` : "";
       // A restore that fell back to the visible tables (no/corrupt _data tab) is
       // PARTIAL — say so instead of reporting a clean "Restored N".
       const lossyNote = imported.lossy
@@ -422,7 +423,7 @@ export function Settings({
         : "";
       setBackupMsg(
         (added ? `Restored ${added} workout${added === 1 ? "" : "s"}` : "Nothing new to restore") +
-          bw + set + lossyNote + (settings ? " — reloading to apply…" : "."),
+          bw + set + bad + lossyNote + (settings ? " — reloading to apply…" : "."),
       );
       if (bwYears) onImported();
       // Preferences (theme/toggles/rest defaults) are read at mount, so reload to
