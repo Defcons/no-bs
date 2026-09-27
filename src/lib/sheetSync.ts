@@ -26,6 +26,8 @@ export type SyncResult = {
   written?: string[];
   skipped?: string[];
   noteWritten?: boolean;
+  idWritten?: boolean; // the script wrote the session's Id row (redeployed since 1.77.0)
+  updated?: boolean; // an existing column (matched by Id) was updated in place
   ping?: boolean;
   tabs?: Record<string, string[][]>; // "pull" response: each sheet tab's cells
 };
@@ -121,11 +123,62 @@ export async function rememberSheetKeys(id: number, keys: string[]): Promise<voi
   if (merged.length !== (row.sheetKeys ?? []).length) await db.workouts.update(id, { sheetKeys: merged });
 }
 
+// A session's sheet Id (the column's "Id" row, since 1.77.0): "id-" + its ISO start.
+// Only app-logged sessions have one (sheet imports without an Id carry a bare date).
+export function sheetIdOf(w: { date: string }): string | null {
+  return w.date.includes("T") ? `id-${w.date}` : null;
+}
+
+const tombstoneKeys = (w: StoredWorkout): string[] => {
+  const id = sheetIdOf(w);
+  return [...sessionKeys(w), ...(w.sheetKeys ?? []), ...(id ? [id] : [])];
+};
+
 // Call BEFORE deleting a workout: its sheet copy must not re-import as a "new" session.
 export async function tombstoneForSheet(w: StoredWorkout): Promise<void> {
-  const keys = [...sessionKeys(w), ...(w.sheetKeys ?? [])];
   const cur = await getSetting<string[]>(DELETED_KEYS, []);
-  await setSetting(DELETED_KEYS, [...new Set([...cur, ...keys])].slice(-MAX_TOMBSTONES));
+  await setSetting(DELETED_KEYS, [...new Set([...cur, ...tombstoneKeys(w)])].slice(-MAX_TOMBSTONES));
+}
+
+// A restored workout: drop its tombstones again.
+export async function untombstone(w: StoredWorkout): Promise<void> {
+  const drop = new Set(tombstoneKeys(w));
+  const cur = await getSetting<string[]>(DELETED_KEYS, []);
+  await setSetting(DELETED_KEYS, cur.filter((k) => !drop.has(k)));
+}
+
+// Mark (deleted:true) or un-mark a session's sheet column. The script only greys the
+// column out and flags its Id cell — it never clears values — so a mistaken delete
+// loses nothing in the sheet either. Only for columns that carry the session's Id;
+// a failed call (offline) is queued and retried by syncPending.
+type SheetMark = { year: string; dayName: string; id: string; deleted: boolean };
+const PENDING_MARKS = "pendingSheetMarks";
+export async function markInSheet(w: StoredWorkout, deleted: boolean): Promise<void> {
+  const id = sheetIdOf(w);
+  if (!w.sheetIdPushed || !id) return;
+  const mark: SheetMark = { year: localDay(w.date).slice(0, 4), dayName: w.dayName, id, deleted };
+  if (!(await sendMark(mark))) {
+    const queued = (await getSetting<SheetMark[]>(PENDING_MARKS, [])).filter((m) => m.id !== id);
+    await setSetting(PENDING_MARKS, [...queued, mark]);
+  }
+}
+async function sendMark(mark: SheetMark): Promise<boolean> {
+  if (!(await syncEnabled())) return false;
+  const { url, secret } = await config();
+  if (!url) return false;
+  try {
+    const res = await post(url, { secret, action: "markDeleted", ...mark });
+    return !!res.ok;
+  } catch {
+    return false;
+  }
+}
+async function retryMarks(): Promise<void> {
+  const queued = await getSetting<SheetMark[]>(PENDING_MARKS, []);
+  if (!queued.length) return;
+  const left: SheetMark[] = [];
+  for (const m of queued) if (!(await sendMark(m))) left.push(m);
+  await setSetting(PENDING_MARKS, left);
 }
 
 // ISO date -> "dd.mm.yy" (the sheet's header format). LOCAL day — an evening
@@ -272,6 +325,7 @@ async function syncWorkoutNow(row: StoredWorkout): Promise<SyncResult | null> {
     pace: run ? fmtPace(run.avgPaceSecPerKm) : tmKm > 0 ? fmtPace(tmMovingSec / tmKm) : "",
     speed: run ? `${run.avgSpeedKmh.toFixed(1)} km/h` : tmKm > 0 ? `${(tmKm / (tmMovingSec / 3600)).toFixed(1)} km/h` : "",
     route: routeLink,
+    id: sheetIdOf(row) ?? undefined, // the column's Id row: lets an edit update it in place
     allowCreate: true, // Alternative/free-form sessions → auto-create a named block
     exercises: row.exercises.map((e) => ({ name: e.name, cell: cellFor(e) })).filter((e) => e.cell !== ""),
   };
@@ -286,6 +340,9 @@ async function syncWorkoutNow(row: StoredWorkout): Promise<SyncResult | null> {
     const skipped = result.skipped ?? [];
     // Whatever landed in the sheet (even a partial write) is now a column this row owns.
     if (result.ok && row.id != null) await rememberSheetKeys(row.id, [pushedKey(row, result.written ?? null)]);
+    // A script that wrote the Id row (redeployed since 1.77.0) can update this column in
+    // place later, and mark it when the workout is deleted.
+    if (result.ok && result.idWritten && row.id != null) await db.workouts.update(row.id, { sheetIdPushed: true });
     if (result.ok && (wroteExercises || nothingToWrite) && skipped.length === 0 && row.id != null) {
       await db.workouts.update(row.id, { synced: true });
     }
@@ -302,20 +359,22 @@ async function syncWorkoutNow(row: StoredWorkout): Promise<SyncResult | null> {
   }
 }
 
+// Waiting for the sheet: app-logged sessions not yet written, plus edits of any session
+// whose column carries its Id (imported ones included) not yet pushed.
+const needsPush = (r: StoredWorkout) => !r.synced && (r.source === "app" || !!r.sheetIdPushed);
+
 // Count app-logged sessions not yet written to the sheet (0 when sync is off).
 export async function pendingCount(): Promise<number> {
   if (!(await syncEnabled())) return 0;
-  const rows = await db.workouts.where("source").equals("app").toArray();
-  return rows.filter((r) => !r.synced).length;
+  return (await db.workouts.toArray()).filter(needsPush).length;
 }
 
 // Retry all unsynced app sessions (oldest first). `errors` carries each failure's
 // reason (e.g. a name mismatch) so the UI can say WHY, not just a count.
 export async function syncPending(): Promise<{ done: number; failed: number; errors: string[] }> {
   if (!(await syncEnabled())) return { done: 0, failed: 0, errors: [] };
-  const rows = (await db.workouts.where("source").equals("app").toArray())
-    .filter((r) => !r.synced)
-    .sort((a, b) => a.date.localeCompare(b.date));
+  await retryMarks(); // deletes/restores that couldn't reach the sheet at the time
+  const rows = (await db.workouts.toArray()).filter(needsPush).sort((a, b) => a.date.localeCompare(b.date));
   let done = 0;
   let failed = 0;
   const errors: string[] = [];
@@ -357,14 +416,21 @@ export async function importFromSheet(): Promise<{ added: number; bwYears?: numb
     ]);
     const cutoff = localDay(new Date(Date.now() + 2 * 86400000).toISOString()); // drop future typos
 
+    // Columns with an Id (written since 1.77.0) match exactly: skip ids this device
+    // already has (or deleted), and columns marked deleted in the app.
+    const haveIds = new Set(existing.map(sheetIdOf).filter((x): x is string => !!x));
     const toAdd: StoredWorkout[] = [];
     for (const w of parsed) {
-      if (w.date > cutoff) continue;
+      if (w.date > cutoff || w.deletedInSheet) continue;
+      const start = w.sheetId ? w.sheetId.slice(3) : null;
+      const idOk = !!start && !Number.isNaN(Date.parse(start));
+      if (idOk && (haveIds.has(w.sheetId!) || have.has(w.sheetId!))) continue;
       const k = sessionKey(w);
       if (have.has(k)) continue;
       have.add(k);
       toAdd.push({
-        date: w.date,
+        date: idOk ? start! : w.date, // the Id carries the exact start time
+        sheetIdPushed: idOk || undefined, // its column has an Id → edits here update it in place
         dayName: w.dayName,
         exercises: w.exercises,
         note: w.note,

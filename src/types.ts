@@ -43,6 +43,8 @@ export type Workout = {
   durationSec?: number; // parsed from the "Time" row ("h:mm:ss")
   avgHr?: number; // parsed from the "Avg HR" row
   source?: string; // origin tab name when imported, e.g. "2026"
+  sheetId?: string; // the column's "Id" cell ("id-<ISO start>"), written since 1.77.0
+  deletedInSheet?: boolean; // the Id cell reads "deleted …" — deleted in the app, kept in the sheet
 };
 
 // One recorded GPS sample during a tracked (cardio) session.

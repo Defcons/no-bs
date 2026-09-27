@@ -354,6 +354,7 @@ export function Today({
     finishingRef.current = true;
     try {
       cancelBreakNotification(); // no "Rest over!" minutes after the workout ended
+      const editIdAtFinish = draft?.editId; // finish() clears the draft
       // The whole session's route, including stretches recorded before GPS was switched off.
       const recorded = await takeTrack(draft?.startedAt);
       const track = recorded.length ? recorded : undefined;
@@ -382,9 +383,12 @@ export function Today({
         endedAt,
         autoBreaks: autoBreaks?.length ? autoBreaks : undefined,
       });
-      if (row && !row.edited) {
-        // Edits update the local record only — re-syncing would append a new column.
-        const res = await syncWorkout(row);
+      // An edit re-syncs only when its sheet column carries the session Id (the script then
+      // updates that column in place); an older column without one would get a duplicate.
+      const editedId = row?.edited ? editIdAtFinish : undefined;
+      const toSync = row && !row.edited ? row : editedId != null ? await db.workouts.get(editedId) : undefined;
+      if (row && toSync && (!row.edited || (toSync.sheetIdPushed && !toSync.synced))) {
+        const res = await syncWorkout(toSync);
         if (res && !res.ok && !auto) {
           alert(`Saved locally, but Google Sheet sync failed:\n${res.error}\n\nRetry from Settings → Sync now.`);
         }

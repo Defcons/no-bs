@@ -38,6 +38,7 @@ import { Switch } from "./Switch";
 import { SoundField } from "./SoundField";
 import { MoonIcon, SunIcon } from "./icons";
 import { SheetsGuide } from "./SheetsGuide";
+import { RecentlyDeleted } from "./RecentlyDeleted";
 
 // A bodyweight entry field with the same raw-while-editing buffer as SetInput's
 // DecField: the controlled re-format on every keystroke ate the decimal separator
@@ -1000,6 +1001,7 @@ export function Settings({
               Reset app data
             </button>
           </div>
+          <RecentlyDeleted />
         </div>
 
         <ToggleRow label="Sync finished workouts to a Google Sheet" checked={syncOn} onChange={toggleSync}>

@@ -4,7 +4,7 @@
 // Plus the 2026-09-27 audit fixes: GPS pace counts only in-run rest; pace records
 // need ≥ 1 km at a plausible pace.
 // Run anytime: npx tsx tests/audit-check.ts
-import { cellFor, pushedKey, sessionKey, sessionKeys } from "../src/lib/sheetSync";
+import { cellFor, pushedKey, sessionKey, sessionKeys, sheetIdOf } from "../src/lib/sheetSync";
 import { parseSheet } from "../src/lib/sheet";
 import { epley, liftRecords, summarize, weekNumbersForLast } from "../src/lib/stats";
 import { resolveExercise } from "../src/lib/exercises";
@@ -243,6 +243,24 @@ console.log("— the sheet copy's key is remembered at push (2026-09-27 DAT-2) �
   const parsed = parseSheet(sheet.grid.map((r: unknown[]) => r.map((c) => String(c ?? ""))), y).find((w) => w.date === day);
   check("the partial column's import key == the key remembered at push", !!parsed && sessionKey(parsed) === pushedKey(row, res.written), `${parsed && sessionKey(parsed)} vs ${pushedKey(row, res.written)}`);
   check("…and differs from the full local row's key (why it used to duplicate)", sessionKey(row) !== pushedKey(row, res.written));
+}
+
+console.log("— sheet Id row: parsed back, deleted columns flagged (1.77.0) —");
+{
+  const { runDoPost, makeSheet } = (await import("./code-gs-harness.cjs")).default;
+  const row = { dayName: "Push", date: "2026-09-27T17:00:00.000Z", exercises: [{ name: "Bench Press", scheme: { sets: 3, reps: 5 }, sets: [{ weight: 80, reps: 5 }] }] };
+  const day = localDay(row.date);
+  const [y, m, d] = day.split("-");
+  const sheet = makeSheet(y, [["Push", "01.09.26"], ["3x5 Bench Press", "75-75-75"]]);
+  const push = { year: y, dayName: "Push", date: `${d}.${m}.${y.slice(2)}`, id: sheetIdOf(row), exercises: row.exercises.map((e) => ({ name: e.name, cell: cellFor(e as never) })) };
+  runDoPost([sheet], push);
+  const cells = () => sheet.grid.map((r: unknown[]) => r.map((c) => String(c ?? "")));
+  const parsed = () => parseSheet(cells(), y).find((w) => w.date === day);
+  check("the Id comes back from the sheet", parsed()?.sheetId === sheetIdOf(row), JSON.stringify(parsed()));
+  check("the Id row is not read as an exercise", !parsed()?.exercises.some((e) => e.name.toLowerCase() === "id"));
+  check("the Id cell never looks like a date header", parseSheet(cells(), y).length === 2);
+  runDoPost([sheet], { action: "markDeleted", year: y, dayName: "Push", id: sheetIdOf(row), deleted: true });
+  check("a column deleted in the app is flagged on import", parsed()?.deletedInSheet === true && parsed()?.exercises.length === 1);
 }
 
 console.log("— restore keeps your own templates + custom exercises (2026-09-27 DAT-6 / DAT-7) —");

@@ -19,6 +19,7 @@ import { syncBodyweight, syncProfile } from "./lib/sheetSync";
 import type { BwEntry, Sex } from "./lib/standards";
 import { trainingDue } from "./lib/stats";
 import { useSetting } from "./lib/useSetting";
+import { purgeOldTrash } from "./lib/trash";
 import { History } from "./components/History";
 import { Records } from "./components/Records";
 // Lazy so Leaflet (+CSS) stays out of the cold-start bundle — only loaded on a map view.
@@ -198,6 +199,7 @@ export default function App() {
       const theme = await getSetting<string>("theme", "dark");
       if (theme === "light") document.documentElement.dataset.theme = "light";
       await ensureBootstrapped();
+      void purgeOldTrash(); // "Recently deleted" items past their 30 days
       await loadExerciseRest(); // per-exercise rest overrides (global, by exercise id)
       setRest(await getSetting("restDefaultSec", 90));
       setStep(await getSetting("weightStep", 2.5));

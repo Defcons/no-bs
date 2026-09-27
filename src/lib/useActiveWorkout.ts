@@ -492,6 +492,9 @@ export function useActiveWorkout() {
           const prev = await db.workouts.get(draft.editId!);
           await db.workouts.update(draft.editId!, {
             ...(prev ? { sheetKeys: [...new Set([...(prev.sheetKeys ?? []), ...sessionKeys(prev)])] } : {}),
+            // Its sheet column carries the session Id → re-push, and the script updates that
+            // column in place. (Older columns without an Id are left as they are.)
+            ...(prev?.sheetIdPushed ? { synced: false } : {}),
             dayName: row.dayName,
             exercises: row.exercises,
             note: row.note,

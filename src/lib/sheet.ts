@@ -247,6 +247,19 @@ export function parseSheet(rows: string[][], source: string): Workout[] {
         continue;
       }
 
+      // The session Id row (since 1.77.0): "id-<ISO start>", or "deleted id-…" for a
+      // session deleted in the app (its values are kept in the sheet, greyed out).
+      if (low0 === "id") {
+        for (const [col, date] of colDate) {
+          const txt = (r[col] ?? "").trim();
+          if (!txt) continue;
+          const w = ensure(col, date);
+          if (txt.startsWith("deleted ")) w.deletedInSheet = true;
+          else if (txt.startsWith("id-")) w.sheetId = txt;
+        }
+        continue;
+      }
+
       if (SKIP_LABELS.has(low0)) continue; // derived cardio rows — not exercises
 
       // Exercise row. Label may be one col ("3x5 Bench") or two ("3x5"|"Benkpress").

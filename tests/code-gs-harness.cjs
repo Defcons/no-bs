@@ -9,6 +9,7 @@ const src = fs.readFileSync(process.env.CODE_GS || path.join(__dirname, "..", "a
 
 function makeSheet(name, grid) {
   const g = grid.map((r) => r.slice());
+  const fmt = {};
   const width = () => Math.max(1, ...g.map((r) => r.length));
   const cell = (r, c) => (g[r] && g[r][c] != null ? g[r][c] : "");
   const ensure = (r, c) => {
@@ -22,6 +23,13 @@ function makeSheet(name, grid) {
       ensure(row - 1, col - 1);
       g[row - 1][col - 1] = v;
     },
+    // Formatting is recorded per cell ("r,c" → {color, line}) so tests can check it.
+    setFontColor: (v) => {
+      for (let i = 0; i < nr; i++) for (let j = 0; j < nc; j++) fmt[`${row - 1 + i},${col - 1 + j}`] = { ...fmt[`${row - 1 + i},${col - 1 + j}`], color: v };
+    },
+    setFontLine: (v) => {
+      for (let i = 0; i < nr; i++) for (let j = 0; j < nc; j++) fmt[`${row - 1 + i},${col - 1 + j}`] = { ...fmt[`${row - 1 + i},${col - 1 + j}`], line: v };
+    },
     setValues: (vals) =>
       vals.forEach((rv, i) =>
         rv.forEach((v, j) => {
@@ -32,6 +40,7 @@ function makeSheet(name, grid) {
   });
   return {
     grid: g,
+    fmt,
     getName: () => name,
     getDataRange: () => range(1, 1, Math.max(1, g.length), width()),
     getRange: range,

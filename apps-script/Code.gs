@@ -95,6 +95,9 @@ function doPost(e) {
     // Profile: upsert age/sex key->value rows in a dedicated tab.
     if (body.action === "profile") return writeProfile(body);
 
+    // A workout deleted (or restored) in the app: MARK its column, never clear it.
+    if (body.action === "markDeleted") return markDeleted(body);
+
     var ss = SpreadsheetApp.getActiveSpreadsheet();
     var sheet = ss.getSheetByName(String(body.year));
     if (!sheet) return json({ ok: false, error: "no tab named " + body.year });
@@ -102,28 +105,7 @@ function doPost(e) {
     var data = sheet.getDataRange().getValues();
     var dayName = String(body.dayName).trim().toLowerCase();
 
-    // Find the day-block header row (col0 == dayName). An exercise row can carry the
-    // same label (a custom "Running" session vs a "Running" row inside another block),
-    // so prefer a header that already has dates; failing that (a fresh year tab), only
-    // a row that STARTS a block — the first row or one after a blank spacer — counts.
-    var headerRow = -1;
-    var isDay = function (row) {
-      return String(row[0]).trim().toLowerCase() === dayName;
-    };
-    for (var r = 0; r < data.length; r++) {
-      if (isDay(data[r]) && rowHasDate(data[r])) {
-        headerRow = r;
-        break;
-      }
-    }
-    if (headerRow < 0) {
-      for (var r2 = 0; r2 < data.length; r2++) {
-        if (isDay(data[r2]) && (r2 === 0 || String(data[r2 - 1][0]).trim() === "")) {
-          headerRow = r2;
-          break;
-        }
-      }
-    }
+    var headerRow = findHeaderRow(data, dayName);
     // No matching block: Alternative/free-form sessions get a fresh named block
     // appended at the end of the year tab (with Note + Mood rows).
     if (headerRow < 0) {
@@ -136,9 +118,13 @@ function doPost(e) {
     // same date ONLY if its exercise cells are empty or identical to what we'd
     // write — a genuinely different same-day session falls through to a new column.
     var disp = sheet.getRange(headerRow + 1, 1, data.length - headerRow, Math.max(1, sheet.getLastColumn())).getDisplayValues();
+    // A session that already has a column (its Id row holds body.id) is UPDATED in
+    // place: an edit made in the app, or a retry. No other column is touched.
+    var col = findIdColumn(disp, data, headerRow, body.id);
+    var updating = col >= 0;
+    var wasDeleted = updating && String(disp[findIdRow(disp, data, headerRow)][col]).trim() !== body.id;
     var want = normDate(body.date);
-    var col = -1;
-    for (var c0 = 1; c0 < disp[0].length; c0++) {
+    for (var c0 = 1; col < 0 && c0 < disp[0].length; c0++) {
       if (want && normDate(disp[0][c0]) === want && columnCompatible(disp, data, headerRow, c0, body.exercises, body)) {
         col = c0;
         break;
@@ -166,7 +152,7 @@ function doPost(e) {
     // which the Apps Script bridge casts to row 0 → "start row of range too small".
     var metaRow = {
       Note: -1, Mood: -1, Time: -1, "Time of day": -1, "Avg HR": -1,
-      Distance: -1, Pace: -1, Speed: -1, Route: -1,
+      Distance: -1, Pace: -1, Speed: -1, Route: -1, Id: -1,
     };
     var lastBlockRow = headerRow; // last row belonging to this block
     var doneNames = {};
@@ -185,15 +171,20 @@ function doPost(e) {
       }
       if (!label) continue;
 
+      var matched = false;
       for (var i = 0; i < body.exercises.length; i++) {
         var ex = body.exercises[i];
         if (!doneNames[ex.name] && matchName(label, ex.name)) {
           sheet.getRange(rr + 1, col + 1).setValue(safe(ex.cell));
           written.push(ex.name);
           doneNames[ex.name] = true;
+          matched = true;
           break;
         }
       }
+      // Updating a session in place: an exercise removed in the edit is cleared from
+      // THIS column only.
+      if (!matched && updating && String(data[rr][col] == null ? "" : data[rr][col]) !== "") sheet.getRange(rr + 1, col + 1).setValue("");
     }
 
     // Write each meta value into its row, appending the row at the block's end if
@@ -208,12 +199,15 @@ function doPost(e) {
       { label: "Pace", value: body.pace },
       { label: "Speed", value: body.speed },
       { label: "Route", value: body.route },
+      { label: "Id", value: body.id },
     ];
     var metaWritten = {};
     var insertAt = lastBlockRow; // 0-based; new meta rows go after here
     for (var mi = 0; mi < metas.length; mi++) {
       var m = metas[mi];
-      if (!m.value) continue;
+      // Empty values are skipped — except when updating in place, where an emptied
+      // field (a note removed in the edit) clears its existing cell.
+      if (!m.value && !(updating && metaRow[m.label] >= 0)) continue;
       var target = metaRow[m.label];
       if (target < 0) {
         sheet.insertRowAfter(insertAt + 1);
@@ -221,9 +215,11 @@ function doPost(e) {
         sheet.getRange(target + 1, 1).setValue(m.label);
         insertAt = target;
       }
-      sheet.getRange(target + 1, col + 1).setValue(safe(m.value));
-      metaWritten[m.label] = true;
+      sheet.getRange(target + 1, col + 1).setValue(safe(m.value || ""));
+      metaWritten[m.label] = !!m.value;
     }
+
+    if (wasDeleted) styleColumn(sheet, headerRow, insertAt, col, false);
 
     var skipped = [];
     for (var k = 0; k < body.exercises.length; k++) {
@@ -240,6 +236,8 @@ function doPost(e) {
       moodWritten: !!metaWritten["Mood"],
       timeWritten: !!metaWritten["Time"],
       hrWritten: !!metaWritten["Avg HR"],
+      idWritten: !!body.id,
+      updated: updating,
     });
     } finally {
       lock.releaseLock();
@@ -268,6 +266,7 @@ function createBlock(sheet, body) {
     var v = { Distance: body.distance, Pace: body.pace, Speed: body.speed, Route: body.route }[lbl];
     if (v) rows.push([lbl, safe(v)]);
   });
+  if (body.id) rows.push(["Id", safe(body.id)]);
 
   var start = sheet.getLastRow() + 2; // leave one blank spacer row
   sheet.getRange(start, 1, rows.length, 2).setValues(rows);
@@ -283,7 +282,77 @@ function createBlock(sheet, body) {
     moodWritten: !!body.mood,
     timeWritten: !!body.time,
     hrWritten: !!body.hr,
+    idWritten: !!body.id,
   });
+}
+
+// Find a day-block's header row (col0 == dayName). An exercise row can carry the same
+// label (a custom "Running" session vs a "Running" row inside another block), so prefer
+// a header that already has dates; failing that (a fresh year tab), only a row that
+// STARTS a block — the first row or one after a blank spacer — counts. -1 if none.
+function findHeaderRow(data, dayName) {
+  var isDay = function (row) {
+    return String(row[0]).trim().toLowerCase() === dayName;
+  };
+  for (var r = 0; r < data.length; r++) {
+    if (isDay(data[r]) && rowHasDate(data[r])) return r;
+  }
+  for (var r2 = 0; r2 < data.length; r2++) {
+    if (isDay(data[r2]) && (r2 === 0 || String(data[r2 - 1][0]).trim() === "")) return r2;
+  }
+  return -1;
+}
+
+// Index (into `disp`, which starts at the header row) of the block's "Id" row, or -1.
+function findIdRow(disp, data, headerRow) {
+  for (var r = 1; r < disp.length; r++) {
+    var absRow = headerRow + r;
+    if (absRow >= data.length || rowHasDate(data[absRow])) break; // next block
+    if (metaKind(String(data[absRow][0]).trim()) === "Id") return r;
+  }
+  return -1;
+}
+
+// The column whose Id cell is this session's id (also when it's marked deleted), or -1.
+function findIdColumn(disp, data, headerRow, id) {
+  if (!id) return -1;
+  var idRow = findIdRow(disp, data, headerRow);
+  if (idRow < 0) return -1;
+  for (var c = 1; c < disp[idRow].length; c++) {
+    var cell = String(disp[idRow][c]).trim();
+    if (cell === id || cell === "deleted " + id) return c;
+  }
+  return -1;
+}
+
+// Grey out (deleted) or restore one session's column within its block. Formatting only —
+// every value stays, so nothing is lost if a delete was a mistake.
+function styleColumn(sheet, headerRow, lastRow, col, deleted) {
+  var range = sheet.getRange(headerRow + 1, col + 1, lastRow - headerRow + 1, 1);
+  range.setFontColor(deleted ? "#9e9e9e" : null);
+  range.setFontLine(deleted ? "line-through" : "none");
+}
+
+// Mark a session's column deleted ({deleted:true}) or restore it ({deleted:false}):
+// the Id cell becomes "deleted <id>" (so imports skip it) and the column is greyed out.
+// Values are never cleared.
+function markDeleted(body) {
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(String(body.year));
+  if (!sheet) return json({ ok: false, error: "no tab named " + body.year });
+  var data = sheet.getDataRange().getValues();
+  var headerRow = findHeaderRow(data, String(body.dayName).trim().toLowerCase());
+  if (headerRow < 0) return json({ ok: false, error: "no day block '" + body.dayName + "'" });
+  var disp = sheet.getRange(headerRow + 1, 1, data.length - headerRow, Math.max(1, sheet.getLastColumn())).getDisplayValues();
+  var col = findIdColumn(disp, data, headerRow, body.id);
+  if (col < 0) return json({ ok: true, found: false });
+  var idRow = findIdRow(disp, data, headerRow);
+  var lastRow = headerRow;
+  for (var r = headerRow + 1; r < data.length && !rowHasDate(data[r]); r++) {
+    if (String(data[r][0]).trim()) lastRow = r;
+  }
+  sheet.getRange(headerRow + idRow + 1, col + 1).setValue(body.deleted ? "deleted " + body.id : body.id);
+  styleColumn(sheet, headerRow, lastRow, col, !!body.deleted);
+  return json({ ok: true, found: true, column: col + 1 });
 }
 
 // Classify a block row label as a meta row (Note/Mood/Time/Avg HR/…), else "".
@@ -301,6 +370,7 @@ function metaKind(label) {
   if (l === "pace" || l === "tempo") return "Pace";
   if (l === "speed" || l === "fart") return "Speed";
   if (l === "route" || l === "rute") return "Route";
+  if (l === "id") return "Id";
   return "";
 }
 

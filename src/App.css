@@ -2590,6 +2590,23 @@ span.bw-year {
   align-items: center;
   flex-wrap: wrap;
 }
+/* Settings → Backup & data → Recently deleted */
+.recently-deleted {
+  margin-top: 12px;
+}
+.recently-deleted summary {
+  cursor: pointer;
+}
+.plain-list {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+.plain-list li {
+  justify-content: space-between;
+}
 .ok {
   color: var(--accent-2);
 }

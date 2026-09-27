@@ -25,6 +25,7 @@ export interface StoredWorkout {
   source: string; // "app" for new sessions, "sheet:2026" etc. for imports
   synced?: boolean; // written back to the Google Sheet
   sheetKeys?: string[]; // dedup keys of this session's copy in the sheet (as pushed / before local edits) — see sheetSync.rememberSheetKeys
+  sheetIdPushed?: boolean; // its sheet column carries this session's Id row — edits update that column in place, deletes mark it (1.77.0)
   custom?: boolean; // logged as a free-form "Alternative" session (not a template)
 }
 
@@ -40,12 +41,20 @@ export interface CustomSound {
   blob: Blob;
 }
 
+// A workout deleted from History, kept restorable for a while (lib/trash.ts).
+export interface TrashItem {
+  id?: number;
+  deletedAt: number; // epoch ms
+  workout: StoredWorkout;
+}
+
 class GymDB extends Dexie {
   workouts!: Table<StoredWorkout, number>;
   templates!: Table<DayTemplate, number>;
   settings!: Table<Setting, string>;
   customSounds!: Table<CustomSound, number>;
   exercises!: Table<Exercise, string>; // user-created catalog (id = slug)
+  trash!: Table<TrashItem, number>; // recently deleted workouts (see lib/trash.ts)
 
   constructor() {
     super("gym-tracker");
@@ -60,6 +69,9 @@ class GymDB extends Dexie {
     // v3: user exercise catalog (muscle group / equipment / unit for exercises the
     // built-in library doesn't cover). Additive; id is a string slug.
     this.version(3).stores({ exercises: "id, name, muscle" });
+    // v4: "Recently deleted" — a deleted workout is moved here (restorable for 30 days)
+    // instead of being erased. Additive.
+    this.version(4).stores({ trash: "++id, deletedAt" });
   }
 }
 

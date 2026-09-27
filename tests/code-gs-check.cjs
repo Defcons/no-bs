@@ -70,5 +70,33 @@ const check = (name, cond, detail = "") => {
   check("caller-chosen tab ignored (year tab untouched)", book[0].grid.length === 1 && book[0].grid[0].length === 2);
 }
 
+// --- session Id: update in place, mark deleted (never clear) ---
+{
+  const s = makeSheet("2026", [["Push", "20.09.26"], ["3x5 Bench Press", "75-75-75"], ["3x8 Row", "60-60-60"], ["Note", "old session"]]);
+  const id = "id-2026-09-27T17:00:00.000Z";
+  const first = runDoPost([s], { year: 2026, dayName: "Push", date: "27.09.26", id, note: "felt good", exercises: [{ name: "Bench Press", cell: "80-80-80" }, { name: "Row", cell: "65-65-65" }] });
+  check("first push writes the Id row", first.ok && first.idWritten && !first.updated && s.grid.some((r) => r[0] === "Id" && r[2] === id), JSON.stringify(first));
+  const retry = runDoPost([s], { year: 2026, dayName: "Push", date: "27.09.26", id, note: "felt good", exercises: [{ name: "Bench Press", cell: "80-80-80" }, { name: "Row", cell: "65-65-65" }] });
+  check("a retry updates its own column", retry.ok && retry.updated && retry.column === first.column, JSON.stringify(retry));
+  const edit = runDoPost([s], { year: 2026, dayName: "Push", date: "27.09.26", id, note: "", exercises: [{ name: "Bench Press", cell: "82,5-80-80" }] });
+  const col = first.column - 1;
+  const rowOf = (label) => s.grid.findIndex((r) => r[0] === label);
+  check("an edit updates the same column", edit.ok && edit.updated && edit.column === first.column, JSON.stringify(edit));
+  check("…with the new bench cell", s.grid[rowOf("3x5 Bench Press")][col] === "82,5-80-80", JSON.stringify(s.grid));
+  check("…the removed exercise cleared", s.grid[rowOf("3x8 Row")][col] === "", JSON.stringify(s.grid[rowOf("3x8 Row")]));
+  check("…the emptied note cleared", s.grid[rowOf("Note")][col] === "", JSON.stringify(s.grid[rowOf("Note")]));
+  check("…and the older session untouched", s.grid[rowOf("3x5 Bench Press")][1] === "75-75-75" && s.grid[rowOf("Note")][1] === "old session");
+  const del = runDoPost([s], { action: "markDeleted", year: 2026, dayName: "Push", id, deleted: true });
+  check("delete MARKS the column", del.ok && del.found && s.grid[rowOf("Id")][col] === "deleted " + id, JSON.stringify(del));
+  check("…values are kept", s.grid[rowOf("3x5 Bench Press")][col] === "82,5-80-80");
+  check("…and greyed out", s.fmt[`${rowOf("3x5 Bench Press")},${col}`]?.line === "line-through");
+  const undo = runDoPost([s], { action: "markDeleted", year: 2026, dayName: "Push", id, deleted: false });
+  check("restore unmarks it", undo.ok && s.grid[rowOf("Id")][col] === id && s.fmt[`${rowOf("3x5 Bench Press")},${col}`]?.line === "none", JSON.stringify(s.fmt));
+  const other = runDoPost([s], { year: 2026, dayName: "Push", date: "27.09.26", id: "id-2026-09-27T19:00:00.000Z", exercises: [{ name: "Bench Press", cell: "60-60-60" }] });
+  check("another same-day session gets its own column", other.ok && !other.updated && other.column !== first.column, JSON.stringify(other));
+  const unknown = runDoPost([s], { action: "markDeleted", year: 2026, dayName: "Push", id: "id-1999-01-01T00:00:00.000Z", deleted: true });
+  check("marking an unknown id changes nothing", unknown.ok && unknown.found === false);
+}
+
 console.log(fails ? `${fails} FAILURE(S)` : "ALL PASS");
 process.exitCode = fails ? 1 : 0;
