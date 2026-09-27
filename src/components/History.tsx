@@ -36,7 +36,19 @@ function cardioVerb(w: StoredWorkout, paceSecPerKm: number): string {
   if (/ski/.test(name)) return "ski";
   return paceSecPerKm > 9 * 60 ? "walk" : "run"; // no telling name → guess from pace (>9:00/km ≈ a walk)
 }
+// computeRun (clean + Kalman smoothing) per GPS row is costly, and History re-renders on
+// every heart-rate reading mid-workout — so cache per workout object (useLiveQuery keeps
+// handing back the same objects until the data actually changes).
+const labelCache = new WeakMap<StoredWorkout, string>();
 function activityLabel(w: StoredWorkout): string {
+  let label = labelCache.get(w);
+  if (label == null) {
+    label = computeActivityLabel(w);
+    labelCache.set(w, label);
+  }
+  return label;
+}
+function computeActivityLabel(w: StoredWorkout): string {
   const dn = (w.dayName ?? "").trim();
   if (dn && dn.toLowerCase() !== "alternative") return dn;
   if (w.track && w.track.length > 1) {

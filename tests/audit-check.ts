@@ -9,7 +9,8 @@ import { epley, liftRecords, summarize, weekNumbersForLast } from "../src/lib/st
 import { resolveExercise } from "../src/lib/exercises";
 import { breakSecInTrack, breakSecWithin, computeRun, withMovingPace, type RunStats } from "../src/lib/runStats";
 import { paceMedals, runPBs } from "../src/lib/runStandards";
-import { cleanTemplate, cleanWorkout, validBw } from "../src/lib/workbook";
+import { cleanCatalogExercise, cleanTemplate, cleanWorkout, isUntouchedStarter, validBw } from "../src/lib/workbook";
+import { GENERIC_TEMPLATES } from "../src/db";
 import { localDay } from "../src/lib/format";
 import type { StoredWorkout } from "../src/db";
 
@@ -211,6 +212,18 @@ console.log("— restore skips records the UI would crash on (2026-09-27 UI-2 / 
   check("a template without an exercise list is rejected", cleanTemplate({ name: "X", order: 0 }) == null);
   check("a normal template passes", cleanTemplate({ name: "Push", order: 1, exercises: [{ name: "Bench", scheme: { sets: 3, reps: 5 } }] }) != null);
   check("a formula as bodyweight year is rejected", !validBw({ year: "=HYPERLINK(1)", kg: 80 }) && validBw({ year: 2025, kg: 80 }));
+}
+
+console.log("— restore keeps your own templates + custom exercises (2026-09-27 DAT-6 / DAT-7) —");
+{
+  const push = GENERIC_TEMPLATES[0];
+  check("a freshly seeded starter counts as untouched", isUntouchedStarter({ ...push, id: 1 }));
+  check("an edited starter is kept", !isUntouchedStarter({ ...push, id: 1, exercises: [...push.exercises, { name: "Flyes", scheme: { sets: 3, reps: 12 } }] }));
+  check("a custom-named template is never a starter", !isUntouchedStarter({ name: "Upper", order: 0, exercises: [] }));
+  const ex = { id: "hip-thrust-machine", name: "Hip thrust machine", muscle: "Legs", equipment: "machine", unit: "weight", builtin: true };
+  check("a valid custom exercise passes (marked non-builtin)", cleanCatalogExercise(ex)?.builtin === false);
+  check("an unknown muscle group is rejected", cleanCatalogExercise({ ...ex, muscle: "Glutes" }) == null);
+  check("a missing id is rejected", cleanCatalogExercise({ ...ex, id: "" }) == null);
 }
 
 process.exitCode = fails ? 1 : 0;

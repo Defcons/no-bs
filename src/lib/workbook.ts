@@ -6,9 +6,10 @@
 // perfect; the visible tabs stay human-readable/editable and parse back through the
 // existing sheet.ts parser. SheetJS is imported lazily so it stays out of the main
 // bundle.
-import { db, getSetting, setSetting, type StoredWorkout } from "../db";
+import { db, GENERIC_TEMPLATES, getSetting, setSetting, type StoredWorkout } from "../db";
 import type { BwEntry } from "./standards";
 import type { DayTemplate, Scheme } from "../types";
+import { type Exercise, MUSCLE_ORDER } from "./exercises";
 import { localDay } from "./format";
 import { cellFor, sessionKey, sessionKeys } from "./sheetSync";
 import { breakSecInTrack, computeRun, fmtDist, fmtPace, withMovingPace } from "./runStats";
@@ -31,6 +32,13 @@ export const BACKUP_SETTINGS = [
   "keepScreenOn", "floatMode",
   "autoEndOnLeave", "hrLowThreshold",
   "remindersEnabled", "exerciseRest",
+  // 1.76.7: preferences that were missing — a restore silently reset them, and losing
+  // the learned strides changed every past treadmill session's distance.
+  "autoDetectBreaks", "breakNotify", "haptics", "includeAltInWeekly", "paceExcludesBreaks",
+  "lowHrWarn", "lowHrWarnBpm", "lowHrMode", "lowHrRelDelta", "lowHrSound",
+  "strideM", "strideWalkM", "strideRunM",
+  // NOT mapMatchUrl: a shared backup must not be able to point route snapping (which
+  // uploads GPS tracks) at someone else's server.
 ] as const;
 
 // Read the allowlisted preferences into a plain object (skips unset keys).
@@ -65,6 +73,7 @@ const str: Check = (v) => typeof v === "string";
 const oneOf =
   (...xs: string[]): Check =>
   (v) => typeof v === "string" && xs.includes(v);
+const stride: Check = (v) => num(v) && (v as number) >= 0.3 && (v as number) <= 2; // metres per step
 const SETTING_CHECKS: Record<(typeof BACKUP_SETTINGS)[number], Check> = {
   age: num,
   sex: oneOf("male", "female"),
@@ -88,6 +97,19 @@ const SETTING_CHECKS: Record<(typeof BACKUP_SETTINGS)[number], Check> = {
     v !== null &&
     !Array.isArray(v) &&
     Object.values(v as Record<string, unknown>).every((n) => typeof n === "number" && Number.isFinite(n)),
+  autoDetectBreaks: bool,
+  breakNotify: bool,
+  haptics: bool,
+  includeAltInWeekly: bool,
+  paceExcludesBreaks: bool,
+  lowHrWarn: bool,
+  lowHrWarnBpm: num,
+  lowHrMode: oneOf("absolute", "relative"),
+  lowHrRelDelta: num,
+  lowHrSound: str,
+  strideM: stride,
+  strideWalkM: stride,
+  strideRunM: stride,
 };
 
 // Restore preferences — allowlist-filtered on the way IN too, so a hand-edited or
@@ -246,6 +268,7 @@ export async function exportXlsx(
 ): Promise<Blob> {
   const XLSX = await import("xlsx");
   const settings = await collectSettings();
+  const exercises = await db.exercises.toArray(); // the user's own exercise catalog
   const exclBreaks = await getSetting<boolean>("paceExcludesBreaks", true);
   const wb = XLSX.utils.book_new();
   for (const tab of workbookTabs(workouts, bwHistory, settings, exclBreaks)) {
@@ -254,7 +277,7 @@ export async function exportXlsx(
   // Lossless JSON, chunked across rows — a single cell can't exceed 32,767 chars.
   // Templates + preferences ride along so a restore on a fresh phone brings the
   // user's split AND their toggles/profile back (v3 added settings).
-  const json = JSON.stringify({ v: 3, workouts, bwHistory, templates, settings });
+  const json = JSON.stringify({ v: 3, workouts, bwHistory, templates, settings, exercises });
   const CHUNK = 30000;
   const dataRows: string[][] = [["NoBS – Workout Log backup — do not edit"]];
   for (let i = 0; i < json.length; i += CHUNK) dataRows.push([json.slice(i, i + CHUNK)]);
@@ -269,6 +292,7 @@ export type ImportedBackup = {
   bwHistory?: BwEntry[];
   templates?: DayTemplate[];
   settings?: Record<string, unknown>;
+  exercises?: Exercise[]; // the user's custom exercise catalog (db.exercises)
   // Set when the lossless _data tab was absent/corrupt and the visible tabs were
   // parsed instead — GPS tracks, breaks, custom flags, templates etc. are then gone,
   // and the restore UI must say so instead of reporting a clean "Restored N".
@@ -293,6 +317,7 @@ export async function importXlsx(buf: ArrayBuffer): Promise<ImportedBackup> {
           bwHistory?: BwEntry[];
           templates?: DayTemplate[];
           settings?: Record<string, unknown>;
+          exercises?: Exercise[];
         };
         if (parsed.workouts)
           return {
@@ -300,6 +325,7 @@ export async function importXlsx(buf: ArrayBuffer): Promise<ImportedBackup> {
             bwHistory: parsed.bwHistory,
             templates: parsed.templates,
             settings: parsed.settings,
+            exercises: parsed.exercises,
           };
       } catch {
         /* fall through to parsing visible tabs */
@@ -346,6 +372,35 @@ export function cleanTemplate(t: unknown): DayTemplate | null {
   return { ...t, order: finite(t.order) ? t.order : 0, exercises } as DayTemplate;
 }
 
+const EQUIPMENT = ["barbell", "dumbbell", "machine", "cable", "bodyweight", "kettlebell", "other"];
+const UNITS = ["weight", "bodyweight", "time", "distance"];
+const isMuscle = (v: unknown) => typeof v === "string" && (MUSCLE_ORDER as string[]).includes(v);
+export function cleanCatalogExercise(e: unknown): Exercise | null {
+  if (!isObj(e) || typeof e.id !== "string" || !e.id || typeof e.name !== "string" || !e.name.trim()) return null;
+  if (!isMuscle(e.muscle) || !EQUIPMENT.includes(e.equipment as string) || !UNITS.includes(e.unit as string)) return null;
+  if (e.aliases != null && !(Array.isArray(e.aliases) && e.aliases.every((a) => typeof a === "string"))) return null;
+  if (e.secondary != null && !(Array.isArray(e.secondary) && e.secondary.every(isMuscle))) return null;
+  return { ...e, builtin: false } as Exercise;
+}
+
+// A starter template (seeded on a fresh install) nobody has touched yet — a backup's
+// template of the same name may replace it.
+export function isUntouchedStarter(t: DayTemplate): boolean {
+  const seed = GENERIC_TEMPLATES.find((g) => g.name === t.name);
+  return (
+    !!seed &&
+    t.exercises.length === seed.exercises.length &&
+    t.exercises.every(
+      (e, i) =>
+        e.name === seed.exercises[i].name &&
+        e.scheme?.sets === seed.exercises[i].scheme.sets &&
+        e.scheme?.reps === seed.exercises[i].scheme.reps &&
+        e.step == null &&
+        e.exerciseId == null,
+    )
+  );
+}
+
 export const validBw = (e: unknown): e is BwEntry =>
   isObj(e) && Number.isInteger(e.year) && (e.year as number) >= 1900 && (e.year as number) <= 2100 && finite(e.kg) && e.kg > 0 && e.kg < 500;
 
@@ -385,15 +440,32 @@ export async function applyBackup(
   }
   if (toAdd.length) await db.workouts.bulkAdd(toAdd);
 
-  // Restore custom templates the device lacks (by name; never overwrites existing).
+  // Restore templates the device lacks (by name). An existing template is never
+  // overwritten — EXCEPT an untouched starter (Push/Pull/Legs seeded on a fresh install):
+  // restoring onto a new phone used to keep the generic "Push" and drop the user's own.
   if (Array.isArray(imported.templates) && imported.templates.length) {
-    const haveNames = new Set((await db.templates.toArray()).map((t) => t.name.trim().toLowerCase()));
+    const byName = new Map((await db.templates.toArray()).map((t) => [t.name.trim().toLowerCase(), t]));
     const valid = imported.templates.map(cleanTemplate);
     skipped += valid.filter((t) => t == null).length;
-    const newTpls = valid
-      .filter((t): t is DayTemplate => t != null && !haveNames.has(t.name.trim().toLowerCase()))
-      .map(({ id: _tid, ...rest }) => rest as DayTemplate);
+    const newTpls: DayTemplate[] = [];
+    for (const t of valid) {
+      if (!t) continue;
+      const { id: _tid, ...rest } = t;
+      void _tid;
+      const existing = byName.get(t.name.trim().toLowerCase());
+      if (!existing) newTpls.push(rest as DayTemplate);
+      else if (existing.id != null && isUntouchedStarter(existing)) await db.templates.update(existing.id, { exercises: rest.exercises, order: rest.order });
+    }
     if (newTpls.length) await db.templates.bulkAdd(newTpls);
+  }
+
+  // The user's own exercise catalog: add the ones this device lacks (never overwrite).
+  if (Array.isArray(imported.exercises) && imported.exercises.length) {
+    const haveIds = new Set((await db.exercises.toArray()).map((e) => e.id));
+    const valid = imported.exercises.map(cleanCatalogExercise);
+    skipped += valid.filter((e) => e == null).length;
+    const newEx = valid.filter((e): e is Exercise => e != null && !haveIds.has(e.id));
+    if (newEx.length) await db.exercises.bulkPut(newEx);
   }
 
   let bwYears = 0;

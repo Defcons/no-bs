@@ -346,6 +346,7 @@ export default function App() {
       // Allowlisted preferences only (collectSettings excludes sync credentials +
       // transient state), as an object that restore reads back through applyBackup.
       settings: await collectSettings(),
+      exercises: await db.exercises.toArray(), // the user's own exercise catalog
       exportedAt: new Date().toISOString(),
     };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });

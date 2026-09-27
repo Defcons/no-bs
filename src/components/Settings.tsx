@@ -408,7 +408,7 @@ export function Settings({
       let imported: ImportedBackup;
       if (file.name.toLowerCase().endsWith(".json")) {
         const j = JSON.parse(new TextDecoder().decode(buf)) as ImportedBackup;
-        imported = { workouts: j.workouts ?? [], bwHistory: j.bwHistory, templates: j.templates, settings: j.settings };
+        imported = { workouts: j.workouts ?? [], bwHistory: j.bwHistory, templates: j.templates, settings: j.settings, exercises: j.exercises };
       } else {
         imported = await importXlsx(buf);
       }
