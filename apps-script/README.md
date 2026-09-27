@@ -5,8 +5,13 @@ The app writes finished workouts back into the **Trening** sheet via a bound App
 ## 1. Create the script
 1. Open the sheet → **Extensions → Apps Script**.
 2. Delete the default `Code.gs` contents and paste the contents of [`Code.gs`](./Code.gs).
-3. At the top, change `var SECRET = "CHANGE_ME";` to a long random string (e.g. from a password manager). Remember it.
+3. Set the secret — a long random string (e.g. from a password manager). Remember it. Either:
+   - **recommended:** ⚙ Project Settings → Script properties → add `SECRET` = your string. Pasting a newer `Code.gs` later won't reset it; or
+   - change `var SECRET = "CHANGE_ME";` at the top of the file (you'll need to redo this after every update).
+   The script refuses every request while the secret is still `CHANGE_ME`.
 4. Save (💾).
+
+**Updating the script:** paste the new `Code.gs` over the old one, save, then **Deploy → Manage deployments → ✎ → Version: New version → Deploy** (the `/exec` URL stays the same). With the secret in Script properties there's nothing else to redo.
 
 ## 2. Deploy as a Web App
 1. **Deploy → New deployment**.

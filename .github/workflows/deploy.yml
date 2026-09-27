@@ -29,6 +29,7 @@ jobs:
       - run: npm ci
       - run: npx oxlint src tests
       - run: npx tsx tests/audit-check.ts
+      - run: node tests/code-gs-check.cjs
       - run: npm run build
 
   deploy:
@@ -77,7 +78,8 @@ jobs:
               fi
               sleep 2
             done
-            echo "Health check failed: version.json does not report $APP_VERSION"
-            docker compose ps
-            docker compose logs --tail 50 nobs
+            # The action's log only shows stderr, so send the diagnostics there.
+            echo "Health check failed: version.json does not report $APP_VERSION" >&2
+            docker compose ps >&2
+            docker compose logs --tail 50 nobs >&2
             exit 1

@@ -7,21 +7,33 @@
  * summaries (action "summary" / "liftSummary") for external consumers like the
  * Home Assistant voice assistant.
  *
- * Setup: Extensions → Apps Script, paste this, set SECRET below, then
- * Deploy → New deployment → Web app → Execute as: Me, Who has access: Anyone.
+ * Setup: Extensions → Apps Script, paste this, set the secret (preferably as a
+ * Script Property named SECRET — Project Settings → Script properties — so pasting
+ * a newer version of this file never resets it; or edit the SECRET line below),
+ * then Deploy → New deployment → Web app → Execute as: Me, Who has access: Anyone.
  * Copy the /exec URL into the app (Settings → Google Sheets sync) with the same
- * SECRET.
+ * secret.
  */
 
-var SECRET = "CHANGE_ME"; // must match the app's "Shared secret"
+var SECRET = "CHANGE_ME"; // fallback when no SECRET script property is set; must match the app's "Shared secret"
+
+// The Script Property wins, so updating this file can't silently reset the secret.
+function currentSecret() {
+  var fromProps = PropertiesService.getScriptProperties().getProperty("SECRET");
+  return fromProps || SECRET;
+}
 
 // Compare SHA-256 digests instead of the raw strings: `!==` short-circuits on the
 // first differing character (a timing side-channel), and hashing also equalizes
 // length. Overkill for a hobby endpoint, but it costs nothing.
 function secretOk(provided) {
+  var expected = currentSecret();
+  // The published placeholder is never a valid secret: an unchanged copy of this
+  // file would otherwise open the whole spreadsheet to anyone with the /exec URL.
+  if (!expected || expected === "CHANGE_ME") return false;
   if (typeof provided !== "string" || !provided) return false;
   var a = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, provided, Utilities.Charset.UTF_8);
-  var b = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, SECRET, Utilities.Charset.UTF_8);
+  var b = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, expected, Utilities.Charset.UTF_8);
   var diff = 0;
   for (var i = 0; i < a.length; i++) diff |= a[i] ^ b[i];
   return diff === 0;
@@ -34,17 +46,32 @@ function doGet() {
 function doPost(e) {
   try {
     var body = JSON.parse(e.postData.contents);
+    var configured = currentSecret();
+    if (!configured || configured === "CHANGE_ME")
+      return json({ ok: false, error: "Set a secret in the script first (Script property SECRET, or the SECRET line)" });
     if (!secretOk(body.secret)) return json({ ok: false, error: "bad secret" });
     if (body.ping) return json({ ok: true, ping: true });
 
     // Pull: return every tab's cells (as displayed) so the app can import
     // workouts that exist in the sheet but not yet on the device.
+    // Read under the same lock as writes, so a pull can't see a half-written session
+    // (which imports as a partial copy and later duplicates).
     if (body.action === "pull") {
-      var out = {};
-      SpreadsheetApp.getActiveSpreadsheet().getSheets().forEach(function (sh) {
-        out[sh.getName()] = sh.getDataRange().getDisplayValues();
-      });
-      return json({ ok: true, tabs: out });
+      var pullLock = LockService.getScriptLock();
+      try {
+        pullLock.waitLock(20000);
+      } catch (pullLockErr) {
+        return json({ ok: false, error: "Sheet is busy — try again in a moment." });
+      }
+      try {
+        var out = {};
+        SpreadsheetApp.getActiveSpreadsheet().getSheets().forEach(function (sh) {
+          out[sh.getName()] = sh.getDataRange().getDisplayValues();
+        });
+        return json({ ok: true, tabs: out });
+      } finally {
+        pullLock.releaseLock();
+      }
     }
 
     // Read-only summaries for external consumers (e.g. the Home Assistant
@@ -75,12 +102,26 @@ function doPost(e) {
     var data = sheet.getDataRange().getValues();
     var dayName = String(body.dayName).trim().toLowerCase();
 
-    // Find the day-block header row (col0 == dayName).
+    // Find the day-block header row (col0 == dayName). An exercise row can carry the
+    // same label (a custom "Running" session vs a "Running" row inside another block),
+    // so prefer a header that already has dates; failing that (a fresh year tab), only
+    // a row that STARTS a block — the first row or one after a blank spacer — counts.
     var headerRow = -1;
+    var isDay = function (row) {
+      return String(row[0]).trim().toLowerCase() === dayName;
+    };
     for (var r = 0; r < data.length; r++) {
-      if (String(data[r][0]).trim().toLowerCase() === dayName) {
+      if (isDay(data[r]) && rowHasDate(data[r])) {
         headerRow = r;
         break;
+      }
+    }
+    if (headerRow < 0) {
+      for (var r2 = 0; r2 < data.length; r2++) {
+        if (isDay(data[r2]) && (r2 === 0 || String(data[r2 - 1][0]).trim() === "")) {
+          headerRow = r2;
+          break;
+        }
       }
     }
     // No matching block: Alternative/free-form sessions get a fresh named block
@@ -98,7 +139,7 @@ function doPost(e) {
     var want = normDate(body.date);
     var col = -1;
     for (var c0 = 1; c0 < disp[0].length; c0++) {
-      if (want && normDate(disp[0][c0]) === want && columnCompatible(disp, data, headerRow, c0, body.exercises)) {
+      if (want && normDate(disp[0][c0]) === want && columnCompatible(disp, data, headerRow, c0, body.exercises, body)) {
         col = c0;
         break;
       }
@@ -266,7 +307,7 @@ function metaKind(label) {
 // Upsert bodyweight-by-year into a dedicated "Bodyweight" tab (Year | Kg).
 function writeBodyweight(body) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var name = body.tab || "Bodyweight";
+  var name = "Bodyweight"; // fixed — never a caller-chosen tab
   var bw = ss.getSheetByName(name);
   if (!bw) {
     bw = ss.insertSheet(name);
@@ -279,26 +320,30 @@ function writeBodyweight(body) {
     if (y) rowByYear[y] = r + 1; // 1-based sheet row
   }
   var entries = body.entries || [];
+  var count = 0;
   for (var i = 0; i < entries.length; i++) {
+    // Only a 4-digit year and a sane weight — nothing else reaches a cell (no formulas).
     var year = String(entries[i].year);
     var kg = Number(entries[i].kg);
+    if (!/^\d{4}$/.test(year) || !(kg > 0 && kg < 500)) continue;
     if (rowByYear[year]) {
       bw.getRange(rowByYear[year], 2).setValue(kg);
     } else {
       var nr = bw.getLastRow() + 1;
-      bw.getRange(nr, 1).setValue(entries[i].year);
+      bw.getRange(nr, 1).setValue(Number(year));
       bw.getRange(nr, 2).setValue(kg);
       rowByYear[year] = nr;
     }
+    count++;
   }
-  return json({ ok: true, bodyweight: true, count: entries.length });
+  return json({ ok: true, bodyweight: true, count: count });
 }
 
 // Upsert the user's profile (age / sex) into a dedicated "Profile" tab (Key | Value),
 // so a reinstall can pull it back like bodyweight. Mirrors writeBodyweight.
 function writeProfile(body) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var name = body.tab || "Profile";
+  var name = "Profile"; // fixed — never a caller-chosen tab
   var sh = ss.getSheetByName(name);
   if (!sh) {
     sh = ss.insertSheet(name);
@@ -311,8 +356,11 @@ function writeProfile(body) {
     if (k) rowByKey[k] = r + 1; // 1-based sheet row
   }
   var entries = [];
-  if (body.age != null && body.age !== "") entries.push(["Age", body.age]);
-  if (body.sex) entries.push(["Sex", body.sex]);
+  // Validated values only (a number, a known word) — nothing that could run as a formula.
+  var age = Number(body.age);
+  if (body.age != null && body.age !== "" && age > 0 && age < 130) entries.push(["Age", age]);
+  var sex = String(body.sex || "").toLowerCase();
+  if (sex === "male" || sex === "female") entries.push(["Sex", sex]);
   for (var i = 0; i < entries.length; i++) {
     var label = entries[i][0];
     var key = label.toLowerCase();
@@ -667,14 +715,29 @@ function normDate(v) {
   return +m[1] + "." + +m[2] + "." + String(m[3]).slice(-2);
 }
 
+// Session details that must also match before a same-date column is reused: two
+// same-day cardio sessions have no exercise cells to tell them apart, so the second
+// one used to overwrite the first's note/distance/route. (Time-like rows are left
+// out — Sheets may reformat them, which would break a genuine retry.)
+var COMPARED_META = { Note: "note", Mood: "mood", "Avg HR": "hr", Distance: "distance", Route: "route" };
+
 // A same-date column is "ours to reuse" (a retry) only when every exercise cell
-// we'd write into it is currently empty or already holds exactly our value.
-function columnCompatible(disp, data, headerRow, col, exercises) {
+// we'd write into it — and every compared session detail above — is currently
+// empty or already holds exactly our value.
+function columnCompatible(disp, data, headerRow, col, exercises, body) {
   for (var r = 1; r < disp.length; r++) {
     var absRow = headerRow + r;
     if (absRow >= data.length || rowHasDate(data[absRow])) break; // next block
     var label = String(data[absRow][0]).trim();
-    if (!label || metaKind(label)) continue;
+    if (!label) continue;
+    var kind = metaKind(label);
+    if (kind) {
+      var field = COMPARED_META[kind];
+      var incoming = field && body ? body[field] : null;
+      var existing = String(disp[r][col] == null ? "" : disp[r][col]).trim();
+      if (incoming != null && incoming !== "" && existing !== "" && existing !== String(incoming).trim()) return false;
+      continue;
+    }
     for (var i = 0; i < exercises.length; i++) {
       if (matchName(label, exercises[i].name)) {
         var cur = String(disp[r][col] == null ? "" : disp[r][col]).trim();
