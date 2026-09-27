@@ -405,10 +405,14 @@ export function useActiveWorkout() {
       window.clearTimeout(saveTimer.current); // same ghost-draft guard as cancel()
       // Manual finish → wall-clock. Auto-end → up to the last logged set (opts.endedAt),
       // clamped so it can never go negative or below a couple of minutes.
+      // A clock that never ran (a cardio-only session never edits a set, which is what
+      // starts it) falls back to wall-clock since start instead of saving 0 s.
       const durationSec =
         opts?.endedAt != null
           ? Math.max(60, Math.floor((opts.endedAt - draft.startedAt) / 1000))
-          : Math.floor(wElapsedMs(draft) / 1000);
+          : draft.editId == null && !draft.wRunning && !draft.wAccumMs
+            ? Math.floor((Date.now() - draft.startedAt) / 1000)
+            : Math.floor(wElapsedMs(draft) / 1000);
       // Bank a break still running at finish, then keep the session's breaks (if any),
       // plus any auto-detected rest breaks the caller passed (Today's movement auto-pause).
       const lastBreak = closeCurrentBreak(draft);

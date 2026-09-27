@@ -262,23 +262,34 @@ export function Today({
   // Android hardware back: on the Today tab with a workout in progress, confirm
   // discarding it and returning to the picker (instead of exiting the app).
   // Registered ONCE (reads live state via a ref) so it doesn't re-bind per edit.
-  const backRef = useRef<{ activeTab: string; draft: typeof draft; cancel: typeof cancel; goToday: () => void }>({
+  // Back closes an open sheet / finish prompt / template editor first — the gesture
+  // everyone expects — instead of jumping to "Discard this workout?" or exiting.
+  const closeOverlay = () => {
+    if (sheet) setSheet(null);
+    else if (finishAsk) setFinishAsk(false);
+    else if (editTpl) setEditTpl(null);
+    else return false;
+    return true;
+  };
+  const backRef = useRef<{ activeTab: string; draft: typeof draft; cancel: typeof cancel; goToday: () => void; closeOverlay: () => boolean }>({
     activeTab,
     draft,
     cancel,
     goToday,
+    closeOverlay,
   });
-  backRef.current = { activeTab, draft, cancel, goToday };
+  backRef.current = { activeTab, draft, cancel, goToday, closeOverlay };
   useEffect(() => {
     if (!Capacitor.isNativePlatform()) return;
     let cancelled = false;
     let handle: PluginListenerHandle | undefined;
     CapacitorApp.addListener("backButton", () => {
-      const { activeTab: t, draft: d, cancel: c, goToday: g } = backRef.current;
+      const { activeTab: t, draft: d, cancel: c, goToday: g, closeOverlay: close } = backRef.current;
       if (t !== "today") {
         g(); // other tabs → land on Today first, don't exit
         return;
       }
+      if (close()) return;
       if (d) {
         const msg = d.editId != null ? "Discard your changes and go back?" : "Discard this workout and go back to selection?";
         if (confirm(msg)) c();
@@ -787,6 +798,7 @@ export function Today({
     const at = now + restSecFor(ex) * 1000;
     scheduleBreakNotification(at); // native: fires even if app is backgrounded
     playBreakStart(); // audible confirmation (matters for volume/headset-button starts)
+    startWorkoutTimer(); // resting means the session is underway (no-op once running or paused)
     update((d) => {
       // If the break button restarts an already-running break, bank the old one first.
       const prior = closeCurrentBreak(d);
@@ -847,7 +859,13 @@ export function Today({
         },
       ],
     }));
-  const removeExercise = (i: number) => update((d) => ({ ...d, exercises: d.exercises.filter((_, idx) => idx !== i) }));
+  const removeExercise = (i: number) => {
+    // 🗑 is small and sits next to ↑/↓ — a slip must not silently delete logged sets.
+    const ex = draft?.exercises[i];
+    const logged = ex && (!!ex.note || ex.sets.some((s) => s.done || !!s.note || s.weight != null || s.seconds != null || s.distanceM != null));
+    if (logged && !confirm(`Remove ${ex.name.trim() || "this exercise"} and everything logged on it?`)) return;
+    update((d) => ({ ...d, exercises: d.exercises.filter((_, idx) => idx !== i) }));
+  };
   // The current exercise = the first one with a set still to log — highlighted + given
   // a "what's next" cue so you can see at a glance where you are in the session.
   const activeExIdx = draft?.exercises.findIndex((ex) => !ex.skipped && ex.sets.some((s) => !s.done)) ?? -1;
@@ -999,13 +1017,20 @@ export function Today({
           <div className="gps-toggle-row">
             <button
               className={`mini ${draft.trackGps ? "active" : ""}`}
-              onClick={() => update((d) => ({ ...d, trackGps: !d.trackGps }))}
+              onClick={() => {
+                // Starting a run starts the workout clock (a cardio-only session never edits a set).
+                if (!draft.trackGps) startWorkoutTimer();
+                update((d) => ({ ...d, trackGps: !d.trackGps }));
+              }}
             >
               {draft.trackGps ? "◉ Tracking GPS route" : "○ Track GPS route"}
             </button>
             <button
               className={`mini ${draft.treadmill ? "active" : ""}`}
-              onClick={() => update((d) => ({ ...d, treadmill: !d.treadmill }))}
+              onClick={() => {
+                if (!draft.treadmill) startWorkoutTimer();
+                update((d) => ({ ...d, treadmill: !d.treadmill }));
+              }}
             >
               {draft.treadmill ? "◉ Treadmill" : "🏃 Treadmill"}
             </button>

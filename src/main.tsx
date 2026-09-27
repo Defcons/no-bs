@@ -30,6 +30,10 @@ if (Capacitor.isNativePlatform()) {
     .catch(() => {});
 }
 
+// Ask the browser not to evict our IndexedDB under storage pressure — it's the only
+// copy of the user's history unless they export. Best effort; it may say no.
+void navigator.storage?.persist?.().catch(() => {});
+
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <ErrorBoundary name="NoBS">

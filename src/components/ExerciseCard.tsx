@@ -164,7 +164,11 @@ export function ExerciseCard({ exercise, step, history, onChange, onSetDone, bes
     onChange({ ...exercise, sets: [...exercise.sets, { id: uid(), weight: last?.weight ?? null, reps: defReps, done: false }] });
   };
   const removeSet = () => {
-    if (exercise.sets.length > 1) onChange({ ...exercise, sets: exercise.sets.slice(0, -1) });
+    if (exercise.sets.length <= 1) return;
+    // The − sits right next to the set count; don't drop a finished set on a slip.
+    const last = exercise.sets[exercise.sets.length - 1];
+    if ((last.done || last.note) && !confirm("Remove the last set? It's already logged.")) return;
+    onChange({ ...exercise, sets: exercise.sets.slice(0, -1) });
   };
 
   return (
