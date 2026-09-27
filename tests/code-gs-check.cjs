@@ -125,5 +125,20 @@ const check = (name, cond, detail = "") => {
   check("with no meta rows, the new row still stays inside its block (above the spacer)", labels.indexOf("Cable fly") === 2 && labels[3] === "" && labels[4] === "Pull", JSON.stringify(labels));
 }
 
+// --- two different same-day sessions never share a column (Legs 25.09, 2026-09-27) ---
+{
+  const s = makeSheet("2026", [["Legs & Shoulder", "25.09.26"], ["3x5 Squat", ""], ["Time", "0:02:16"], ["Time of day", "10:08"]]);
+  const later = runDoPost([s], { year: 2026, dayName: "Legs & Shoulder", date: "25.09.26", id: "id-2026-09-25T09:54:57.214Z", time: "0:45:05", timeOfDay: "11:54",
+    exercises: [{ name: "Squat", cell: "100-105-110" }] });
+  const row = (label) => s.grid.find((r) => r[0] === label);
+  check("a later same-day session gets its own column", later.ok && later.column === 3, JSON.stringify(later));
+  check("…and the earlier session's time is not overwritten", row("Time")[1] === "0:02:16" && row("Time of day")[1] === "10:08", JSON.stringify(s.grid));
+  const retry = runDoPost([s], { year: 2026, dayName: "Legs & Shoulder", date: "25.09.26", time: "0:02:16", timeOfDay: "10:08", exercises: [] });
+  check("a retry of the earlier (pre-Id) session still reuses its column", retry.ok && retry.column === 2, JSON.stringify(retry));
+  const s2 = makeSheet("2026", [["Push", "01.10.26"], ["3x5 Bench", ""], ["Time of day", "18:00"], ["Id", "id-2026-10-01T16:00:00.000Z"]]);
+  const other = runDoPost([s2], { year: 2026, dayName: "Push", date: "01.10.26", id: "id-2026-10-01T16:00:05.000Z", timeOfDay: "18:00", exercises: [{ name: "Bench", cell: "80" }] });
+  check("a column carrying another session's Id is never reused", other.ok && other.column === 3, JSON.stringify(other));
+}
+
 console.log(fails ? `${fails} FAILURE(S)` : "ALL PASS");
 process.exitCode = fails ? 1 : 0;

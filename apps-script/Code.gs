@@ -813,6 +813,12 @@ function normDate(v) {
 // out — Sheets may reformat them, which would break a genuine retry.)
 var COMPARED_META = { Note: "note", Mood: "mood", "Avg HR": "hr", Distance: "distance", Route: "route" };
 
+// "9:05" / "09:05" / "09:05:00" → "9:05" (the start-time comparison in columnCompatible).
+function hhmm(v) {
+  var m = String(v).trim().match(/^(\d{1,2}):(\d{2})/);
+  return m ? +m[1] + ":" + m[2] : String(v).trim();
+}
+
 // A same-date column is "ours to reuse" (a retry) only when every exercise cell
 // we'd write into it — and every compared session detail above — is currently
 // empty or already holds exactly our value.
@@ -824,9 +830,24 @@ function columnCompatible(disp, data, headerRow, col, exercises, body) {
     if (!label) continue;
     var kind = metaKind(label);
     if (kind) {
+      var existing = String(disp[r][col] == null ? "" : disp[r][col]).trim();
+      // A column that already carries ANOTHER session's Id is never ours.
+      if (kind === "Id") {
+        var own = body && body.id;
+        if (existing !== "" && (!own || (existing !== own && existing !== "deleted " + own))) return false;
+        continue;
+      }
+      // Different start times = different sessions (compared as H:MM, since Sheets may
+      // show "10:08" as "10:08:00"). Before this, a same-day session with no exercise
+      // cells in common was merged into another session's column and overwrote its
+      // Time / Time of day (Legs 25.09, 2026-09-27).
+      if (kind === "Time of day") {
+        var inTod = body && body.timeOfDay;
+        if (inTod && existing !== "" && hhmm(existing) !== hhmm(inTod)) return false;
+        continue;
+      }
       var field = COMPARED_META[kind];
       var incoming = field && body ? body[field] : null;
-      var existing = String(disp[r][col] == null ? "" : disp[r][col]).trim();
       if (incoming != null && incoming !== "" && existing !== "" && existing !== String(incoming).trim()) return false;
       continue;
     }
