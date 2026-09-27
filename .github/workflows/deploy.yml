@@ -6,13 +6,33 @@ on:
 
 concurrency:
   group: deploy
-  cancel-in-progress: true
+  # Queue, don't cancel: cancelling mid-`up -d` can leave the old container removed
+  # and the new one not started.
+  cancel-in-progress: false
 
-# The job only uses its own secrets; the GitHub token gets no permissions.
+# Jobs get no GitHub-token permissions unless they ask (only `test` reads the repo).
 permissions: {}
 
 jobs:
+  # Gate: nothing reaches the box unless lint, the regression checks and the full
+  # build (tsc -b + vite) pass on a clean checkout.
+  test:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx oxlint src tests
+      - run: npx tsx tests/audit-check.ts
+      - run: npm run build
+
   deploy:
+    needs: test
     runs-on: ubuntu-latest
     steps:
       # Actions pinned to full commit SHAs (they receive the deploy secrets); bump deliberately.
@@ -48,4 +68,16 @@ jobs:
             echo "Building OTA bundle version $APP_VERSION"
             docker compose build --no-cache
             docker compose up -d --remove-orphans
-            echo "nobs deploy complete ($APP_VERSION)"
+            # Health check: the new container must serve THIS build's version.json, or the
+            # job fails instead of reporting green over a restart-looping container.
+            for i in $(seq 1 15); do
+              if docker compose exec -T nobs wget -qO- http://127.0.0.1/version.json 2>/dev/null | grep -q "+$APP_VERSION\""; then
+                echo "nobs deploy complete ($APP_VERSION)"
+                exit 0
+              fi
+              sleep 2
+            done
+            echo "Health check failed: version.json does not report $APP_VERSION"
+            docker compose ps
+            docker compose logs --tail 50 nobs
+            exit 1

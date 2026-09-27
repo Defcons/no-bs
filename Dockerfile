@@ -24,6 +24,8 @@ RUN apk add --no-cache zip \
 FROM nginx:alpine
 RUN rm -rf /usr/share/nginx/html/*
 COPY nginx.conf /etc/nginx/conf.d/default.conf
+# Fail the build (old container keeps serving) instead of shipping a config nginx rejects.
+RUN nginx -t
 COPY --from=build /app/dist /usr/share/nginx/html
 COPY --from=build /app/bundle-*.zip /app/version.json /usr/share/nginx/html/
 EXPOSE 80
