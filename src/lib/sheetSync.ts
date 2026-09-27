@@ -222,13 +222,15 @@ async function post(url: string, payload: unknown): Promise<SyncResult> {
       headers: { "Content-Type": "text/plain;charset=utf-8" },
       data: body,
       connectTimeout: 15000, // don't hang Finish forever on a black-hole network
-      readTimeout: 20000,
+      // The script can take 20 s+ on a busy day (cold start, lock wait, cell-by-cell
+      // writes); timing out earlier recorded a failure for a column it DID write.
+      readTimeout: 45000,
     });
     if (res.status >= 400) return { ok: false, error: `HTTP ${res.status}` };
     return (typeof res.data === "string" ? JSON.parse(res.data) : res.data) as SyncResult;
   }
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 12000); // don't hang Finish on a dead network
+  const timer = setTimeout(() => controller.abort(), 30000); // don't hang Finish on a dead network (a slow script run can take 20 s+)
   try {
     const res = await fetch(url, {
       method: "POST",

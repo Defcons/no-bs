@@ -15,7 +15,7 @@ import { isExtendedBuild } from "./lib/buildInfo";
 import { collectSettings, fullBwHistory } from "./lib/workbook";
 import { setKeepAwake } from "./lib/pip";
 import { saveFile } from "./lib/download";
-import { syncBodyweight, syncProfile } from "./lib/sheetSync";
+import { syncBodyweight, syncPending, syncProfile } from "./lib/sheetSync";
 import type { BwEntry, Sex } from "./lib/standards";
 import { trainingDue } from "./lib/stats";
 import { useSetting } from "./lib/useSetting";
@@ -354,6 +354,32 @@ export default function App() {
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
     await saveFile(`gym-backup-${localDay(new Date().toISOString())}.json`, blob);
   };
+
+  // Workouts that didn't reach the sheet at finish (weak gym signal, or a slow script run
+  // that outlasted the request while it still wrote the column) are retried by themselves
+  // — at launch, when the network comes back, and on returning to the app (at most every
+  // 10 min) — instead of waiting for a manual "Sync now". Retries are safe: the sheet
+  // column is matched by the session Id and updated in place.
+  useEffect(() => {
+    if (!ready) return;
+    let last = 0;
+    const retry = (force = false) => {
+      if (!force && Date.now() - last < 10 * 60 * 1000) return;
+      last = Date.now();
+      void syncPending().catch(() => {});
+    };
+    retry(true);
+    const onOnline = () => retry(true);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") retry();
+    };
+    window.addEventListener("online", onOnline);
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      window.removeEventListener("online", onOnline);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [ready]);
 
   const onReset = async () => {
     // Nothing is re-imported afterwards (only the starter templates come back), so spell
