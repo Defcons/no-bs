@@ -6,6 +6,7 @@ import type { DayTemplate, ExercisePerf, SetEntry, WorkoutBreak } from "../types
 import { uid } from "./uid";
 import { resolveExercise } from "./exercises";
 import { mmss } from "./format";
+import { sessionKeys } from "./sheetSync";
 
 export type Draft = {
   startedAt: number; // epoch ms (session start, for the date)
@@ -486,7 +487,11 @@ export function useActiveWorkout() {
       try {
         if (editing) {
           // Update the existing workout in place; keep its original date/source/synced.
+          // The sheet (if it was pushed or imported) still holds the PRE-edit version —
+          // remember its keys so "Import from sheet" doesn't add it back as a new session.
+          const prev = await db.workouts.get(draft.editId!);
           await db.workouts.update(draft.editId!, {
+            ...(prev ? { sheetKeys: [...new Set([...(prev.sheetKeys ?? []), ...sessionKeys(prev)])] } : {}),
             dayName: row.dayName,
             exercises: row.exercises,
             note: row.note,

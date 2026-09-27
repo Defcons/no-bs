@@ -4,7 +4,8 @@
 // Plus the 2026-09-27 audit fixes: GPS pace counts only in-run rest; pace records
 // need ≥ 1 km at a plausible pace.
 // Run anytime: npx tsx tests/audit-check.ts
-import { sessionKey, sessionKeys } from "../src/lib/sheetSync";
+import { cellFor, pushedKey, sessionKey, sessionKeys } from "../src/lib/sheetSync";
+import { parseSheet } from "../src/lib/sheet";
 import { epley, liftRecords, summarize, weekNumbersForLast } from "../src/lib/stats";
 import { resolveExercise } from "../src/lib/exercises";
 import { breakSecInTrack, breakSecWithin, computeRun, withMovingPace, type RunStats } from "../src/lib/runStats";
@@ -212,6 +213,36 @@ console.log("— restore skips records the UI would crash on (2026-09-27 UI-2 / 
   check("a template without an exercise list is rejected", cleanTemplate({ name: "X", order: 0 }) == null);
   check("a normal template passes", cleanTemplate({ name: "Push", order: 1, exercises: [{ name: "Bench", scheme: { sets: 3, reps: 5 } }] }) != null);
   check("a formula as bodyweight year is rejected", !validBw({ year: "=HYPERLINK(1)", kg: 80 }) && validBw({ year: 2025, kg: 80 }));
+}
+
+console.log("— the sheet copy's key is remembered at push (2026-09-27 DAT-2) —");
+{
+  // Build the column exactly as the real script writes it, parse it back with the
+  // app's own sheet parser, and check the key saved at push matches the import's key.
+  const { runDoPost, makeSheet } = (await import("./code-gs-harness.cjs")).default;
+  const row = {
+    dayName: "Push",
+    date: "2026-09-27T21:30:00.000Z", // late evening UTC: the local day may differ
+    durationSec: 3725,
+    exercises: [
+      { name: "Bench Press", scheme: { sets: 3, reps: 5 }, sets: [{ weight: 80, reps: 5 }, { weight: 80, reps: 5 }] },
+      { name: "Cable Fly", scheme: { sets: 3, reps: 12 }, sets: [{ weight: 20, reps: 12 }] }, // no row in the block
+    ],
+  };
+  const day = localDay(row.date);
+  const [y, m, d] = day.split("-");
+  const sheet = makeSheet(y, [["Push", "01.09.26"], ["3x5 Bench Press", "75-75-75"], ["Time", "1:00:00"]]);
+  const res = runDoPost([sheet], {
+    year: y,
+    dayName: row.dayName,
+    date: `${d}.${m}.${y.slice(2)}`,
+    time: "1:02:05",
+    exercises: row.exercises.map((e) => ({ name: e.name, cell: cellFor(e as never) })),
+  });
+  check("the script skips the exercise it has no row for", res.ok && res.skipped?.[0] === "Cable Fly", JSON.stringify(res));
+  const parsed = parseSheet(sheet.grid.map((r: unknown[]) => r.map((c) => String(c ?? ""))), y).find((w) => w.date === day);
+  check("the partial column's import key == the key remembered at push", !!parsed && sessionKey(parsed) === pushedKey(row, res.written), `${parsed && sessionKey(parsed)} vs ${pushedKey(row, res.written)}`);
+  check("…and differs from the full local row's key (why it used to duplicate)", sessionKey(row) !== pushedKey(row, res.written));
 }
 
 console.log("— restore keeps your own templates + custom exercises (2026-09-27 DAT-6 / DAT-7) —");

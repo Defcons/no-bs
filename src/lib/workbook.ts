@@ -37,6 +37,7 @@ export const BACKUP_SETTINGS = [
   "autoDetectBreaks", "breakNotify", "haptics", "includeAltInWeekly", "paceExcludesBreaks",
   "lowHrWarn", "lowHrWarnBpm", "lowHrMode", "lowHrRelDelta", "lowHrSound",
   "strideM", "strideWalkM", "strideRunM",
+  "deletedSheetKeys", // deleted workouts stay deleted when a new phone imports from the sheet
   // NOT mapMatchUrl: a shared backup must not be able to point route snapping (which
   // uploads GPS tracks) at someone else's server.
 ] as const;
@@ -110,6 +111,7 @@ const SETTING_CHECKS: Record<(typeof BACKUP_SETTINGS)[number], Check> = {
   strideM: stride,
   strideWalkM: stride,
   strideRunM: stride,
+  deletedSheetKeys: (v) => Array.isArray(v) && v.every((k) => typeof k === "string"),
 };
 
 // Restore preferences — allowlist-filtered on the way IN too, so a hand-edited or

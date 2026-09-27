@@ -24,6 +24,7 @@ export interface StoredWorkout {
   breaks?: WorkoutBreak[]; // rest periods taken during the session (break stats + map markers)
   source: string; // "app" for new sessions, "sheet:2026" etc. for imports
   synced?: boolean; // written back to the Google Sheet
+  sheetKeys?: string[]; // dedup keys of this session's copy in the sheet (as pushed / before local edits) — see sheetSync.rememberSheetKeys
   custom?: boolean; // logged as a free-form "Alternative" session (not a template)
 }
 

@@ -4,6 +4,7 @@
 import { Suspense, lazy, useEffect, useMemo, useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db, type StoredWorkout } from "../db";
+import { tombstoneForSheet } from "../lib/sheetSync";
 import { clockTime, daysAgoLabel, hhmmss, localDay, mmss, niceDate } from "../lib/format";
 import { breakSec, breakSecInTrack, computeRun, fmtDist, fmtPace, withMovingPace } from "../lib/runStats";
 import { type MoveKind, type MoveSegment, segmentTotals, segmentsFromCadence, segmentsFromTrack } from "../lib/segments";
@@ -456,9 +457,10 @@ function LogRow({
             </button>
             <button
               className="mini danger"
-              onClick={() => {
-                if (confirm(`Delete this ${w.dayName} workout from ${niceDate(w.date)}? This can't be undone.`))
-                  db.workouts.delete(w.id!);
+              onClick={async () => {
+                if (!confirm(`Delete this ${w.dayName} workout from ${niceDate(w.date)}? This can't be undone.`)) return;
+                await tombstoneForSheet(w); // its sheet copy mustn't re-import on the next "Import from sheet"
+                await db.workouts.delete(w.id!);
               }}
             >
               🗑 Delete

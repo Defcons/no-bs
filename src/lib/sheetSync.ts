@@ -95,6 +95,39 @@ export function sessionKeys(w: KeyableWorkout): string[] {
   return utc !== local ? [buildKey(w, local), buildKey(w, utc)] : [buildKey(w, local)];
 }
 
+// ── Keys the SHEET copy is known by ────────────────────────────────────────────
+// The dedup key is content-based, so a session whose local copy stops matching its
+// sheet column used to come back as a duplicate on "Import from sheet": edited after
+// the push, pushed only partly (an exercise the block has no row for), or pushed in
+// another time zone. Each row therefore remembers the keys its sheet copy carries —
+// added at every push (from what was actually WRITTEN, on the day written into the
+// header) and before every local edit — and a deleted row leaves its keys behind as
+// tombstones, so the import skips all of them.
+const DELETED_KEYS = "deletedSheetKeys";
+const MAX_TOMBSTONES = 2000;
+
+// The key the sheet column will produce on import: only the exercises the script
+// wrote, on the local day the header got.
+export function pushedKey(row: KeyableWorkout, written: string[] | null): string {
+  const exercises = written ? row.exercises.filter((e) => written.includes(e.name)) : row.exercises;
+  const day = localDay(row.date);
+  return buildKey({ ...row, date: day, exercises }, day);
+}
+
+export async function rememberSheetKeys(id: number, keys: string[]): Promise<void> {
+  const row = await db.workouts.get(id);
+  if (!row) return;
+  const merged = [...new Set([...(row.sheetKeys ?? []), ...keys])];
+  if (merged.length !== (row.sheetKeys ?? []).length) await db.workouts.update(id, { sheetKeys: merged });
+}
+
+// Call BEFORE deleting a workout: its sheet copy must not re-import as a "new" session.
+export async function tombstoneForSheet(w: StoredWorkout): Promise<void> {
+  const keys = [...sessionKeys(w), ...(w.sheetKeys ?? [])];
+  const cur = await getSetting<string[]>(DELETED_KEYS, []);
+  await setSetting(DELETED_KEYS, [...new Set([...cur, ...keys])].slice(-MAX_TOMBSTONES));
+}
+
 // ISO date -> "dd.mm.yy" (the sheet's header format). LOCAL day — an evening
 // session must appear in the sheet under the day the user actually trained.
 function fmtDate(iso: string): string {
@@ -251,6 +284,8 @@ async function syncWorkoutNow(row: StoredWorkout): Promise<SyncResult | null> {
     const wroteExercises = (result.written?.length ?? 0) > 0;
     const nothingToWrite = payload.exercises.length === 0;
     const skipped = result.skipped ?? [];
+    // Whatever landed in the sheet (even a partial write) is now a column this row owns.
+    if (result.ok && row.id != null) await rememberSheetKeys(row.id, [pushedKey(row, result.written ?? null)]);
     if (result.ok && (wroteExercises || nothingToWrite) && skipped.length === 0 && row.id != null) {
       await db.workouts.update(row.id, { synced: true });
     }
@@ -313,7 +348,13 @@ export async function importFromSheet(): Promise<{ added: number; bwYears?: numb
       .filter(([name]) => name !== BODYWEIGHT_TAB)
       .flatMap(([name, rows]) => parseSheet(rows, name));
     const existing = await db.workouts.toArray();
-    const have = new Set(existing.flatMap(sessionKeys)); // incl. legacy UTC-day keys
+    // Current content keys (incl. legacy UTC-day keys) + each row's remembered sheet
+    // keys + tombstones of deleted rows — see pushedKey/rememberSheetKeys above.
+    const have = new Set([
+      ...existing.flatMap(sessionKeys),
+      ...existing.flatMap((w) => w.sheetKeys ?? []),
+      ...(await getSetting<string[]>(DELETED_KEYS, [])),
+    ]);
     const cutoff = localDay(new Date(Date.now() + 2 * 86400000).toISOString()); // drop future typos
 
     const toAdd: StoredWorkout[] = [];
