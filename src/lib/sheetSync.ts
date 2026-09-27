@@ -9,7 +9,7 @@ import { Capacitor, CapacitorHttp } from "@capacitor/core";
 import { db, getSetting, setSetting, type StoredWorkout } from "../db";
 import { localDay } from "./format";
 import { parseBodyweightTab, parseSheet } from "./sheet";
-import { breakSec, computeRun, fmtDist, fmtPace, withMovingPace } from "./runStats";
+import { breakSec, breakSecInTrack, computeRun, fmtDist, fmtPace, withMovingPace } from "./runStats";
 import { strideFor } from "./pedometer";
 import { downsample, encodePolyline } from "./polyline";
 import type { BwEntry } from "./standards";
@@ -211,7 +211,7 @@ async function syncWorkoutNow(row: StoredWorkout): Promise<SyncResult | null> {
   // Pace/speed honour the same "exclude rest breaks" setting the app's tiles + records use.
   const exclBreaks = await getSetting<boolean>("paceExcludesBreaks", true);
   const rawRun = computeRun(row.track); // GPS-tracked cardio → distance/pace/speed/route
-  const run = rawRun ? withMovingPace(rawRun, breakSec(row.breaks), exclBreaks) : null;
+  const run = rawRun ? withMovingPace(rawRun, breakSecInTrack(row.breaks, row.track), exclBreaks) : null;
   // Treadmill sessions carry no GPS track (run == null) — derive distance from the entered
   // machine distance (ground truth) or steps × stride, on the same moving-pace basis, so a
   // treadmill run still lands distance/pace/speed in the sheet.

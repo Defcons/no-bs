@@ -202,6 +202,7 @@ export function Records({
                 </div>
                 <p className="muted tiny">
                   Absolute tiers are fixed pace targets (same for everyone); medals rank your runs against your own best.
+                  Only runs of 1 km or more count toward pace.
                 </p>
               </div>
             </div>

@@ -2,7 +2,8 @@
 //   1. ABSOLUTE pace tiers — fixed pace targets, the same for everyone.
 //   2. PERSONAL-BEST medals — each run rated against the user's own fastest.
 // A "run" is any saved workout that carries a GPS track (Alternative + Track GPS).
-import { breakSec, computeRun, withMovingPace, type RunStats } from "./runStats";
+import { breakSecInTrack, computeRun, withMovingPace, type RunStats } from "./runStats";
+import { MIN_PLAUSIBLE_PACE_SEC_PER_KM } from "./stats";
 import type { StoredWorkout } from "../db";
 
 export type RunSummary = { date: string; run: RunStats };
@@ -15,13 +16,20 @@ export function runsFrom(workouts: StoredWorkout[], exclBreaks = false): RunSumm
     .filter((w) => w.track && w.track.length > 1)
     .map((w) => {
       const raw = computeRun(w.track);
-      return { date: w.date, run: raw ? withMovingPace(raw, breakSec(w.breaks), exclBreaks) : null };
+      return { date: w.date, run: raw ? withMovingPace(raw, breakSecInTrack(w.breaks, w.track), exclBreaks) : null };
     })
     .filter((r): r is RunSummary => r.run != null && r.run.distanceM > 50)
     .sort((a, b) => (a.date < b.date ? 1 : -1));
 }
 
 export type RunPBs = { count: number; furthestM: number; fastestPace: number; longestSec: number; totalM: number };
+
+// Pace records (fastest pace, tier, medals) only count runs of at least 1 km at a
+// humanly possible pace: a 265 m sprint mustn't become the PB, rate you "Elite", and set
+// the bar every real run's medal is judged against. Distance/time records count every run.
+export const PACE_PB_MIN_M = 1000;
+const countsForPace = (run: RunStats) =>
+  run.distanceM >= PACE_PB_MIN_M && run.avgPaceSecPerKm >= MIN_PLAUSIBLE_PACE_SEC_PER_KM;
 
 export function runPBs(runs: RunSummary[]): RunPBs | null {
   if (!runs.length) return null;
@@ -33,7 +41,7 @@ export function runPBs(runs: RunSummary[]): RunPBs | null {
     furthestM = Math.max(furthestM, run.distanceM);
     longestSec = Math.max(longestSec, run.durationSec);
     totalM += run.distanceM;
-    if (run.avgPaceSecPerKm > 0) fastestPace = Math.min(fastestPace, run.avgPaceSecPerKm);
+    if (countsForPace(run)) fastestPace = Math.min(fastestPace, run.avgPaceSecPerKm);
   }
   return { count: runs.length, furthestM, fastestPace: Number.isFinite(fastestPace) ? fastestPace : 0, longestSec, totalM };
 }
@@ -79,8 +87,8 @@ export function paceMedals(runs: RunSummary[], bestPace: number): { gold: number
   let bronze = 0;
   if (bestPace > 0) {
     for (const { run } of runs) {
+      if (!countsForPace(run)) continue;
       const p = run.avgPaceSecPerKm;
-      if (!p) continue;
       if (p <= bestPace * 1.03) gold++;
       else if (p <= bestPace * 1.08) silver++;
       else if (p <= bestPace * 1.15) bronze++;

@@ -1,11 +1,14 @@
 // Regression checks for the 2026-08-19 audit-fix batches (1.58.0): sessionKey
 // sheet-shape normalization, epley r=1, 53-week streaks, the GPS spike gate, the
 // resolver CANON re-probe, cardio plausibility guards, and localDay (H1) dating.
-// Run anytime: npx tsx scripts/audit-check.ts
+// Plus the 2026-09-27 audit fixes: GPS pace counts only in-run rest; pace records
+// need ≥ 1 km at a plausible pace.
+// Run anytime: npx tsx tests/audit-check.ts
 import { sessionKey, sessionKeys } from "../src/lib/sheetSync";
 import { epley, liftRecords, summarize, weekNumbersForLast } from "../src/lib/stats";
 import { resolveExercise } from "../src/lib/exercises";
-import { computeRun } from "../src/lib/runStats";
+import { breakSecInTrack, breakSecWithin, computeRun, withMovingPace, type RunStats } from "../src/lib/runStats";
+import { paceMedals, runPBs } from "../src/lib/runStandards";
 import { localDay } from "../src/lib/format";
 import type { StoredWorkout } from "../src/db";
 
@@ -136,6 +139,37 @@ console.log("— weekNumbersForLast local-day labels —");
   const labels = weekNumbersForLast(12);
   check("12 labels", labels.length === 12);
   check("all in 1..53", labels.every((n) => n >= 1 && n <= 53), labels.join(","));
+}
+
+console.log("— GPS pace: only in-run rest counts (2026-09-27 LOG-1) —");
+{
+  const t0 = Date.parse("2026-09-27T10:00:00Z");
+  // A straight 20-min run of ~4.3 km that starts 45 min into a lifting session.
+  const runStart = t0 + 45 * 60_000;
+  const track = Array.from({ length: 121 }, (_, i) => ({ t: runStart + i * 10_000, lat: 59 + (i * 35.8) / 111_320, lng: 5.7, acc: 5 }));
+  const breaks = [
+    { at: t0 + 5 * 60_000, sec: 900 }, // lifting rests BEFORE the run
+    { at: t0 + 25 * 60_000, sec: 900 },
+    { at: runStart + 10 * 60_000, sec: 60 }, // a real stop mid-run
+  ];
+  check("only the in-run break is counted", Math.round(breakSecInTrack(breaks, track)) === 60, String(breakSecInTrack(breaks, track)));
+  check("a break straddling the run start is clipped", breakSecWithin([{ at: runStart - 30_000, sec: 60 }], runStart, runStart + 600_000) === 30);
+  const moving = withMovingPace(computeRun(track)!, breakSecInTrack(breaks, track), true);
+  check("mixed session keeps a sane moving pace", moving.avgPaceSecPerKm > 240 && moving.avgPaceSecPerKm < 330, String(moving.avgPaceSecPerKm));
+}
+
+console.log("— pace records need ≥ 1 km at a plausible pace (2026-09-27 LOG-5) —");
+{
+  const r = (distanceM: number, pace: number) => ({
+    date: "2026-09-01",
+    run: { distanceM, rawDistanceM: distanceM, durationSec: (pace * distanceM) / 1000, avgSpeedKmh: 0, avgPaceSecPerKm: pace, avgHr: null, maxHr: null, points: 10 } as RunStats,
+  });
+  const runs = [r(10_000, 330), r(265, 222), r(4300, 0.23)];
+  const pbs = runPBs(runs);
+  check("a 265 m sprint and a 0:00/km glitch don't set the pace PB", pbs?.fastestPace === 330, String(pbs?.fastestPace));
+  check("distance records still count every run", pbs?.count === 3 && pbs.furthestM === 10_000);
+  const m = paceMedals(runs, 330);
+  check("only runs that count for pace earn medals", m.gold === 1 && m.silver === 0 && m.bronze === 0, JSON.stringify(m));
 }
 
 process.exitCode = fails ? 1 : 0;

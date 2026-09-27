@@ -18,6 +18,24 @@ export function breakSec(breaks?: WorkoutBreak[]): number {
   return (breaks ?? []).reduce((a, b) => a + (b.sec || 0), 0);
 }
 
+// Rest that falls INSIDE [fromMs, toMs] — a GPS run's own time span. A session can hold
+// breaks from before the run started (lifting first; GPS is offered in any session with
+// a cardio exercise), and subtracting those from the run's duration turned a normal run
+// into a 0:00/km pace record.
+export function breakSecWithin(breaks: WorkoutBreak[] | undefined, fromMs: number, toMs: number): number {
+  return (breaks ?? []).reduce((a, b) => {
+    const end = b.at + (b.sec || 0) * 1000;
+    return a + Math.max(0, Math.min(end, toMs) - Math.max(b.at, fromMs)) / 1000;
+  }, 0);
+}
+
+// breakSecWithin over a track's first→last fix (0 without a usable track). Use this, not
+// breakSec, for anything paired with computeRun (whose duration is the track's span).
+export function breakSecInTrack(breaks: WorkoutBreak[] | undefined, track: TrackPoint[] | undefined): number {
+  if (!track || track.length < 2) return 0;
+  return breakSecWithin(breaks, track[0].t, track[track.length - 1].t);
+}
+
 // "Moving-time" pace/speed: recompute a run's pace + speed EXCLUDING rest-break time,
 // when the user's "Pace excludes rest breaks" setting is on. distanceM + durationSec
 // (total wall-clock) are UNCHANGED — only pace/speed derive from the moving time.

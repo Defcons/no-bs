@@ -70,7 +70,10 @@ function DecField({
   unit: string;
   fieldClass: string;
   extraClass?: string;
-  onUserEdit?: () => void; // fired only on a real keystroke (not the focus/blur value dance)
+  // Fired INSTEAD of onCommit on a real keystroke (not the focus/blur value dance), so
+  // the caller can fold extra fields into the SAME patch — two patches in one handler
+  // are both built from stale props and the second one wipes the typed value.
+  onUserEdit?: (n: number | null) => void;
 }) {
   const [raw, setRaw] = useState<string | null>(null); // non-null while the user is editing
   const stash = useRef<number | null>(null);
@@ -94,8 +97,7 @@ function DecField({
         onKeyDown={blurOnEnter}
         onChange={(e) => {
           setRaw(e.target.value);
-          onCommit(parse(e.target.value));
-          onUserEdit?.();
+          (onUserEdit ?? onCommit)(parse(e.target.value));
         }}
       />
       <span className="unit">{unit}</span>
@@ -231,7 +233,7 @@ export function SetInput({ index, set, step, unit = "weight", units = "kg", defa
                 return d == null ? null : fromDisplayWeight(d, units);
               }}
               onCommit={(v) => onChange({ weight: v })}
-              onUserEdit={() => set.prefill && onChange({ prefill: false })}
+              onUserEdit={(v) => onChange(set.prefill ? { weight: v, prefill: false } : { weight: v })}
               placeholder={bodyweight ? "BW" : prevWeight != null ? weightStr(prevWeight, units) : "—"}
               unit={bodyweight ? `+${units}` : units}
               fieldClass="weight-field"

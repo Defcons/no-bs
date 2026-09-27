@@ -5,7 +5,7 @@ import { Suspense, lazy, useEffect, useMemo, useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db, type StoredWorkout } from "../db";
 import { clockTime, daysAgoLabel, hhmmss, localDay, mmss, niceDate } from "../lib/format";
-import { breakSec, computeRun, fmtDist, fmtPace, withMovingPace } from "../lib/runStats";
+import { breakSec, breakSecInTrack, computeRun, fmtDist, fmtPace, withMovingPace } from "../lib/runStats";
 import { type MoveKind, type MoveSegment, segmentTotals, segmentsFromCadence, segmentsFromTrack } from "../lib/segments";
 import { calibrateStrideFromDistance, isRunningCadence, strideRunM, strideWalkM } from "../lib/pedometer";
 import { useSetting } from "../lib/useSetting";
@@ -568,9 +568,10 @@ function RunDetail({
     mapMatchConfigured().then(setCanSnap);
   }, []);
   if (!raw) return null;
-  const s = withMovingPace(raw, breakSec(breaks), excl); // moving-time pace when the setting is on
+  const runBreakSec = breakSecInTrack(breaks, track); // only rest taken during the run itself
+  const s = withMovingPace(raw, runBreakSec, excl); // moving-time pace when the setting is on
   // Steps×stride cross-check: pick walk vs run stride by cadence over moving time.
-  const stride = isRunningCadence(steps ?? 0, Math.max(1, raw.durationSec - breakSec(breaks))) ? strideRun : strideWalk;
+  const stride = isRunningCadence(steps ?? 0, Math.max(1, raw.durationSec - runBreakSec)) ? strideRun : strideWalk;
   const doSnap = async () => {
     setSnapping(true);
     setSnapErr("");

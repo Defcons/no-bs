@@ -62,6 +62,12 @@ let starting = false; // a start() is mid-await
 // live watcher wired to a dead recording session (same pattern as geofence.ts).
 let gen = 0;
 let points: TrackPoint[] = [];
+// Earlier stretches of THIS session's route. Turning "Track GPS route" off (or off→on)
+// must not throw away what was already recorded: a stop banks the stretch here and
+// finish (takeTrack) collects the whole session. Keyed by the session's start so a new
+// or cancelled workout never inherits another session's route.
+let banked: TrackPoint[] = [];
+let bankedFor: number | null = null;
 let getHr: (() => number | null) | null = null;
 let drainTimer: ReturnType<typeof setInterval> | null = null;
 // "native": drain the buffer (patched APK). "legacy": record in the JS callback
@@ -91,8 +97,13 @@ async function drain(id: string): Promise<void> {
 }
 
 // Start recording. getBpm lets us stamp fresh (foreground) points with the live HR.
-export async function startTracking(getBpm: () => number | null): Promise<boolean> {
+// `session` = the workout's startedAt; a different session drops any banked route.
+export async function startTracking(getBpm: () => number | null, session: number): Promise<boolean> {
   if (!Capacitor.isNativePlatform() || watcherId || starting) return false;
+  if (bankedFor !== session) {
+    banked = [];
+    bankedFor = session;
+  }
   const myGen = ++gen;
   starting = true;
   points = [];
@@ -159,10 +170,11 @@ export async function startTracking(getBpm: () => number | null): Promise<boolea
 }
 
 export function currentTrack(): TrackPoint[] {
-  return points.slice();
+  return banked.concat(points);
 }
 
-// Stop recording and return the collected track (final native drain included).
+// Stop recording, bank this stretch, and return the session's route so far (final
+// native drain included).
 export async function stopTracking(): Promise<TrackPoint[]> {
   gen++; // invalidate any in-flight start (it cleans up after itself on resolve)
   starting = false;
@@ -182,5 +194,18 @@ export async function stopTracking(): Promise<TrackPoint[]> {
       /* already gone */
     }
   }
-  return points.slice();
+  banked = banked.concat(points);
+  points = [];
+  return banked.slice();
+}
+
+// Finish: stop recording (if it still is) and hand over the session's WHOLE route —
+// every banked stretch plus the live one — then forget it. Empty when the route
+// belongs to another session (or GPS was never on).
+export async function takeTrack(session: number | undefined): Promise<TrackPoint[]> {
+  const all = await stopTracking();
+  const mine = session != null && bankedFor === session ? all : [];
+  banked = [];
+  bankedFor = null;
+  return mine;
 }

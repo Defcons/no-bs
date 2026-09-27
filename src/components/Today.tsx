@@ -11,10 +11,10 @@ import { cancelBreakNotification, scheduleBreakNotification, showAutoEndNotifica
 import { startGeofence, stopGeofence } from "../lib/geofence";
 import { exitPip, isInPip, onPipChange, setPipAutoEnter } from "../lib/pip";
 import { onVolumeKey, setPhoneKeyCapture, setVolumeCapture } from "../lib/hwButtons";
-import { currentTrack, startTracking, stopTracking } from "../lib/tracker";
+import { currentTrack, startTracking, stopTracking, takeTrack } from "../lib/tracker";
 import { calibrateStride, currentSteps, drainStepSamples, isRunningCadence, startSteps, stopSteps, strideRunM, strideWalkM } from "../lib/pedometer";
 import { useSetting } from "../lib/useSetting";
-import { breakSec, computeRun, fmtDist, fmtPace, type RunStats, withMovingPace } from "../lib/runStats";
+import { breakSec, breakSecWithin, computeRun, fmtDist, fmtPace, type RunStats, withMovingPace } from "../lib/runStats";
 import { autoBreaksFromSegments, segmentsFromTrack } from "../lib/segments";
 import { stepForExercise } from "../lib/steps";
 import { playBreakSkip, playBreakStart, playSoundChoice } from "../lib/sounds";
@@ -116,6 +116,7 @@ export function Today({
   const [pipMode, setPipMode] = useState(false);
   const [geoArmed, setGeoArmed] = useState(false); // leave-gym watcher armed (only near end of workout)
   const [liveRun, setLiveRun] = useState<RunStats | null>(null); // live GPS run stats shown while tracking
+  const [liveSpan, setLiveSpan] = useState<[number, number] | null>(null); // that track's first→last fix (ms)
   const [liveSteps, setLiveSteps] = useState(0); // session step count (native hardware step counter)
   const [editTpl, setEditTpl] = useState<DayTemplate | null>(null); // workout being created/edited
   const native = Capacitor.isNativePlatform();
@@ -342,7 +343,9 @@ export function Today({
     finishingRef.current = true;
     try {
       cancelBreakNotification(); // no "Rest over!" minutes after the workout ended
-      const track = draft?.trackGps ? await stopTracking() : undefined;
+      // The whole session's route, including stretches recorded before GPS was switched off.
+      const recorded = await takeTrack(draft?.startedAt);
+      const track = recorded.length ? recorded : undefined;
       const steps = await currentSteps(); // session total; the effect cleanup stops the sensor
       const stepSamples = await drainStepSamples(); // timestamped cadence (patched APK only; [] otherwise)
       void calibrateStride(track, steps); // learn the user's stride from a clean-GPS run (no-ops otherwise)
@@ -516,23 +519,30 @@ export function Today({
   }, [workoutActive, floatMode]);
 
   // GPS route recording: while an Alternative session has "Track GPS route" on,
-  // record the path (stamped with live HR). The track is attached on finish.
+  // record the path (stamped with live HR). The track is attached on finish; switching
+  // GPS off banks the stretch so far (tracker.ts), it doesn't discard it.
   const trackGps = !!draft?.trackGps;
+  const sessionStart = draft?.startedAt;
   useEffect(() => {
-    if (!trackGps) return;
-    startTracking(() => bpmRef.current);
+    if (!trackGps || sessionStart == null) return;
+    startTracking(() => bpmRef.current, sessionStart);
     return () => {
       stopTracking();
     };
-  }, [trackGps]);
+  }, [trackGps, sessionStart]);
   // Live run dashboard: poll the in-progress track every 2 s so the Today screen shows
   // distance/pace/speed as you run (native drains its GPS buffer every ~4 s).
   useEffect(() => {
     if (!trackGps) {
       setLiveRun(null);
+      setLiveSpan(null);
       return;
     }
-    const tick = () => setLiveRun(computeRun(currentTrack()));
+    const tick = () => {
+      const t = currentTrack();
+      setLiveRun(computeRun(t));
+      setLiveSpan(t.length >= 2 ? [t[0].t, t[t.length - 1].t] : null);
+    };
     tick();
     const id = window.setInterval(tick, 2000);
     return () => window.clearInterval(id);
@@ -868,7 +878,9 @@ export function Today({
   const tmKm = stepDistM / 1000;
   const tmPace = tmKm > 0 ? tmMovingSec / tmKm : 0;
   const tmSpeed = tmKm > 0 ? tmKm / (tmMovingSec / 3600) : 0;
-  const liveRunShown = liveRun ? withMovingPace(liveRun, liveBreakSec, paceExclBreaks) : null;
+  // GPS pace subtracts only rest taken during the run (not lifting rests before it).
+  const liveRunBreakSec = liveSpan ? breakSecWithin(draft?.breaks, liveSpan[0], liveSpan[1]) : 0;
+  const liveRunShown = liveRun ? withMovingPace(liveRun, liveRunBreakSec, paceExclBreaks) : null;
 
   return (
     <div className="today">

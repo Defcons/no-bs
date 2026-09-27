@@ -16,7 +16,7 @@ const plausible = (w: number | null): w is number => w != null && w > 0 && w <= 
 // Same guard class for cardio entries: a swapped distance/time pair ("10 km in
 // 2 min") must not mint a permanent best-pace/longest record.
 const MAX_PLAUSIBLE_DISTANCE_M = 300_000;
-const MIN_PLAUSIBLE_PACE_SEC_PER_KM = 60; // 60 km/h sustained — beyond human-powered
+export const MIN_PLAUSIBLE_PACE_SEC_PER_KM = 60; // 60 km/h sustained — beyond human-powered
 
 // Exercise identity + classification (canonName / canonKey / muscleGroup /
 // MUSCLE_ORDER) moved to lib/exercises.ts and is now catalog-backed via

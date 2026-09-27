@@ -11,7 +11,7 @@ import type { BwEntry } from "./standards";
 import type { DayTemplate, Scheme } from "../types";
 import { localDay } from "./format";
 import { cellFor, sessionKey, sessionKeys } from "./sheetSync";
-import { breakSec, computeRun, fmtDist, fmtPace, withMovingPace } from "./runStats";
+import { breakSecInTrack, computeRun, fmtDist, fmtPace, withMovingPace } from "./runStats";
 import { parseBodyweightTab, parseSheet } from "./sheet";
 
 export type SheetTab = { name: string; rows: string[][] };
@@ -193,7 +193,7 @@ function yearRows(list: StoredWorkout[], exclBreaks: boolean): string[][] {
     // the "exclude rest breaks" setting so the .xlsx matches the Google Sheet + records.
     const runs = sessions.map((s) => {
       const raw = computeRun(s.track);
-      return raw ? withMovingPace(raw, breakSec(s.breaks), exclBreaks) : null;
+      return raw ? withMovingPace(raw, breakSecInTrack(s.breaks, s.track), exclBreaks) : null;
     });
     if (runs.some(Boolean)) {
       rows.push(["Distance", ...runs.map((r) => (r ? fmtDist(r.distanceM) : ""))]);

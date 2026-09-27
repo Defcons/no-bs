@@ -352,7 +352,16 @@ export default function App() {
   };
 
   const onReset = async () => {
-    if (!confirm("Erase all local data and re-import your sheet history?")) return;
+    // Nothing is re-imported afterwards (only the starter templates come back), so spell
+    // out what's lost and make it a typed confirmation, not one reflex tap.
+    if (
+      !confirm(
+        "Permanently delete ALL data on this device?\n\nEvery workout, GPS route, template, custom sound and setting — plus the session in progress and your Google Sheet connection. Nothing is restored afterwards.\n\nUse Export (JSON) first if you want a copy.",
+      )
+    )
+      return;
+    const typed = prompt('Type DELETE to erase everything.');
+    if (typed?.trim().toUpperCase() !== "DELETE") return;
     await db.delete();
     location.reload();
   };

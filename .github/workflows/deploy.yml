@@ -8,20 +8,24 @@ concurrency:
   group: deploy
   cancel-in-progress: true
 
+# The job only uses its own secrets; the GitHub token gets no permissions.
+permissions: {}
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
+      # Actions pinned to full commit SHAs (they receive the deploy secrets); bump deliberately.
       - name: Connect to Tailscale
-        uses: tailscale/github-action@v3
+        uses: tailscale/github-action@6cae46e2d796f265265cfcf628b72a32b4d7cade # v3.3.0
         with:
           oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
           oauth-secret:    ${{ secrets.TS_OAUTH_SECRET }}
           tags:            tag:ci
-          version:         latest
+          version:         1.102.4
 
       - name: Deploy via SSH over Tailscale
-        uses: appleboy/ssh-action@v1
+        uses: appleboy/ssh-action@0ff4204d59e8e51228ff73bce53f80d53301dee2 # v1.2.5
         env:
           # The OTA bundles are world-readable (OTA requires it). VITE_APP_URL is the
           # ONLY var the build takes. Sync is configured per-device in Settings — no
