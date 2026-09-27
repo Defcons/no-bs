@@ -47,6 +47,7 @@ export function distanceM(a: LatLng, b: LatLng): number {
 const RADIUS_M = 100; // how far counts as "left the area"
 const EXIT_GRACE_MS = 10 * 60 * 1000; // ...sustained for this long
 const REFINE_BY_M = 15; // upgrade the anchor to a fix at least this much more accurate
+const ANCHOR_SLACK_MAX_M = 200; // most of the anchor's own inaccuracy the exit test allows for
 // Flip to true + rebuild the OTA bundle to trace anchor/distance/accuracy in logcat
 // (Capacitor forwards console.log). This feature fails SILENTLY, so it needs a trace.
 const DEBUG_GEO = false;
@@ -106,13 +107,19 @@ export async function startGeofence(onLeave: () => void): Promise<boolean> {
           anchorAcc = position.accuracy;
           return;
         }
-        if (outsideSince == null && position.accuracy + REFINE_BY_M < anchorAcc && distanceM(anchor, here) < RADIUS_M) {
+        // A clearly-better fix anywhere inside the anchor's own uncertainty circle is
+        // where we really are — a coarse first fix 250 m off (±300 m) could never be
+        // corrected by the old "within 100 m" rule, and a user who never moved then
+        // got auto-ended after 10 min.
+        if (outsideSince == null && position.accuracy + REFINE_BY_M < anchorAcc && distanceM(anchor, here) < Math.max(RADIUS_M, anchorAcc)) {
           anchor = here;
           anchorAcc = position.accuracy;
           return;
         }
         const d = distanceM(anchor, here);
-        const outside = d - position.accuracy > RADIUS_M;
+        // Leaving must clear BOTH fixes' uncertainty (the anchor's capped, so a very
+        // coarse indoor anchor can't disable leave-detection entirely).
+        const outside = d - position.accuracy - Math.min(anchorAcc, ANCHOR_SLACK_MAX_M) > RADIUS_M;
         const inside = d + position.accuracy < RADIUS_M;
         glog(`  d=${Math.round(d)} outside=${outside} inside=${inside} out=${outsideSince ? Math.round((Date.now() - outsideSince) / 1000) + "s" : "-"}`);
         if (inside) {

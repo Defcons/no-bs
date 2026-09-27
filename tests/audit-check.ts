@@ -173,6 +173,33 @@ console.log("— pace records need ≥ 1 km at a plausible pace (2026-09-27 LOG-
   check("only runs that count for pace earn medals", m.gold === 1 && m.silver === 0 && m.bronze === 0, JSON.stringify(m));
 }
 
+console.log("— GPS outliers after a dropout / at the start (2026-09-27 LOG-4) —");
+{
+  // Straight run north at 3.5 m/s, a fix every second.
+  const t0 = Date.parse("2026-09-27T12:00:00Z");
+  const at = (sec: number, extraLatM = 0, eastM = 0) => ({ t: t0 + sec * 1000, lat: 59 + (sec * 3.5 + extraLatM) / 111_320, lng: 5.7 + eastM / 57_300, acc: 8 });
+  const run = (from: number, to: number) => Array.from({ length: to - from + 1 }, (_, k) => at(from + k));
+  const truth = computeRun([...run(0, 300), ...run(361, 660)])!.distanceM; // 60 s dropout, no bad fix
+  // Same, plus ONE fix 800 m to the side right after the dropout — close enough in speed
+  // (827 m / 60 s) for the old check to accept it and then reject the good fixes after it.
+  const dropoutSpike = computeRun([...run(0, 300), at(360, 0, 800), ...run(361, 660)])!.distanceM;
+  check("a far fix after a dropout doesn't inflate distance", Math.abs(dropoutSpike - truth) < truth * 0.03, `truth=${truth.toFixed(0)} got=${dropoutSpike.toFixed(0)}`);
+  // A bad FIRST fix 2 km off.
+  const clean = computeRun(run(0, 600))!.distanceM;
+  const badFirst = computeRun([at(-1, 2000), ...run(0, 600)])!.distanceM;
+  check("a bad first fix doesn't inflate distance", Math.abs(badFirst - clean) < clean * 0.03, `clean=${clean.toFixed(0)} got=${badFirst.toFixed(0)}`);
+  // A 3-fix multipath cluster 400 m off mid-run is still dropped.
+  const cluster = computeRun([...run(0, 200), at(201, 400), at(202, 400), at(203, 400), ...run(204, 400)])!.distanceM;
+  const plain = computeRun(run(0, 400))!.distanceM;
+  check("a short bad cluster mid-run is dropped", Math.abs(cluster - plain) < plain * 0.03, `plain=${plain.toFixed(0)} got=${cluster.toFixed(0)}`);
+}
+
+console.log("— estimated 1RM caps reps at 12 (2026-09-27 LOG-6) —");
+{
+  check("60 kg × 30 counts as × 12", Math.abs(epley(60, 30) - epley(60, 12)) < 1e-9, String(epley(60, 30)));
+  check("a burnout set no longer beats a heavy triple", epley(60, 30) < epley(100, 3), `${epley(60, 30)} vs ${epley(100, 3)}`);
+}
+
 console.log("— restore skips records the UI would crash on (2026-09-27 UI-2 / SEC-3) —");
 {
   const good = { dayName: "Push", date: "2026-09-01T17:00:00.000Z", exercises: [{ name: "Bench", scheme: { sets: 3, reps: 5 }, sets: [{ weight: 80, reps: 5 }] }] };

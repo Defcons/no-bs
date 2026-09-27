@@ -89,11 +89,37 @@ export function computeRun(track: TrackPoint[] | undefined): RunStats | null {
   };
 }
 
-// Drop GPS spikes from a track for DRAWING: a point implying more than
-// MAX_SEGMENT_SPEED_MS from the last kept point is multipath, not movement, so it
-// would draw as a teleport spike on the map. (computeRun already skips such segments
-// for distance; this cleans the polyline itself.) The first point is always kept.
-export function cleanTrack(track: TrackPoint[]): TrackPoint[] {
+// A fix is an outlier when MOST of its neighbours (up to OUTLIER_NEIGHBOURS each side)
+// can't be reached from it at a plausible speed. This catches what the sequential check
+// below misses because it only compares with the last KEPT fix: a far fix just after a
+// dropout (the long gap makes its speed look fine, and it then became the reference that
+// every good fix after it was rejected against) and a bad FIRST fix.
+const OUTLIER_NEIGHBOURS = 3;
+function dropOutliers(track: TrackPoint[]): TrackPoint[] {
+  if (track.length < 3) return track;
+  const plausible = (a: TrackPoint, b: TrackPoint) => {
+    const dt = Math.abs(b.t - a.t) / 1000;
+    return dt <= 0 || distanceM(a, b) / dt <= MAX_SEGMENT_SPEED_MS;
+  };
+  return track.filter((p, i) => {
+    let ok = 0;
+    let n = 0;
+    for (let j = Math.max(0, i - OUTLIER_NEIGHBOURS); j <= Math.min(track.length - 1, i + OUTLIER_NEIGHBOURS); j++) {
+      if (j === i) continue;
+      n++;
+      if (plausible(p, track[j])) ok++;
+    }
+    return ok * 2 > n;
+  });
+}
+
+// Drop GPS spikes from a track for DRAWING (and, via processTrack, distance): first the
+// neighbour-majority outliers above, then any point implying more than
+// MAX_SEGMENT_SPEED_MS from the last kept point — multipath, not movement, which would
+// draw as a teleport spike and inflate distance. The (post-outlier) first point is kept.
+export function cleanTrack(raw: TrackPoint[]): TrackPoint[] {
+  if (raw.length < 2) return raw;
+  const track = dropOutliers(raw);
   if (track.length < 2) return track;
   const out: TrackPoint[] = [track[0]];
   for (let i = 1; i < track.length; i++) {

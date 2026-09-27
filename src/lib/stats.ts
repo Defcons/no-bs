@@ -7,7 +7,12 @@ import { localDay } from "./format";
 
 // Est-1RM. A true single IS its own 1RM — the formula's r=1 case would inflate it
 // 3.3% (200 kg single → "206.7"), enough to flip a strength-standard tier.
-export const epley = (weight: number, reps: number): number => (reps === 1 ? weight : weight * (1 + reps / 30));
+// Reps are capped for the estimate: Epley balloons on high-rep sets (60 kg × 30 "=" 120 kg),
+// which let a burnout set beat a real heavy triple for the PR badge and strength tier.
+// Past ~12 reps a set says little about a 1-rep max, so it only counts as a 12-rep set.
+export const MAX_E1RM_REPS = 12;
+export const epley = (weight: number, reps: number): number =>
+  reps === 1 ? weight : weight * (1 + Math.min(reps, MAX_E1RM_REPS) / 30);
 
 // Guard against sheet typos like "40-4040" producing absurd PRs. Exported so the
 // live PR badge (ExerciseCard) filters by the same bound.
