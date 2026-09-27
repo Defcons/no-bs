@@ -29,7 +29,7 @@ In the app: **Settings → Google Sheets sync** →
 From then on, tapping **Finish workout** writes a new dated column into the correct year tab + day-block. Anything logged while offline/unconfigured queues up — hit **Sync now** in Settings to push it.
 
 ## How it writes
-For the workout's year tab (e.g. `2026`), it finds the day-block whose header cell equals the day name (e.g. `Chest & Arms`), writes the date (`dd.mm.yy`) in the first empty column of that header row, and fills each exercise row (matched by name, ignoring the `3x8` prefix) with the sets string (e.g. `72,5-70-70`, reps annotated as `(6)` only when they differ from the scheme). The day note goes in the block's `Note` row.
+For the workout's year tab (e.g. `2026`), it finds the day-block whose header cell equals the day name (e.g. `Chest & Arms`), writes the date (`dd.mm.yy`) in the first empty column of that header row, and fills each exercise row (matched by name, ignoring the `3x8` prefix) with the sets string (e.g. `72,5-70-70`, reps annotated as `(6)` only when they differ from the scheme). The day note goes in the block's `Note` row. An exercise the block has no row for yet (added during the workout) gets its own new row after the block's last exercise row, above `Note`; later sessions reuse it.
 
 ## Read-only summary API (Home Assistant voice)
 

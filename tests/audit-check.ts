@@ -239,10 +239,13 @@ console.log("— the sheet copy's key is remembered at push (2026-09-27 DAT-2) �
     time: "1:02:05",
     exercises: row.exercises.map((e) => ({ name: e.name, cell: cellFor(e as never) })),
   });
-  check("the script skips the exercise it has no row for", res.ok && res.skipped?.[0] === "Cable Fly", JSON.stringify(res));
+  check("the script adds a row for the exercise its block lacks (nothing skipped)", res.ok && (res.skipped ?? []).length === 0 && !!res.written?.includes("Cable Fly"), JSON.stringify(res));
   const parsed = parseSheet(sheet.grid.map((r: unknown[]) => r.map((c) => String(c ?? ""))), y).find((w) => w.date === day);
-  check("the partial column's import key == the key remembered at push", !!parsed && sessionKey(parsed) === pushedKey(row, res.written), `${parsed && sessionKey(parsed)} vs ${pushedKey(row, res.written)}`);
-  check("…and differs from the full local row's key (why it used to duplicate)", sessionKey(row) !== pushedKey(row, res.written));
+  check("the column's import key == the key remembered at push", !!parsed && sessionKey(parsed) === pushedKey(row, res.written), `${parsed && sessionKey(parsed)} vs ${pushedKey(row, res.written)}`);
+  // An older deployed script skipped such an exercise: the key remembered must then be
+  // that of only what WAS written (else the partial column re-imported as a duplicate).
+  const partial = { ...row, date: day, exercises: row.exercises.slice(0, 1) };
+  check("a partial push remembers only what was written", pushedKey(row, ["Bench Press"]) === sessionKey(partial) && pushedKey(row, ["Bench Press"]) !== sessionKey(row));
 }
 
 console.log("— sheet Id row: parsed back, deleted columns flagged (1.77.0) —");

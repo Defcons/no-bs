@@ -98,5 +98,32 @@ const check = (name, cond, detail = "") => {
   check("marking an unknown id changes nothing", unknown.ok && unknown.found === false);
 }
 
+// --- an exercise the block has no row for gets its own row (no more stuck "pending") ---
+{
+  const s = makeSheet("2026", [
+    ["Legs & Shoulder", "24.09.26"], ["3x5 Squat", "60-60-60"], ["3x10 Calves", "237-237-237"],
+    ["Note", "old"], ["Mood", "4→7"], ["Time", "1:17:50"], [""],
+    ["Chest & Arms", "26.09.26"], ["3x5 Bench", "80-90-90"],
+  ]);
+  const res = runDoPost([s], { year: 2026, dayName: "Legs & Shoulder", date: "27.09.26", id: "id-2026-09-27T10:00:00.000Z", note: "calves pump", time: "1:05:00",
+    exercises: [{ name: "Squat", cell: "70-70-70" }, { name: "Calves", cell: "240-240-240" }, { name: "Drop calves lighter", cell: "180-160-140" }] });
+  const labels = s.grid.map((r) => String(r[0] ?? ""));
+  const at = (label) => labels.indexOf(label);
+  check("nothing is skipped", res.ok && (res.skipped || []).length === 0 && res.written.includes("Drop calves lighter"), JSON.stringify(res));
+  check("the new row sits after the last exercise, above Note", at("Drop calves lighter") === at("3x10 Calves") + 1 && at("Note") === at("Drop calves lighter") + 1, JSON.stringify(labels));
+  check("…with the logged sets in this session's column", s.grid[at("Drop calves lighter")]?.[2] === "180-160-140");
+  check("note and time still land in their own (shifted) rows", s.grid[at("Note")][2] === "calves pump" && s.grid[at("Time")][2] === "1:05:00", JSON.stringify(s.grid));
+  check("the next block is untouched", s.grid[at("Chest & Arms")][1] === "26.09.26" && labels[at("Chest & Arms") - 1] === "", JSON.stringify(labels));
+  const again = runDoPost([s], { year: 2026, dayName: "Legs & Shoulder", date: "28.09.26", id: "id-2026-09-28T10:00:00.000Z", exercises: [{ name: "Drop calves lighter", cell: "170-150" }] });
+  check("a later session reuses that row (no second one)", again.ok && s.grid.filter((r) => r[0] === "Drop calves lighter").length === 1 && s.grid[at("Drop calves lighter")]?.[3] === "170-150", JSON.stringify(s.grid.map((r) => r[0])));
+}
+{
+  // A block with no meta rows, followed by the spacer and the next block.
+  const s = makeSheet("2026", [["Push", "01.09.26"], ["3x5 Bench", "80"], [""], ["Pull", "02.09.26"], ["3x5 Deadlift", "100"]]);
+  runDoPost([s], { year: 2026, dayName: "Push", date: "03.09.26", exercises: [{ name: "Bench", cell: "82" }, { name: "Cable fly", cell: "20-20" }] });
+  const labels = s.grid.map((r) => String(r[0] ?? ""));
+  check("with no meta rows, the new row still stays inside its block (above the spacer)", labels.indexOf("Cable fly") === 2 && labels[3] === "" && labels[4] === "Pull", JSON.stringify(labels));
+}
+
 console.log(fails ? `${fails} FAILURE(S)` : "ALL PASS");
 process.exitCode = fails ? 1 : 0;

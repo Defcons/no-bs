@@ -155,6 +155,7 @@ function doPost(e) {
       Distance: -1, Pace: -1, Speed: -1, Route: -1, Id: -1,
     };
     var lastBlockRow = headerRow; // last row belonging to this block
+    var lastExerciseRow = headerRow; // last exercise (non-meta) row — new exercise rows go after it
     var doneNames = {};
     for (var rr = headerRow + 1; rr < data.length; rr++) {
       if (rowHasDate(data[rr])) break; // reached the next day-block header
@@ -170,6 +171,7 @@ function doPost(e) {
         continue;
       }
       if (!label) continue;
+      lastExerciseRow = rr;
 
       var matched = false;
       for (var i = 0; i < body.exercises.length; i++) {
@@ -185,6 +187,26 @@ function doPost(e) {
       // Updating a session in place: an exercise removed in the edit is cleared from
       // THIS column only.
       if (!matched && updating && String(data[rr][col] == null ? "" : data[rr][col]) !== "") sheet.getRange(rr + 1, col + 1).setValue("");
+    }
+
+    // An exercise this block has no row for (added mid-session) gets its own new row
+    // right after the block's last exercise row, above Note/Mood/… — so nothing logged
+    // is left out of the sheet (such a session used to stay "pending" forever). Rows
+    // below shift down one, so the meta-row positions are shifted with them.
+    for (var ni = 0; ni < body.exercises.length; ni++) {
+      var nex = body.exercises[ni];
+      var nname = String(nex.name || "").trim();
+      if (!nname || doneNames[nex.name]) continue;
+      var at = lastExerciseRow + 1; // 0-based index of the new row
+      sheet.insertRowAfter(lastExerciseRow + 1); // 1-based row of the last exercise row
+      sheet.getRange(at + 1, 1).setValue(safe(nname));
+      sheet.getRange(at + 1, col + 1).setValue(safe(nex.cell));
+      written.push(nex.name);
+      doneNames[nex.name] = true;
+      for (var mk in metaRow) if (metaRow[mk] >= at) metaRow[mk]++;
+      if (lastBlockRow >= at) lastBlockRow++;
+      if (at > lastBlockRow) lastBlockRow = at;
+      lastExerciseRow = at;
     }
 
     // Write each meta value into its row, appending the row at the block's end if
