@@ -140,5 +140,47 @@ const check = (name, cond, detail = "") => {
   check("a column carrying another session's Id is never reused", other.ok && other.column === 3, JSON.stringify(other));
 }
 
+// --- set/exercise notes ride on the exercise's cell as a cell note, highlighted ---
+{
+  const NOTE_COLOR = "#c55a11";
+  const s = makeSheet("2026", [["Push", "20.09.26"], ["3x5 Bench Press", "75-75-75"], ["3x8 Row", "60-60-60"], ["3x8 Fly", "20-20"], ["Note", ""]]);
+  const id = "id-2026-09-28T17:00:00.000Z";
+  const push = (exercises) => runDoPost([s], { year: 2026, dayName: "Push", date: "28.09.26", id, exercises });
+  const res = push([
+    { name: "Bench Press", cell: "80-80-80", note: "Set 2: left shoulder" },
+    { name: "Row", cell: "65-65-65" },
+    { name: "Fly", cell: "", note: "machine taken" },
+  ]);
+  const at = (label) => s.grid.findIndex((r) => r[0] === label);
+  const col = res.column - 1;
+  const key = (label) => `${at(label)},${col}`;
+  check("a noted exercise's cell carries the note", s.notes[key("3x5 Bench Press")] === "Set 2: left shoulder", JSON.stringify(s.notes));
+  check("…and is highlighted (bold, coloured text)", s.fmt[key("3x5 Bench Press")]?.color === NOTE_COLOR && s.fmt[key("3x5 Bench Press")]?.weight === "bold", JSON.stringify(s.fmt));
+  check("a cell without a note stays plain", !s.notes[key("3x8 Row")] && s.fmt[key("3x8 Row")]?.color == null);
+  check("a note-only exercise keeps its note on an empty cell", res.written.includes("Fly") && s.notes[key("3x8 Fly")] === "machine taken" && s.grid[at("3x8 Fly")][col] === "", JSON.stringify(res));
+  check("the older session's cells are untouched", !s.notes[`${at("3x5 Bench Press")},1`] && s.fmt[`${at("3x5 Bench Press")},1`] == null);
+  push([{ name: "Bench Press", cell: "80-80-80" }, { name: "Row", cell: "65-65-65", note: "grip slipped" }]);
+  check("an edit that drops a note clears the note and its highlight", !s.notes[key("3x5 Bench Press")] && s.fmt[key("3x5 Bench Press")]?.color == null && s.fmt[key("3x5 Bench Press")]?.weight == null, JSON.stringify(s.fmt));
+  check("…a note added in the edit lands", s.notes[key("3x8 Row")] === "grip slipped" && s.fmt[key("3x8 Row")]?.color === NOTE_COLOR);
+  check("…and an exercise removed in the edit loses its note", !s.notes[key("3x8 Fly")] && s.fmt[key("3x8 Fly")]?.color == null);
+  runDoPost([s], { action: "markDeleted", year: 2026, dayName: "Push", id, deleted: true });
+  check("delete greys a noted cell like the rest", s.fmt[key("3x8 Row")]?.color === "#9e9e9e");
+  runDoPost([s], { action: "markDeleted", year: 2026, dayName: "Push", id, deleted: false });
+  check("restore brings the highlight back (only on noted cells)", s.fmt[key("3x8 Row")]?.color === NOTE_COLOR && s.fmt[key("3x5 Bench Press")]?.color == null, JSON.stringify(s.fmt));
+}
+{
+  // A row inserted below a noted cell inherits its formatting in Sheets; it must not look noted.
+  const s = makeSheet("2026", [["Push", "20.09.26"], ["3x5 Bench", "75"], ["Note", ""]]);
+  runDoPost([s], { year: 2026, dayName: "Push", date: "21.09.26", exercises: [{ name: "Bench", cell: "80", note: "PR" }] });
+  runDoPost([s], { year: 2026, dayName: "Push", date: "22.09.26", exercises: [{ name: "Bench", cell: "82" }, { name: "Cable fly", cell: "20-20" }] });
+  const fly = s.grid.findIndex((r) => r[0] === "Cable fly");
+  check("a new row does not inherit a noted cell's highlight", fly === 2 && s.fmt[`${fly},2`]?.color == null && s.fmt[`${fly},2`]?.weight == null, JSON.stringify(s.fmt));
+  check("…while the noted cell keeps its note and highlight", s.notes["1,2"] === "PR" && s.fmt["1,2"]?.color === "#c55a11", JSON.stringify(s.notes));
+  const s2 = makeSheet("2026", [["Push", "20.09.26"], ["3x5 Bench", "75"]]);
+  const made = runDoPost([s2], { year: 2026, dayName: "Boxing", date: "23.09.26", allowCreate: true, exercises: [{ name: "Bag work", cell: "", note: "3 rounds" }] });
+  const bag = s2.grid.findIndex((r) => r[0] === "Bag work");
+  check("a newly created block's exercise cell gets its note", made.created && s2.notes[`${bag},1`] === "3 rounds" && s2.fmt[`${bag},1`]?.weight === "bold", JSON.stringify(s2.notes));
+}
+
 console.log(fails ? `${fails} FAILURE(S)` : "ALL PASS");
 process.exitCode = fails ? 1 : 0;

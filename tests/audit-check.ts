@@ -4,7 +4,7 @@
 // Plus the 2026-09-27 audit fixes: GPS pace counts only in-run rest; pace records
 // need ≥ 1 km at a plausible pace.
 // Run anytime: npx tsx tests/audit-check.ts
-import { cellFor, pushedKey, sessionKey, sessionKeys, sheetIdOf } from "../src/lib/sheetSync";
+import { cellFor, pushedKey, sessionKey, sessionKeys, sheetExercises, sheetIdOf } from "../src/lib/sheetSync";
 import { parseSheet } from "../src/lib/sheet";
 import { epley, liftRecords, summarize, weekNumbersForLast } from "../src/lib/stats";
 import { resolveExercise } from "../src/lib/exercises";
@@ -12,7 +12,7 @@ import { breakSecInTrack, breakSecWithin, computeRun, withMovingPace, type RunSt
 import { paceMedals, runPBs } from "../src/lib/runStandards";
 import { cleanCatalogExercise, cleanTemplate, cleanWorkout, isUntouchedStarter, validBw } from "../src/lib/workbook";
 import { GENERIC_TEMPLATES } from "../src/db";
-import { localDay } from "../src/lib/format";
+import { localDay, noteLines } from "../src/lib/format";
 import type { StoredWorkout } from "../src/db";
 
 let fails = 0;
@@ -264,6 +264,35 @@ console.log("— sheet Id row: parsed back, deleted columns flagged (1.77.0) —
   check("the Id cell never looks like a date header", parseSheet(cells(), y).length === 2);
   runDoPost([sheet], { action: "markDeleted", year: y, dayName: "Push", id: sheetIdOf(row), deleted: true });
   check("a column deleted in the app is flagged on import", parsed()?.deletedInSheet === true && parsed()?.exercises.length === 1);
+}
+
+console.log("— exercise + set notes reach the sheet as a cell note (1.78.0) —");
+{
+  const { runDoPost, makeSheet } = (await import("./code-gs-harness.cjs")).default;
+  const ex = (name: string, sets: { weight: number | null; reps: number | null; note?: string }[], note?: string) =>
+    ({ name, scheme: { sets: 3, reps: 5 }, sets, note }) as never;
+  const exercises = [
+    ex("Bench Press", [{ weight: 80, reps: 5 }, { weight: 80, reps: 5, note: " left shoulder " }, { weight: null, reps: null, note: "skipped, tired" }], "felt heavy"),
+    ex("Row", [{ weight: 60, reps: 8 }]),
+    ex("Fly", [{ weight: null, reps: null }], "machine taken"),
+    ex("Curl", [{ weight: null, reps: null }]),
+  ];
+  const sent = sheetExercises(exercises);
+  check("notes: exercise note first, then set notes by set position", sent[0].note === "felt heavy\nSet 2: left shoulder\nSet 3: skipped, tired", JSON.stringify(sent[0]));
+  check("an exercise without notes sends no note", sent[1].note === undefined);
+  check("a note-only exercise is sent (empty cell), an empty one is not", sent.length === 3 && sent[2].name === "Fly" && sent[2].cell === "", JSON.stringify(sent));
+  check("noteLines ignores blank notes", noteLines({ note: "  ", sets: [{ note: "" }, {}] }).length === 0);
+  // The note-only exercise must not change the key the sheet copy is known by.
+  const row = { dayName: "Push", date: "2026-09-28T17:00:00.000Z", exercises: exercises as never };
+  const withoutFly = { ...row, exercises: (exercises as { name: string }[]).filter((e) => e.name !== "Fly") as never };
+  check("a note-only exercise leaves the import key alone", sessionKey(row) === sessionKey(withoutFly) && pushedKey(row, ["Bench Press", "Row", "Fly"]) === pushedKey(row, ["Bench Press", "Row"]));
+  const day = localDay(row.date);
+  const [y, m, d] = day.split("-");
+  const sheet = makeSheet(y, [["Push", "01.09.26"], ["3x5 Bench Press", "75-75-75"], ["3x8 Row", "60"], ["3x8 Fly", "20"]]);
+  const res = runDoPost([sheet], { year: y, dayName: "Push", date: `${d}.${m}.${y.slice(2)}`, exercises: sent });
+  const parsed = parseSheet(sheet.grid.map((r: unknown[]) => r.map((c) => String(c ?? ""))), y).find((w) => w.date === day);
+  check("the script writes the note onto the exercise's cell", sheet.notes[`1,${res.column - 1}`] === sent[0].note, JSON.stringify(sheet.notes));
+  check("…and the column still imports under the pushed key", !!parsed && sessionKey(parsed) === pushedKey(row, res.written), `${parsed && sessionKey(parsed)} vs ${pushedKey(row, res.written)}`);
 }
 
 console.log("— restore keeps your own templates + custom exercises (2026-09-27 DAT-6 / DAT-7) —");

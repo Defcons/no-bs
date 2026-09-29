@@ -588,6 +588,14 @@ button.chip {
   font-variant-numeric: tabular-nums;
   text-align: right;
 }
+/* An exercise's own note and its set notes, one line each under the exercise. */
+.log-ex-note {
+  font-size: 13px;
+  color: var(--muted);
+  padding-left: 8px;
+  margin-top: 2px;
+  overflow-wrap: anywhere;
+}
 .log-meta {
   margin-top: 4px;
 }

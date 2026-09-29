@@ -16,6 +16,18 @@ export function hhmmss(totalSec: number): string {
     : `${m}:${String(r).padStart(2, "0")}`;
 }
 
+// An exercise's notes as lines: its own note first, then each set's note as "Set N: …"
+// (N = the set's position, as the workout screen numbers it). History shows them; the
+// sheet sync puts them on the exercise's cell as a cell note.
+export function noteLines(ex: { note?: string; sets: { note?: string }[] }): string[] {
+  const lines: string[] = [];
+  if (ex.note?.trim()) lines.push(ex.note.trim());
+  ex.sets.forEach((s, i) => {
+    if (s.note?.trim()) lines.push(`Set ${i + 1}: ${s.note.trim()}`);
+  });
+  return lines;
+}
+
 // The LOCAL calendar day ("yyyy-mm-dd") a stored date refers to — THE canonical
 // "which day did this happen" helper; every day-derivation goes through it.
 // App-logged rows store a full UTC ISO timestamp: slicing that gives the UTC day,

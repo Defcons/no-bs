@@ -7,9 +7,20 @@ const crypto = require("crypto");
 
 const src = fs.readFileSync(process.env.CODE_GS || path.join(__dirname, "..", "apps-script", "Code.gs"), "utf8");
 
+// Move every "r,c" key at row >= `at` one row down (a row was inserted at `at`).
+function shiftRows(map, at) {
+  const entries = Object.entries(map);
+  for (const k of Object.keys(map)) delete map[k];
+  for (const [k, v] of entries) {
+    const [r, c] = k.split(",").map(Number);
+    map[`${r >= at ? r + 1 : r},${c}`] = v;
+  }
+}
+
 function makeSheet(name, grid) {
   const g = grid.map((r) => r.slice());
   const fmt = {};
+  const notes = {}; // cell notes, "r,c" → text
   const width = () => Math.max(1, ...g.map((r) => r.length));
   const cell = (r, c) => (g[r] && g[r][c] != null ? g[r][c] : "");
   const ensure = (r, c) => {
@@ -23,12 +34,22 @@ function makeSheet(name, grid) {
       ensure(row - 1, col - 1);
       g[row - 1][col - 1] = v;
     },
-    // Formatting is recorded per cell ("r,c" → {color, line}) so tests can check it.
+    // Formatting is recorded per cell ("r,c" → {color, line, weight}) so tests can check it.
     setFontColor: (v) => {
       for (let i = 0; i < nr; i++) for (let j = 0; j < nc; j++) fmt[`${row - 1 + i},${col - 1 + j}`] = { ...fmt[`${row - 1 + i},${col - 1 + j}`], color: v };
     },
     setFontLine: (v) => {
       for (let i = 0; i < nr; i++) for (let j = 0; j < nc; j++) fmt[`${row - 1 + i},${col - 1 + j}`] = { ...fmt[`${row - 1 + i},${col - 1 + j}`], line: v };
+    },
+    setFontWeight: (v) => {
+      for (let i = 0; i < nr; i++) for (let j = 0; j < nc; j++) fmt[`${row - 1 + i},${col - 1 + j}`] = { ...fmt[`${row - 1 + i},${col - 1 + j}`], weight: v };
+    },
+    getNotes: () => Array.from({ length: nr }, (_, i) => Array.from({ length: nc }, (_, j) => notes[`${row - 1 + i},${col - 1 + j}`] || "")),
+    setNote: (v) => {
+      notes[`${row - 1},${col - 1}`] = String(v);
+    },
+    clearNote: () => {
+      for (let i = 0; i < nr; i++) for (let j = 0; j < nc; j++) delete notes[`${row - 1 + i},${col - 1 + j}`];
     },
     setValues: (vals) =>
       vals.forEach((rv, i) =>
@@ -41,12 +62,22 @@ function makeSheet(name, grid) {
   return {
     grid: g,
     fmt,
+    notes,
     getName: () => name,
     getDataRange: () => range(1, 1, Math.max(1, g.length), width()),
     getRange: range,
     getLastRow: () => g.length,
     getLastColumn: () => width(),
-    insertRowAfter: (n) => g.splice(n, 0, []),
+    insertRowAfter: (n) => {
+      g.splice(n, 0, []);
+      shiftRows(fmt, n);
+      shiftRows(notes, n);
+      // Like Sheets: the new row takes the formatting of the row above it (not its notes).
+      for (const [k, v] of Object.entries(fmt)) {
+        const [r, c] = k.split(",").map(Number);
+        if (r === n - 1) fmt[`${n},${c}`] = { ...v };
+      }
+    },
   };
 }
 

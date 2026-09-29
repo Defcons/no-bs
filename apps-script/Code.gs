@@ -157,6 +157,12 @@ function doPost(e) {
     var lastBlockRow = headerRow; // last row belonging to this block
     var lastExerciseRow = headerRow; // last exercise (non-meta) row — new exercise rows go after it
     var doneNames = {};
+    // Updating in place: this column's cell notes as they are now, so a note removed in
+    // the edit is cleared (with its highlight) and nothing else is touched.
+    var colNotes = updating ? sheet.getRange(headerRow + 1, col + 1, data.length - headerRow, 1).getNotes() : [];
+    var hadNote = function (r) {
+      return !!(colNotes[r - headerRow] && colNotes[r - headerRow][0]);
+    };
     for (var rr = headerRow + 1; rr < data.length; rr++) {
       if (rowHasDate(data[rr])) break; // reached the next day-block header
       var label = String(data[rr][0]).trim();
@@ -177,7 +183,9 @@ function doPost(e) {
       for (var i = 0; i < body.exercises.length; i++) {
         var ex = body.exercises[i];
         if (!doneNames[ex.name] && matchName(label, ex.name)) {
-          sheet.getRange(rr + 1, col + 1).setValue(safe(ex.cell));
+          var exCell = sheet.getRange(rr + 1, col + 1);
+          exCell.setValue(safe(ex.cell));
+          noteCell(exCell, ex.note, hadNote(rr));
           written.push(ex.name);
           doneNames[ex.name] = true;
           matched = true;
@@ -185,8 +193,12 @@ function doPost(e) {
         }
       }
       // Updating a session in place: an exercise removed in the edit is cleared from
-      // THIS column only.
-      if (!matched && updating && String(data[rr][col] == null ? "" : data[rr][col]) !== "") sheet.getRange(rr + 1, col + 1).setValue("");
+      // THIS column only (its note too).
+      if (!matched && updating) {
+        var gone = sheet.getRange(rr + 1, col + 1);
+        if (String(data[rr][col] == null ? "" : data[rr][col]) !== "") gone.setValue("");
+        noteCell(gone, "", hadNote(rr));
+      }
     }
 
     // An exercise this block has no row for (added mid-session) gets its own new row
@@ -198,9 +210,11 @@ function doPost(e) {
       var nname = String(nex.name || "").trim();
       if (!nname || doneNames[nex.name]) continue;
       var at = lastExerciseRow + 1; // 0-based index of the new row
-      sheet.insertRowAfter(lastExerciseRow + 1); // 1-based row of the last exercise row
+      insertPlainRow(sheet, lastExerciseRow + 1); // 1-based row of the last exercise row
       sheet.getRange(at + 1, 1).setValue(safe(nname));
-      sheet.getRange(at + 1, col + 1).setValue(safe(nex.cell));
+      var newCell = sheet.getRange(at + 1, col + 1);
+      newCell.setValue(safe(nex.cell));
+      noteCell(newCell, nex.note, false);
       written.push(nex.name);
       doneNames[nex.name] = true;
       for (var mk in metaRow) if (metaRow[mk] >= at) metaRow[mk]++;
@@ -232,7 +246,7 @@ function doPost(e) {
       if (!m.value && !(updating && metaRow[m.label] >= 0)) continue;
       var target = metaRow[m.label];
       if (target < 0) {
-        sheet.insertRowAfter(insertAt + 1);
+        insertPlainRow(sheet, insertAt + 1);
         target = insertAt + 1;
         sheet.getRange(target + 1, 1).setValue(m.label);
         insertAt = target;
@@ -292,6 +306,9 @@ function createBlock(sheet, body) {
 
   var start = sheet.getLastRow() + 2; // leave one blank spacer row
   sheet.getRange(start, 1, rows.length, 2).setValues(rows);
+  for (var ni = 0; ni < body.exercises.length; ni++) {
+    noteCell(sheet.getRange(start + 1 + ni, 2), body.exercises[ni].note, false);
+  }
 
   var names = body.exercises.map(function (e) { return e.name; });
   return json({
@@ -353,6 +370,46 @@ function styleColumn(sheet, headerRow, lastRow, col, deleted) {
   var range = sheet.getRange(headerRow + 1, col + 1, lastRow - headerRow + 1, 1);
   range.setFontColor(deleted ? "#9e9e9e" : null);
   range.setFontLine(deleted ? "line-through" : "none");
+  if (deleted) return;
+  // Restored: the grey replaced the note highlight, so noted cells get it back.
+  var notes = range.getNotes();
+  for (var i = 0; i < notes.length; i++) {
+    if (notes[i][0]) sheet.getRange(headerRow + 1 + i, col + 1).setFontColor(NOTE_COLOR);
+  }
+}
+
+// Notes typed in the app (the exercise's note, and each set's note as "Set N: …") ride
+// on the exercise's cell as a Sheets cell note, and the cell's text turns bold dark
+// orange so a noted cell stands out. A fill colour would not show: the year tabs' green
+// is a conditional-format rule ("Cell is not empty"), which paints over any fill.
+var NOTE_COLOR = "#c55a11";
+
+// Put `note` on one cell and highlight it. An empty note clears the note and the
+// highlight, but only from a cell that had a note (hadNote), so formatting set by hand on
+// other cells is never reset.
+function noteCell(range, note, hadNote) {
+  var text = String(note == null ? "" : note).trim();
+  if (text) {
+    range.setNote(text);
+    range.setFontColor(NOTE_COLOR);
+    range.setFontWeight("bold");
+  } else if (hadNote) {
+    range.clearNote();
+    range.setFontColor(null);
+    range.setFontWeight(null);
+  }
+}
+
+// Insert a row after 1-based row `after`. Sheets copies the row above's formatting into
+// the new row, which would carry a noted cell's highlight onto cells without a note, so
+// the new row's session cells go back to plain text (the label cell keeps its style).
+function insertPlainRow(sheet, after) {
+  sheet.insertRowAfter(after);
+  var width = sheet.getLastColumn();
+  if (width < 2) return;
+  var cells = sheet.getRange(after + 1, 2, 1, width - 1);
+  cells.setFontColor(null);
+  cells.setFontWeight(null);
 }
 
 // Mark a session's column deleted ({deleted:true}) or restore it ({deleted:false}):

@@ -7,7 +7,7 @@
 // request (no preflight); Apps Script's redirected response carries ACAO:*.
 import { Capacitor, CapacitorHttp } from "@capacitor/core";
 import { db, getSetting, setSetting, type StoredWorkout } from "../db";
-import { localDay } from "./format";
+import { localDay, noteLines } from "./format";
 import { parseBodyweightTab, parseSheet } from "./sheet";
 import { breakSec, breakSecInTrack, computeRun, fmtDist, fmtPace, withMovingPace } from "./runStats";
 import { strideFor } from "./pedometer";
@@ -54,6 +54,15 @@ export function cellFor(ex: ExercisePerf): string {
     })
     .filter((t) => t !== "")
     .join("-");
+}
+
+// The exercises a push sends: each one's cell, plus its notes (exercise + set notes),
+// which the script puts on that cell as a cell note. An exercise with only a note (no
+// numbers) is sent too, with an empty cell, so the note still reaches the sheet.
+export function sheetExercises(exercises: ExercisePerf[]): { name: string; cell: string; note?: string }[] {
+  return exercises
+    .map((e) => ({ name: e.name, cell: cellFor(e), note: noteLines(e).join("\n") || undefined }))
+    .filter((e) => e.cell !== "" || e.note);
 }
 
 // Dedup key for restore/import: day + date alone would collapse two genuine
@@ -329,7 +338,7 @@ async function syncWorkoutNow(row: StoredWorkout): Promise<SyncResult | null> {
     route: routeLink,
     id: sheetIdOf(row) ?? undefined, // the column's Id row: lets an edit update it in place
     allowCreate: true, // Alternative/free-form sessions → auto-create a named block
-    exercises: row.exercises.map((e) => ({ name: e.name, cell: cellFor(e) })).filter((e) => e.cell !== ""),
+    exercises: sheetExercises(row.exercises),
   };
   try {
     const result = await post(url, payload);

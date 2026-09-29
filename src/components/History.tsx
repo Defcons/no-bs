@@ -5,7 +5,7 @@ import { Suspense, lazy, useEffect, useMemo, useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db, type StoredWorkout } from "../db";
 import { deleteWorkout, TRASH_DAYS } from "../lib/trash";
-import { clockTime, daysAgoLabel, hhmmss, localDay, mmss, niceDate } from "../lib/format";
+import { clockTime, daysAgoLabel, hhmmss, localDay, mmss, niceDate, noteLines } from "../lib/format";
 import { breakSec, breakSecInTrack, computeRun, fmtDist, fmtPace, withMovingPace } from "../lib/runStats";
 import { type MoveKind, type MoveSegment, segmentTotals, segmentsFromCadence, segmentsFromTrack } from "../lib/segments";
 import { calibrateStrideFromDistance, isRunningCadence, strideRunM, strideWalkM } from "../lib/pedometer";
@@ -151,7 +151,12 @@ export function History({
       return (
         w.dayName.toLowerCase().includes(q) ||
         !!w.note?.toLowerCase().includes(q) ||
-        w.exercises.some((e) => e.name.toLowerCase().includes(q))
+        w.exercises.some(
+          (e) =>
+            e.name.toLowerCase().includes(q) ||
+            !!e.note?.toLowerCase().includes(q) ||
+            e.sets.some((s) => !!s.note?.toLowerCase().includes(q)),
+        )
       );
     });
   }, [workouts, type, query]);
@@ -432,12 +437,20 @@ function LogRow({
                   ? s.distanceM != null || s.seconds != null
                   : s.weight != null || s.reps != null,
             );
+            const notes = noteLines(e);
             return (
-              <div key={i} className="log-ex">
-                <span className="log-ex-name">{e.name}</span>
-                <span className="log-ex-sets">
-                  {sets.length ? sets.map(fmt).filter(Boolean).join(" · ") : e.skipped ? "skipped" : "—"}
-                </span>
+              <div key={i}>
+                <div className="log-ex">
+                  <span className="log-ex-name">{e.name}</span>
+                  <span className="log-ex-sets">
+                    {sets.length ? sets.map(fmt).filter(Boolean).join(" · ") : e.skipped ? "skipped" : "—"}
+                  </span>
+                </div>
+                {notes.map((n, j) => (
+                  <div key={j} className="log-ex-note">
+                    📝 {n}
+                  </div>
+                ))}
               </div>
             );
           })}
