@@ -21,12 +21,17 @@ RUN apk add --no-cache zip \
   && (cd dist && zip -qr "/app/bundle-${APP_VERSION}.zip" .) \
   && printf '{"version":"%s+%s","url":"https://app.agentas.net/bundle-%s.zip"}\n' "$SEMVER" "$APP_VERSION" "$APP_VERSION" > /app/version.json
 
-FROM nginx:alpine
+FROM nginxinc/nginx-unprivileged:alpine
+# Not root: this image runs nginx as uid 101 (pid file and temp paths in /tmp) and listens on 3060, the published host
+# port. Clearing the stock page needs root, so only that step runs as root; the compose file pins the user too.
+USER root
 RUN rm -rf /usr/share/nginx/html/*
+USER 101
 COPY nginx.conf /etc/nginx/conf.d/default.conf
-# Fail the build (old container keeps serving) instead of shipping a config nginx rejects.
+# Fail the build (old container keeps serving) instead of shipping a config nginx rejects. Runs as 101 on purpose:
+# nginx -t creates its temp dirs, and root-made ones in /tmp would be unusable for the user the container runs as.
 RUN nginx -t
 COPY --from=build /app/dist /usr/share/nginx/html
 COPY --from=build /app/bundle-*.zip /app/version.json /usr/share/nginx/html/
-EXPOSE 80
+EXPOSE 3060
 CMD ["nginx", "-g", "daemon off;"]

@@ -3,6 +3,8 @@ name: Deploy to Production
 on:
   push:
     branches: [master]
+  # A manual run on another branch tests it (test and container) and deploys nothing.
+  workflow_dispatch:
 
 concurrency:
   group: deploy
@@ -32,8 +34,24 @@ jobs:
       - run: node tests/code-gs-check.cjs
       - run: npm run build
 
+  # The image and docker-compose.yml as the box runs them: uid 101, a read-only filesystem, the app and its OTA files
+  # served on 3060 and no redirect carrying the port. A container that cannot start in that shape stops the deploy
+  # here, not on the box.
+  container:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Start the production container in its shape
+        run: bash tests/container-smoke.sh
+
   deploy:
-    needs: test
+    needs: [test, container]
+    # A manual run on another branch tests it and deploys nothing.
+    if: github.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
     steps:
       # Actions pinned to full commit SHAs (they receive the deploy secrets); bump deliberately.
@@ -72,7 +90,7 @@ jobs:
             # Health check: the new container must serve THIS build's version.json, or the
             # job fails instead of reporting green over a restart-looping container.
             for i in $(seq 1 15); do
-              if docker compose exec -T nobs wget -qO- http://127.0.0.1/version.json 2>/dev/null | grep -q "+$APP_VERSION\""; then
+              if docker compose exec -T nobs wget -qO- http://127.0.0.1:3060/version.json 2>/dev/null | grep -q "+$APP_VERSION\""; then
                 echo "nobs deploy complete ($APP_VERSION)"
                 exit 0
               fi

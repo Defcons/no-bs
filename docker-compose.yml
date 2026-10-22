@@ -9,10 +9,20 @@ services:
         VITE_APP_URL: ${VITE_APP_URL:-}
     container_name: nobs
     restart: unless-stopped
+    # Not root: nginx-unprivileged runs as uid 101, the files are read-only and /tmp (pid file, temp paths) is the only
+    # writable place.
+    user: "101:101"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp
     environment:
       - TZ=Europe/Oslo
     ports:
-      - "3060:80" # host:container — put your own reverse proxy (Caddy/NPM/Traefik) in front
+      # host:container, the same number. Put your own reverse proxy (Caddy/NPM/Traefik) in front.
+      - "3060:3060"
     volumes:
       # Persistent host dir for the downloadable APK, so it survives image rebuilds.
       # Served at <your-domain>/dl/ — host dir holding the downloadable APK
