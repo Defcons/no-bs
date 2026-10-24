@@ -49,6 +49,4 @@ secrets/
 # ---- Internal working docs (kept local, NOT published to the public repo) ----
 /docs/
 /OrientationMap.md
-/NavigationMap.md
 /DEPLOY.md
-/landing-dist/

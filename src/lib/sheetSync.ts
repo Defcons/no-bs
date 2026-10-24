@@ -255,10 +255,6 @@ async function post(url: string, payload: unknown): Promise<SyncResult> {
   }
 }
 
-export function syncConfigured(url: string): boolean {
-  return !!url.trim();
-}
-
 export async function testSync(): Promise<SyncResult> {
   const { url, secret } = await config();
   if (!url) return { ok: false, error: "No sync URL set" };

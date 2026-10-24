@@ -74,10 +74,6 @@ let drainTimer: ReturnType<typeof setInterval> | null = null;
 // (old APK, screen-off gap remains). "pending": still probing at start.
 let recordMode: "pending" | "native" | "legacy" = "pending";
 
-export function isTracking(): boolean {
-  return watcherId != null;
-}
-
 // Pull everything the native side has buffered since the last drain, filter bad
 // fixes, and append. HR is stamped only on fixes fresh enough to be foreground
 // (screen-off fixes have no live HR to attach anyway).

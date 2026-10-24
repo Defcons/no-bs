@@ -16,31 +16,12 @@ const Pip = registerPlugin<PipPlugin>("Pip");
 
 const native = () => Capacitor.isNativePlatform();
 
-export async function pipSupported(): Promise<boolean> {
-  if (!native()) return false;
-  try {
-    return (await Pip.isSupported()).supported;
-  } catch {
-    return false;
-  }
-}
-
 export async function isInPip(): Promise<boolean> {
   if (!native()) return false;
   try {
     return (await Pip.isInPip()).inPip;
   } catch {
     return false;
-  }
-}
-
-// Enter PiP now (a tall 2:3 window suits the stacked timer view).
-export async function enterPip(): Promise<void> {
-  if (!native()) return;
-  try {
-    await Pip.enter({ width: 2, height: 3 });
-  } catch {
-    /* unsupported */
   }
 }
 
