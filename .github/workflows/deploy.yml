@@ -76,6 +76,8 @@ jobs:
           port:     ${{ secrets.DEPLOY_PORT }}
           username: ${{ secrets.DEPLOY_USER }}
           key:      ${{ secrets.DEPLOY_SSH_KEY }}
+          # pins the target's ECDSA host key (appleboy's client asks for ECDSA first)
+          fingerprint: ${{ secrets.DEPLOY_HOST_FINGERPRINT }}
           envs:     VITE_APP_URL
           script: |
             set -euo pipefail
