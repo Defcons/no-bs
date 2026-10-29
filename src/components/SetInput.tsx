@@ -148,8 +148,10 @@ export function SetInput({ index, set, step, unit = "weight", units = "kg", defa
   };
 
   // Last time you beat the scheme's target reps on this set → a faint "last week"
-  // tint on the reps field (only until you log this set's reps).
-  const repsPrevBeat = set.reps == null && prevReps != null && defaultReps != null && prevReps > defaultReps;
+  // tint on the reps field (only until you log this set's reps). Reps prefill AT the
+  // target, so "not logged yet" = still at the target (or blank) and not ticked done.
+  const repsPrevBeat =
+    !done && (set.reps == null || set.reps === defaultReps) && prevReps != null && defaultReps != null && prevReps > defaultReps;
 
   // Weight vs this set's TARGET (the buildExercises seed = your recent best at this
   // position) → border cue, a true mirror of the reps-vs-target cue: green above the

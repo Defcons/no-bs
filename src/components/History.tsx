@@ -56,7 +56,11 @@ function computeActivityLabel(w: StoredWorkout): string {
     const run = computeRun(w.track);
     if (run) return `${fmtDist(run.distanceM)} ${cardioVerb(w, run.avgPaceSecPerKm)}`;
   }
-  if (w.treadmill) return w.treadmillM != null ? `${fmtDist(w.treadmillM)} ${cardioVerb(w, 0)}` : `Treadmill ${cardioVerb(w, 0)}`;
+  if (w.treadmill) {
+    // No pace here (the stride is async), so a walk is told from a run by step cadence.
+    const verb = cardioVerb(w, w.steps && !isRunningCadence(w.steps, w.durationSec ?? 0) ? Infinity : 0);
+    return w.treadmillM != null ? `${fmtDist(w.treadmillM)} ${verb}` : `Treadmill ${verb}`;
+  }
   const names = w.exercises.map((e) => e.name.trim()).filter(Boolean);
   if (names.length) return names.slice(0, 3).join(", ") + (names.length > 3 ? "…" : "");
   return dn || "Alternative";
