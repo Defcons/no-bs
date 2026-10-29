@@ -39,6 +39,16 @@
             tools:node="merge"
             tools:replace="android:exported" />
 
+        <!-- Workout foreground service (standard build, earbud break on): keeps the app
+             alive on a locked phone. Type "health" = fitness tracking; on Android 14+ it
+             needs ACTIVITY_RECOGNITION granted (WorkoutServicePlugin checks first). Ends
+             with the task, so swiping the app away also drops its notification. -->
+        <service
+            android:name=".WorkoutService"
+            android:exported="false"
+            android:foregroundServiceType="health"
+            android:stopWithTask="true" />
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"
@@ -72,6 +82,8 @@
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+    <!-- The workout foreground service (WorkoutService), type health. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_HEALTH" />
 
     <!-- Notifications (break-timer alarm + reminders) -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />

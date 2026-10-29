@@ -18,6 +18,7 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(PipPlugin.class);
         registerPlugin(HwButtonsPlugin.class);
         registerPlugin(StepCounterPlugin.class);
+        registerPlugin(WorkoutServicePlugin.class);
         super.onCreate(savedInstanceState);
     }
 

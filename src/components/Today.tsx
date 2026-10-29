@@ -12,6 +12,8 @@ import { startGeofence, stopGeofence } from "../lib/geofence";
 import { exitPip, isInPip, onPipChange, setPipAutoEnter } from "../lib/pip";
 import { onVolumeKey, setPhoneKeyCapture, setVolumeCapture } from "../lib/hwButtons";
 import { currentTrack, startTracking, stopTracking, takeTrack } from "../lib/tracker";
+import { setWorkoutService } from "../lib/workoutService";
+import { isExtendedBuild } from "../lib/buildInfo";
 import { calibrateStride, currentSteps, drainStepSamples, isRunningCadence, startSteps, stopSteps, strideRunM, strideWalkM } from "../lib/pedometer";
 import { useSetting } from "../lib/useSetting";
 import { breakSec, breakSecWithin, computeRun, fmtDist, fmtPace, type RunStats, withMovingPace } from "../lib/runStats";
@@ -118,6 +120,9 @@ export function Today({
   const [liveRun, setLiveRun] = useState<RunStats | null>(null); // live GPS run stats shown while tracking
   const [liveSpan, setLiveSpan] = useState<[number, number] | null>(null); // that track's first→last fix (ms)
   const [liveSteps, setLiveSteps] = useState(0); // session step count (native hardware step counter)
+  const [stepsAsked, setStepsAsked] = useState(false); // this session's step-counter start settled (its permission prompt answered)
+  const [gpsWatching, setGpsWatching] = useState(false); // the GPS route tracker's location watcher is running
+  const [geoWatching, setGeoWatching] = useState(false); // the leave-gym location watcher is running
   const [editTpl, setEditTpl] = useState<DayTemplate | null>(null); // workout being created/edited
   const native = Capacitor.isNativePlatform();
   const bpmRef = useRef<number | null>(null);
@@ -540,8 +545,13 @@ export function Today({
   const sessionStart = draft?.startedAt;
   useEffect(() => {
     if (!trackGps || sessionStart == null) return;
-    startTracking(() => bpmRef.current, sessionStart);
+    let active = true;
+    void startTracking(() => bpmRef.current, sessionStart).then((ok) => {
+      if (active) setGpsWatching(ok);
+    });
     return () => {
+      active = false;
+      setGpsWatching(false);
       stopTracking();
     };
   }, [trackGps, sessionStart]);
@@ -571,7 +581,9 @@ export function Today({
       return;
     }
     let active = true;
-    startSteps();
+    void startSteps().finally(() => {
+      if (active) setStepsAsked(true);
+    });
     const tick = async () => {
       const s = await currentSteps();
       if (active) setLiveSteps(s);
@@ -580,6 +592,7 @@ export function Today({
     const id = window.setInterval(tick, 5000);
     return () => {
       active = false;
+      setStepsAsked(false);
       window.clearInterval(id);
       stopSteps();
     };
@@ -621,17 +634,38 @@ export function Today({
   useEffect(() => {
     if (!draft || draft.custom || draft.trackGps || !geoArmed) return;
     let active = true;
-    startGeofence(() => {
+    void startGeofence(() => {
       if (!active) return;
       // The auto-save notification (fired from finishNow) explains the reason and
       // offers mood logging — no separate "saved" reminder needed here.
       finishRef.current("left");
+    }).then((ok) => {
+      if (active) setGeoWatching(ok);
     });
     return () => {
       active = false;
+      setGeoWatching(false);
       stopGeofence();
     };
   }, [geoArmed, draft?.startedAt, draft?.custom, draft?.trackGps]);
+
+  // Workout foreground service (standard build, earbud break on): keeps the app alive on a
+  // locked phone so the earbud break still fires; the extended build stays alive through
+  // its accessibility service. Waits for the step counter's permission prompt (a "health"
+  // service needs that permission on Android 14+), and stands down while a location
+  // watcher runs: that is a foreground service too, so a workout shows one notification.
+  useEffect(() => {
+    if (!draft || !stepsAsked || gpsWatching || geoWatching) return;
+    let on = true;
+    void (async () => {
+      const want = (await getSetting<boolean>("volumeUpBreak", false)) && !(await isExtendedBuild());
+      if (on && want) void setWorkoutService(true);
+    })();
+    return () => {
+      on = false;
+      void setWorkoutService(false);
+    };
+  }, [draft == null, volUpBreak, stepsAsked, gpsWatching, geoWatching]);
 
   // Low-HR watchdog: after HR sits below the threshold for 10 min, ask if you're
   // still working out; if unanswered for 5 more min, auto-end. Driven by HR updates.
