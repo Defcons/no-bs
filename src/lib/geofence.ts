@@ -9,6 +9,7 @@ interface BgLocation {
   latitude: number;
   longitude: number;
   accuracy: number;
+  time?: number | null; // epoch ms of the fix (from the native Location)
 }
 interface BgError {
   code?: string;
@@ -95,6 +96,9 @@ export async function startGeofence(onLeave: () => void): Promise<boolean> {
       (position, error) => {
         if (error || !position || fired) return;
         const here = { lat: position.latitude, lng: position.longitude };
+        // The fix's own time: with the screen off Android can deliver fixes in a late
+        // batch, and the callback time would squash ten minutes away into one instant.
+        const at = position.time ?? Date.now();
         glog(`fix acc=${Math.round(position.accuracy)} anchor=${anchor ? `acc${Math.round(anchorAcc)}` : "none"}`);
         // Anchor to the FIRST fix. (The old ≤75 m accuracy gate meant an indoor gym
         // — where fixes are routinely 100 m+ — often never anchored, so the watcher
@@ -121,12 +125,12 @@ export async function startGeofence(onLeave: () => void): Promise<boolean> {
         // coarse indoor anchor can't disable leave-detection entirely).
         const outside = d - position.accuracy - Math.min(anchorAcc, ANCHOR_SLACK_MAX_M) > RADIUS_M;
         const inside = d + position.accuracy < RADIUS_M;
-        glog(`  d=${Math.round(d)} outside=${outside} inside=${inside} out=${outsideSince ? Math.round((Date.now() - outsideSince) / 1000) + "s" : "-"}`);
+        glog(`  d=${Math.round(d)} outside=${outside} inside=${inside} out=${outsideSince ? Math.round((at - outsideSince) / 1000) + "s" : "-"}`);
         if (inside) {
           outsideSince = null;
         } else if (outside) {
-          outsideSince ??= Date.now();
-          if (Date.now() - outsideSince >= EXIT_GRACE_MS) {
+          const since = (outsideSince ??= at);
+          if (at - since >= EXIT_GRACE_MS) {
             fired = true;
             void stopGeofence(); // stop GPS immediately, don't wait on React cleanup
             onLeave();

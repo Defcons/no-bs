@@ -137,6 +137,16 @@ public class StepCounterPlugin extends Plugin implements SensorEventListener {
         call.resolve(ret);
     }
 
+    // The activity is going away mid-session: release the sensor, or the listener keeps
+    // this plugin instance (and the old bridge) alive and counting.
+    @Override
+    protected void handleOnDestroy() {
+        if (listening && sensorManager != null) {
+            sensorManager.unregisterListener(this);
+            listening = false;
+        }
+    }
+
     private long steps() {
         return (base >= 0 && latest >= base) ? (long) (latest - base) : 0L;
     }
