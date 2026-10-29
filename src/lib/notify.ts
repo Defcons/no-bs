@@ -3,6 +3,7 @@
 // we fall back to the service-worker notification (best-effort in background).
 import { Capacitor } from "@capacitor/core";
 import { LocalNotifications } from "@capacitor/local-notifications";
+import { App } from "@capacitor/app";
 import { getSetting } from "../db";
 import { localDay } from "./format";
 
@@ -185,6 +186,38 @@ export async function scheduleBreakNotification(at: number): Promise<void> {
     /* ignore */
   }
 }
+// On-time rest alarm (Android 12+ "Alarms & reminders"). With it granted the plugin
+// arms an exact alarm; without it, it falls back to an inexact one that Doze may
+// deliver late. Only shells from 1.80.0 declare SCHEDULE_EXACT_ALARM: on an older
+// shell the settings page can't grant anything, so report "unsupported" there.
+const EXACT_ALARM_BUILD = 18000; // versionCode of 1.80.0
+export type ExactAlarm = "granted" | "denied" | "unsupported";
+async function exactAlarmShell(): Promise<boolean> {
+  if (!native()) return false;
+  try {
+    return Number((await App.getInfo()).build) >= EXACT_ALARM_BUILD;
+  } catch {
+    return false;
+  }
+}
+export async function exactAlarmStatus(): Promise<ExactAlarm> {
+  if (!(await exactAlarmShell())) return "unsupported";
+  try {
+    return (await LocalNotifications.checkExactNotificationSetting()).exact_alarm === "granted" ? "granted" : "denied";
+  } catch {
+    return "unsupported";
+  }
+}
+// Opens the system "Alarms & reminders" page; resolves with the state once the user is back.
+export async function requestExactAlarms(): Promise<ExactAlarm> {
+  if (!(await exactAlarmShell())) return "unsupported";
+  try {
+    return (await LocalNotifications.changeExactNotificationSetting()).exact_alarm === "granted" ? "granted" : "denied";
+  } catch {
+    return exactAlarmStatus();
+  }
+}
+
 export async function cancelBreakNotification(): Promise<void> {
   if (!native()) return;
   breakNotifGen++; // invalidate any schedule still inside its await gap

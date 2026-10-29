@@ -15,7 +15,15 @@ import {
 import { saveFile } from "../lib/download";
 import { localDay } from "../lib/format";
 import { hrAvailable } from "../lib/hr";
-import { cancelTrainingReminders, notificationsSupported, requestNotifications, scheduleTrainingReminders } from "../lib/notify";
+import {
+  cancelTrainingReminders,
+  exactAlarmStatus,
+  notificationsSupported,
+  requestExactAlarms,
+  requestNotifications,
+  scheduleTrainingReminders,
+  type ExactAlarm,
+} from "../lib/notify";
 import { importFromSheet, pendingCount, syncEnabled, syncPending, testSync } from "../lib/sheetSync";
 import { testMapMatch } from "../lib/mapMatch";
 import type { BwEntry, Sex } from "../lib/standards";
@@ -177,6 +185,7 @@ export function Settings({
   const [breakSound, setBreakSound] = useState<string>("beep");
   const [breakCountdown, setBreakCountdown] = useState(false);
   const [breakNotify, setBreakNotify] = useState(false);
+  const [exactAlarm, setExactAlarm] = useState<ExactAlarm>("unsupported");
   const [includeAltWeekly, setIncludeAltWeekly] = useState(false);
   const [paceExclBreaks, setPaceExclBreaks] = useState(true);
   const [autoDetectBreaks, setAutoDetectBreaks] = useState(false);
@@ -244,6 +253,7 @@ export function Settings({
     getSetting<string>("breakSound", "beep").then(setBreakSound);
     getSetting("breakCountdown", false).then(setBreakCountdown);
     getSetting<boolean>("breakNotify", false).then(setBreakNotify);
+    exactAlarmStatus().then(setExactAlarm);
     getSetting<boolean>("includeAltInWeekly", false).then(setIncludeAltWeekly);
     getSetting<boolean>("paceExcludesBreaks", true).then(setPaceExclBreaks);
     getSetting<boolean>("autoDetectBreaks", false).then(setAutoDetectBreaks);
@@ -562,15 +572,29 @@ export function Settings({
           <ToggleRow
             label="Break-over notification"
             checked={breakNotify}
-            onChange={(v) => {
+            onChange={async (v) => {
               setBreakNotify(v);
               setSetting("breakNotify", v);
+              // Ask once, as it's turned on; refused, it still rings, maybe late.
+              if (v && (await exactAlarmStatus()) === "denied") setExactAlarm(await requestExactAlarms());
             }}
           >
             <p className="muted tiny">
               A phone notification when the break ends — handy if the app is backgrounded / screen off, where the in-app
               sound won't reach you. Off by default.
             </p>
+            {breakNotify && exactAlarm === "denied" && (
+              <>
+                <p className="muted tiny">
+                  "Alarms &amp; reminders" is off for NoBS, so with the screen off Android may ring it late.
+                </p>
+                <div className="row">
+                  <button className="mini" onClick={async () => setExactAlarm(await requestExactAlarms())}>
+                    Allow on-time alarms
+                  </button>
+                </div>
+              </>
+            )}
           </ToggleRow>
         )}
       </details>

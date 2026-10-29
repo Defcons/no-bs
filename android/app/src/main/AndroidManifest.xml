@@ -87,6 +87,10 @@
 
     <!-- Notifications (break-timer alarm + reminders) -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- On-time rest-over alarm. User-granted "Alarms & reminders" (Settings asks when the
+         break notification is turned on); refused, the plugin falls back to an inexact
+         alarm. NOT USE_EXACT_ALARM: Play keeps that auto-granted kind for alarm-clock apps. -->
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
 
     <!-- Hardware step counter (workout step stats). Runtime-requested on Android 10+. -->
     <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION" />
