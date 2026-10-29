@@ -43,6 +43,9 @@ for path in / /version.json /bundle-smoke.zip /some/deep/route /dl/t.apk; do
   [ "$s" = 200 ] || fail "$base$path answers $s, not 200"
 done
 curl -s "$base/version.json" | grep -q '+smoke"' || fail "version.json does not report the build's APP_VERSION"
+# The app hands this checksum to Capgo, which refuses a bundle that does not match it.
+sum="$(curl -s "$base/bundle-smoke.zip" | sha256sum | cut -d' ' -f1)"
+curl -s "$base/version.json" | grep -q "\"checksum\":\"$sum\"" || fail "version.json's checksum is not the SHA-256 of the served bundle ($sum)"
 
 # Directory URLs without the slash: relative Location, never the host or the port.
 redirects_to /assets /assets/

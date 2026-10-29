@@ -15,11 +15,14 @@ RUN printf 'VITE_APP_URL=%s\n' "$VITE_APP_URL" > .env.production \
   && rm -f .env.production
 # OTA bundle for the native app: a zip of the built web app + a version manifest
 # the app polls (see src/lib/update.ts). Version = semver (package.json) + git sha
-# build metadata, so it's human-readable (vX.Y.Z) yet unique per deploy.
+# build metadata, so it's human-readable (vX.Y.Z) yet unique per deploy. checksum =
+# the zip's SHA-256, which Capgo checks on download (and requires once the app carries
+# a bundle-signing public key).
 RUN apk add --no-cache zip \
   && SEMVER="$(node -p "require('./package.json').version")" \
   && (cd dist && zip -qr "/app/bundle-${APP_VERSION}.zip" .) \
-  && printf '{"version":"%s+%s","url":"https://app.agentas.net/bundle-%s.zip"}\n' "$SEMVER" "$APP_VERSION" "$APP_VERSION" > /app/version.json
+  && SUM="$(sha256sum "/app/bundle-${APP_VERSION}.zip" | cut -d' ' -f1)" \
+  && printf '{"version":"%s+%s","url":"https://app.agentas.net/bundle-%s.zip","checksum":"%s"}\n' "$SEMVER" "$APP_VERSION" "$APP_VERSION" "$SUM" > /app/version.json
 
 FROM nginxinc/nginx-unprivileged:alpine
 # Not root: this image runs nginx as uid 101 (pid file and temp paths in /tmp) and listens on 3060, the published host

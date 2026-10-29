@@ -56,7 +56,7 @@ export async function checkAndApplyUpdate(): Promise<UpdateResult> {
   try {
     const res = await fetch(VERSION_URL, { cache: "no-store" });
     if (!res.ok) return { status: "error", message: `Update server returned ${res.status}` };
-    const latest = (await res.json()) as { version: string; url: string };
+    const latest = (await res.json()) as { version: string; url: string; checksum?: string };
     if (!latest?.url || !latest?.version) return { status: "error", message: "Malformed update info." };
     // Only ever download from our own origin — never live-load a bundle from a URL
     // an altered version.json could point elsewhere.
@@ -71,7 +71,13 @@ export async function checkAndApplyUpdate(): Promise<UpdateResult> {
     if (isSemverDowngrade(latest.version, cur)) {
       return { status: "error", message: `Server offers v${latest.version} but you're on v${cur} — not downgrading.` };
     }
-    const bundle = await CapacitorUpdater.download({ url: latest.url, version: latest.version });
+    // The zip's SHA-256 from the manifest: Capgo refuses a bundle that doesn't match it,
+    // and refuses one with no checksum at all once the app carries a signing public key.
+    const bundle = await CapacitorUpdater.download({
+      url: latest.url,
+      version: latest.version,
+      ...(latest.checksum ? { checksum: latest.checksum } : {}),
+    });
     // Stamp the new version so that after the reload the app can open on Settings and
     // confirm the update (App.readJustUpdated reads-and-clears this on boot).
     try {
