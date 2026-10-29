@@ -13,6 +13,10 @@ import { paceMedals, runPBs } from "../src/lib/runStandards";
 import { cleanCatalogExercise, cleanTemplate, cleanWorkout, isUntouchedStarter, validBw } from "../src/lib/workbook";
 import { GENERIC_TEMPLATES } from "../src/db";
 import { localDay, noteLines } from "../src/lib/format";
+import { restoreDedup } from "../src/lib/workbook";
+import { isRunningCadence, stepsBetween, strideSample } from "../src/lib/pedometer";
+import { segmentsFromCadence, segmentsFromTrack } from "../src/lib/segments";
+import type { StepSample, TrackPoint, WorkoutBreak } from "../src/types";
 import type { StoredWorkout } from "../src/db";
 
 let fails = 0;
@@ -305,6 +309,65 @@ console.log("— restore keeps your own templates + custom exercises (2026-09-27
   check("a valid custom exercise passes (marked non-builtin)", cleanCatalogExercise(ex)?.builtin === false);
   check("an unknown muscle group is rejected", cleanCatalogExercise({ ...ex, muscle: "Glutes" }) == null);
   check("a missing id is rejected", cleanCatalogExercise({ ...ex, id: "" }) == null);
+}
+
+console.log("— restore keeps two same-size sessions on one day (2026-09-27 DAT-5) —");
+{
+  const run = (date: string) => ({ dayName: "Alternative", date, durationSec: 31 * 60, exercises: [{ name: "Running", sets: [] }] as never });
+  const am = run("2026-10-10T05:00:00.000Z");
+  const pm = run("2026-10-10T16:00:00.000Z");
+  check("the two runs share a content key (the old dedup)", sessionKey(am) === sessionKey(pm));
+  const isNew = restoreDedup([]);
+  check("a restore onto an empty phone keeps both", isNew(am) && isNew(pm));
+  check("…and the same session twice in one file only once", !isNew(run("2026-10-10T05:00:00.000Z")));
+  check("a session already on the phone is skipped", !restoreDedup([am])(am) && restoreDedup([am])(pm));
+  const sheetCopy = { ...am, date: localDay(am.date) }; // date-only row from an old sheet import
+  check("a backup row whose copy here is a date-only sheet import is skipped", !restoreDedup([sheetCopy])(am));
+  check("date-only rows still dedupe by key", !restoreDedup([sheetCopy])({ ...sheetCopy }));
+}
+
+console.log("— stride and interval bands (2026-09-27 LOG-7 / LOG-8) —");
+{
+  // Seeded noise so the GPS checks are repeatable.
+  const rnd = (seed: number) => { let s = seed; return () => (s = (s * 1664525 + 1013904223) >>> 0) / 4294967296; };
+  const gauss = (r: () => number) => Math.sqrt(-2 * Math.log(r() + 1e-9)) * Math.cos(2 * Math.PI * r());
+  const T0 = 1_700_000_000_000;
+  const kinds = (s: { kind: string }[]) => s.map((x) => x.kind).join(",");
+  // LOG-7: 1500 lifting steps before GPS goes on, then a 30-min walk of 3000 steps along a straight line at 1.2 m/s.
+  const walk: TrackPoint[] = [];
+  for (let i = 0; i <= 1800; i++) walk.push({ t: T0 + 600_000 + i * 1000, lat: 58.97 + (i * 1.2) / 111320, lng: 5.73, acc: 5 });
+  const samples: StepSample[] = [{ t: T0, steps: 0 }, { t: T0 + 600_000, steps: 1500 }, { t: T0 + 600_000 + 1_800_000, steps: 4500 }];
+  check("steps are read off the samples inside the track's span", stepsBetween(samples, walk[0].t, walk[walk.length - 1].t) === 3000);
+  const m = strideSample(walk, samples);
+  check("the walk's stride counts only its own steps (≈0.72 m, not 0.48)", !!m && Math.abs(m.stride - 0.72) < 0.03, JSON.stringify(m));
+  check("…and stays a walk by cadence", !!m && !isRunningCadence(m.steps, m.movingSec));
+  check("no samples, no calibration", strideSample(walk, []) == null);
+  // Intervals: 3 × 4 min at 165 spm with 2 min rests, rests logged as breaks.
+  const iv: TrackPoint[] = [];
+  const ivSamples: StepSample[] = [];
+  const ivBreaks: WorkoutBreak[] = [];
+  let y = 0;
+  let st = 0;
+  for (let i = 0; i < 1080; i++) {
+    const running = i % 360 < 240;
+    if (running) { y += 3.2; st += 165 / 60; } else if (i % 360 === 240) ivBreaks.push({ at: T0 + i * 1000, sec: 120 });
+    iv.push({ t: T0 + i * 1000, lat: 58.97 + y / 111320, lng: 5.73, acc: 5 });
+    if (i % 5 === 0) ivSamples.push({ t: T0 + i * 1000, steps: Math.round(st) });
+  }
+  const im = strideSample(iv, ivSamples, ivBreaks);
+  check("interval rests don't turn a run into a walk", !!im && isRunningCadence(im.steps, im.movingSec), JSON.stringify(im));
+  // LOG-8 (a): the same intervals from the step stream alone (a treadmill): runs stay runs.
+  check("cadence bands: run,stop,run,stop,run,stop", kinds(segmentsFromCadence(ivSamples, 0.72, 1.1)) === "run,stop,run,stop,run,stop", kinds(segmentsFromCadence(ivSamples, 0.72, 1.1)));
+  // LOG-8 (b): 20 min standing still indoors with 6 m GPS noise is one stop.
+  const r = rnd(7);
+  const still: TrackPoint[] = [];
+  for (let i = 0; i < 1200; i++) still.push({ t: T0 + i * 1000, lat: 58.97 + (gauss(r) * 6) / 111320, lng: 5.73 + (gauss(r) * 6) / 57360, acc: 15 });
+  check("standing still with GPS noise is one stop", kinds(segmentsFromTrack(still)) === "stop", kinds(segmentsFromTrack(still)));
+  const r2 = rnd(9);
+  const wr: TrackPoint[] = [];
+  let y2 = 0;
+  for (let i = 0; i < 900; i++) { y2 += i < 600 ? 1.4 : 3.0; wr.push({ t: T0 + i * 1000, lat: 58.97 + (y2 + gauss(r2) * 5) / 111320, lng: 5.73 + (gauss(r2) * 5) / 57360, acc: 15 }); }
+  check("a noisy walk then a run reads walk,run", kinds(segmentsFromTrack(wr)) === "walk,run", kinds(segmentsFromTrack(wr)));
 }
 
 process.exitCode = fails ? 1 : 0;

@@ -14,7 +14,7 @@ import { onVolumeKey, setPhoneKeyCapture, setVolumeCapture } from "../lib/hwButt
 import { currentTrack, startTracking, stopTracking, takeTrack } from "../lib/tracker";
 import { setWorkoutService } from "../lib/workoutService";
 import { isExtendedBuild } from "../lib/buildInfo";
-import { calibrateStride, currentSteps, drainStepSamples, isRunningCadence, startSteps, stopSteps, strideRunM, strideWalkM } from "../lib/pedometer";
+import { calibrateStride, currentSteps, drainStepSamples, isRunningCadence, startSteps, stepsBetween, stopSteps, strideRunM, strideWalkM } from "../lib/pedometer";
 import { useSetting } from "../lib/useSetting";
 import { breakSec, breakSecWithin, computeRun, fmtDist, fmtPace, type RunStats, withMovingPace } from "../lib/runStats";
 import { autoBreaksFromSegments, segmentsFromTrack } from "../lib/segments";
@@ -365,14 +365,18 @@ export function Today({
       const track = recorded.length ? recorded : undefined;
       const steps = await currentSteps(); // session total; the effect cleanup stops the sensor
       const stepSamples = await drainStepSamples(); // timestamped cadence (patched APK only; [] otherwise)
-      void calibrateStride(track, steps); // learn the user's stride from a clean-GPS run (no-ops otherwise)
+      void calibrateStride(track, stepSamples, draft?.breaks); // learn the user's stride from a clean-GPS run (no-ops otherwise)
       const endedAt = auto ? draft?.lastActivityAt : undefined;
       // Capture whether mood still needs logging BEFORE finish() clears the draft.
       const moodIncomplete = draft ? draft.moodBefore == null || draft.moodAfter == null : false;
       // Treadmill = manual toggle, or GPS was on but captured almost none of the movement
       // the steps imply (indoor/stationary). Then distance comes from steps × stride, not GPS.
       const gpsDist = track && track.length >= 2 ? computeRun(track)?.distanceM ?? 0 : 0;
-      const treadmill = !!draft?.treadmill || (!!draft?.trackGps && steps * strideValRef.current > 200 && gpsDist < steps * strideValRef.current * 0.4);
+      // Compare with the steps taken while GPS recorded, when the samples tell: the lifting
+      // before an outdoor run once outweighed it and the run was saved as a treadmill with
+      // its route dropped (audit LOG-7).
+      const gpsSteps = track && track.length >= 2 && stepSamples.length > 1 ? stepsBetween(stepSamples, track[0].t, track[track.length - 1].t) : steps;
+      const treadmill = !!draft?.treadmill || (!!draft?.trackGps && gpsSteps * strideValRef.current > 200 && gpsDist < gpsSteps * strideValRef.current * 0.4);
       const extra: Partial<StoredWorkout> = {};
       if (!treadmill && track && track.length >= 2) extra.track = track;
       if (steps > 0) extra.steps = steps;
@@ -581,7 +585,7 @@ export function Today({
       return;
     }
     let active = true;
-    void startSteps().finally(() => {
+    void startSteps(draft.startedAt).finally(() => {
       if (active) setStepsAsked(true);
     });
     const tick = async () => {

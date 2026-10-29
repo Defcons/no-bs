@@ -6,12 +6,14 @@
 import type { StepSample, TrackPoint, WorkoutBreak } from "../types";
 import { distanceM } from "./geofence";
 import { processTrack } from "./runStats";
+import { WALK_RUN_CADENCE_SPM } from "./pedometer";
 
 export type MoveKind = "run" | "walk" | "stop";
 export type MoveSegment = { kind: MoveKind; startMs: number; endMs: number; distanceM: number };
 
-// One measured interval between two samples: how far you moved over how long.
-export type MoveStep = { t0: number; t1: number; dist: number };
+// One measured interval between two samples: how far you moved over how long. `kind`,
+// when set, overrides the speed classification (the cadence adapter knows it better).
+export type MoveStep = { t0: number; t1: number; dist: number; speed?: number; kind?: MoveKind };
 
 // Speed thresholds (m/s): stop < STOP_MS ≤ walk < WALK_MS ≤ run.
 //   STOP_MS 0.6 m/s ≈ 2.2 km/h — below this you're standing / shuffling in place.
@@ -24,6 +26,11 @@ const MIN_SEG_SEC = 25;
 // Beyond this a "step" is a GPS teleport (multipath), not movement — drop it, matching
 // runStats' own MAX_SEGMENT_SPEED_MS gate so distance and segments agree.
 const MAX_SPEED_MS = 20;
+// The GPS adapter classifies each fix by how far you got over the last WINDOW_MS (net
+// displacement), not fix to fix: jitter while standing still adds up fix to fix (a
+// 20-min stand indoors read as 2.7 km of walk/run bands, audit LOG-8), but it does not
+// carry you anywhere over 15 s, while real movement does.
+const WINDOW_MS = 15_000;
 
 function kindOf(speedMs: number): MoveKind {
   if (speedMs < STOP_MS) return "stop";
@@ -54,7 +61,7 @@ export function classifySteps(steps: MoveStep[]): MoveSegment[] {
   if (!usable.length) return [];
   let segs = coalesce(
     usable.map((s) => ({
-      kind: kindOf(s.dist / ((s.t1 - s.t0) / 1000)),
+      kind: s.kind ?? kindOf(s.speed ?? s.dist / ((s.t1 - s.t0) / 1000)),
       startMs: s.t0,
       endMs: s.t1,
       distanceM: s.dist,
@@ -79,18 +86,23 @@ export function classifySteps(steps: MoveStep[]): MoveSegment[] {
   return segs;
 }
 
-// Outdoor adapter: per-point speed from the clean+smoothed GPS track (the same track
-// RunMap draws and computeRun measures), teleport spikes dropped.
+// Outdoor adapter: from the clean+smoothed GPS track (the same track RunMap draws and
+// computeRun measures), teleport spikes dropped. Each step's distance is the fix-to-fix
+// distance (so the bands add up to the drawn line); its kind comes from the speed over
+// the trailing WINDOW_MS.
 export function segmentsFromTrack(track: TrackPoint[] | undefined): MoveSegment[] {
   if (!track || track.length < 2) return [];
   const t = processTrack(track);
   const steps: MoveStep[] = [];
+  let j = 0;
   for (let i = 1; i < t.length; i++) {
     const dt = (t[i].t - t[i - 1].t) / 1000;
     if (dt <= 0) continue;
     const d = distanceM(t[i - 1], t[i]);
     if (d / dt > MAX_SPEED_MS) continue; // teleport spike
-    steps.push({ t0: t[i - 1].t, t1: t[i].t, dist: d });
+    while (j < i - 1 && t[i].t - t[j + 1].t >= WINDOW_MS) j++;
+    const span = (t[i].t - t[j].t) / 1000;
+    steps.push({ t0: t[i - 1].t, t1: t[i].t, dist: d, speed: span > 0 ? distanceM(t[j], t[i]) / span : 0 });
   }
   return classifySteps(steps);
 }
@@ -112,18 +124,23 @@ export function autoBreaksFromSegments(segs: MoveSegment[], existing: WorkoutBre
   return out;
 }
 
-// Indoor / treadmill adapter: build the speed profile from the step-CADENCE stream
-// (cumulative steps at each sample × stride) so walk/run/stop fall out of the same
-// classifier when there's no GPS. Samples are cumulative + monotonic; a counter reset or
-// out-of-order sample (dSteps<0 / dt≤0) is skipped. Feeds History's TreadmillDetail.
-export function segmentsFromCadence(samples: StepSample[] | undefined, strideM: number): MoveSegment[] {
-  if (!samples || samples.length < 2 || !(strideM > 0)) return [];
+// Indoor / treadmill adapter: walk/run/stop from the step-CADENCE stream (cumulative
+// steps at each sample) when there's no GPS. Each sample is a run at a running cadence,
+// a stop below walking speed, else a walk, and its distance uses that kind's stride: one
+// session-wide stride made 3 × 4-min runs with rests read as walks, because the rests
+// pulled the session's cadence under the run line (audit LOG-8). Samples are cumulative +
+// monotonic; a counter reset or out-of-order sample (dSteps<0 / dt≤0) is skipped. Feeds
+// History's TreadmillDetail.
+export function segmentsFromCadence(samples: StepSample[] | undefined, walkM: number, runM: number): MoveSegment[] {
+  if (!samples || samples.length < 2 || !(walkM > 0) || !(runM > 0)) return [];
   const steps: MoveStep[] = [];
   for (let i = 1; i < samples.length; i++) {
     const dt = (samples[i].t - samples[i - 1].t) / 1000;
     const dSteps = samples[i].steps - samples[i - 1].steps;
     if (dt <= 0 || dSteps < 0) continue;
-    steps.push({ t0: samples[i - 1].t, t1: samples[i].t, dist: dSteps * strideM });
+    const run = (dSteps / dt) * 60 >= WALK_RUN_CADENCE_SPM;
+    const dist = dSteps * (run ? runM : walkM);
+    steps.push({ t0: samples[i - 1].t, t1: samples[i].t, dist, kind: run ? "run" : dist / dt < STOP_MS ? "stop" : "walk" });
   }
   return classifySteps(steps);
 }

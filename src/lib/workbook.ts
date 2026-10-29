@@ -11,7 +11,7 @@ import type { BwEntry } from "./standards";
 import type { DayTemplate, Scheme } from "../types";
 import { type Exercise, MUSCLE_ORDER } from "./exercises";
 import { localDay } from "./format";
-import { cellFor, sessionKey, sessionKeys } from "./sheetSync";
+import { cellFor, sessionKey, sessionKeys, sheetIdOf } from "./sheetSync";
 import { breakSecInTrack, computeRun, fmtDist, fmtPace, withMovingPace } from "./runStats";
 import { parseBodyweightTab, parseSheet } from "./sheet";
 
@@ -406,16 +406,33 @@ export function isUntouchedStarter(t: DayTemplate): boolean {
 export const validBw = (e: unknown): e is BwEntry =>
   isObj(e) && Number.isInteger(e.year) && (e.year as number) >= 1900 && (e.year as number) <= 2100 && finite(e.kg) && e.kg > 0 && e.kg < 500;
 
-// Apply a restore: add only workouts this device is missing (deduped by a
-// content-aware session key so two genuine same-day sessions both survive), plus
+// Restore dedup. A row with a full ISO start time is the same session only when the
+// start time matches: the content key alone merged two same-size sessions on one day
+// (two 31-min runs, no sets → one key; audit DAT-5). The key still catches an ISO row
+// whose copy here is a date-only sheet import, and dedupes date-only rows themselves.
+export function restoreDedup(existing: { dayName: string; date: string; exercises: StoredWorkout["exercises"]; durationSec?: number }[]) {
+  const ids = new Set(existing.map(sheetIdOf).filter((x): x is string => !!x));
+  const bareKeys = new Set(existing.filter((w) => !sheetIdOf(w)).flatMap(sessionKeys)); // incl. legacy UTC-day keys
+  const keys = new Set(existing.flatMap(sessionKeys));
+  return (w: { dayName: string; date: string; exercises: StoredWorkout["exercises"]; durationSec?: number }): boolean => {
+    const id = sheetIdOf(w);
+    const k = sessionKey(w);
+    if (id ? ids.has(id) || bareKeys.has(k) : keys.has(k)) return false;
+    if (id) ids.add(id);
+    else bareKeys.add(k);
+    keys.add(k);
+    return true;
+  };
+}
+
+// Apply a restore: add only workouts this device is missing (`restoreDedup`), plus
 // any templates the device doesn't have (matched by name), and merge bodyweight
 // years (imported wins per year). Never overwrites or deletes.
 export async function applyBackup(
   imported: ImportedBackup,
 ): Promise<{ added: number; bwYears: number; settings: number; skipped: number }> {
   let skipped = 0;
-  const existing = await db.workouts.toArray();
-  const have = new Set(existing.flatMap(sessionKeys)); // incl. legacy UTC-day keys
+  const isNew = restoreDedup(await db.workouts.toArray());
   const toAdd: StoredWorkout[] = [];
   for (const raw of Array.isArray(imported.workouts) ? imported.workouts : []) {
     const w = cleanWorkout(raw);
@@ -423,9 +440,7 @@ export async function applyBackup(
       skipped++;
       continue;
     }
-    const k = sessionKey(w as StoredWorkout);
-    if (have.has(k)) continue;
-    have.add(k);
+    if (!isNew(w as StoredWorkout)) continue;
     const { id: _id, ...rest } = w as StoredWorkout;
     void _id;
     // synced is TRI-state for app-logged rows: an unsynced session stores

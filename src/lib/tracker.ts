@@ -16,6 +16,7 @@
 // updates) — the OTA never breaks tracking on a not-yet-updated install. Screen-off
 // fixes carry no HR (the BLE strap runs through the WebView too, likewise suspended).
 import { Capacitor, registerPlugin } from "@capacitor/core";
+import { getSetting, setSetting } from "../db";
 import type { TrackPoint } from "../types";
 
 interface BgLocation {
@@ -52,6 +53,12 @@ const MAX_ACCURACY_M = 65; // drop clearly-bad fixes. 40→65→100→65: raisin
 // noisier lines, so back to 65. The Kalman still weights each KEPT fix by its accuracy, and
 // time-based sampling (distanceFilter 0) now supplies the density. Spikes → cleanTrack.
 const DRAIN_MS = 4000; // how often to pull the native buffer while foregrounded
+// A reload mid-workout (an OTA apply, Android dropping the WebView) starts the JS fresh:
+// the route so far and the live watcher's id are saved under SAVED_KEY every SAVE_MS and
+// when the app goes to the background, and the same session takes them back (audit DAT-3).
+const SAVED_KEY = "activeTrack";
+const SAVE_MS = 30_000;
+type SavedTrack = { session: number; points: TrackPoint[]; watcherId: string | null };
 const HR_FRESH_MS = 8000; // only stamp HR on fixes that just arrived (foreground)
 
 let watcherId: string | null = null;
@@ -73,6 +80,40 @@ let drainTimer: ReturnType<typeof setInterval> | null = null;
 // "native": drain the buffer (patched APK). "legacy": record in the JS callback
 // (old APK, screen-off gap remains). "pending": still probing at start.
 let recordMode: "pending" | "native" | "legacy" = "pending";
+let saveTimer: ReturnType<typeof setInterval> | null = null;
+
+function saveTrack(): void {
+  if (bankedFor == null) return;
+  const row: SavedTrack = { session: bankedFor, points: currentTrack(), watcherId };
+  void setSetting(SAVED_KEY, row).catch(() => {});
+}
+if (typeof document !== "undefined") {
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden" && watcherId) saveTrack();
+  });
+}
+
+// Take back the route a reload interrupted: the saved points, plus whatever the old
+// watcher buffered since (the native side outlives the WebView), and stop that watcher
+// so its GPS and notification don't run on unowned.
+async function restoreTrack(session: number): Promise<void> {
+  const saved = await getSetting<SavedTrack | null>(SAVED_KEY, null).catch(() => null);
+  if (!saved || saved.session !== session) return;
+  banked = saved.points ?? [];
+  bankedFor = session;
+  if (saved.watcherId) {
+    try {
+      const { locations } = await BackgroundGeolocation.getBufferedLocations({ id: saved.watcherId });
+      const last = banked.length ? banked[banked.length - 1].t : -Infinity;
+      for (const p of locations) {
+        if (p.accuracy <= MAX_ACCURACY_M && p.time > last) banked.push({ t: p.time, lat: p.latitude, lng: p.longitude, acc: p.accuracy });
+      }
+    } catch {
+      /* old APK, or the watcher died with the process */
+    }
+    await BackgroundGeolocation.removeWatcher({ id: saved.watcherId }).catch(() => {});
+  }
+}
 
 // Pull everything the native side has buffered since the last drain, filter bad
 // fixes, and append. HR is stamped only on fixes fresh enough to be foreground
@@ -96,16 +137,19 @@ async function drain(id: string): Promise<void> {
 // `session` = the workout's startedAt; a different session drops any banked route.
 export async function startTracking(getBpm: () => number | null, session: number): Promise<boolean> {
   if (!Capacitor.isNativePlatform() || watcherId || starting) return false;
-  if (bankedFor !== session) {
-    banked = [];
-    bankedFor = session;
-  }
   const myGen = ++gen;
   starting = true;
   points = [];
   recordMode = "pending";
   getHr = getBpm;
   try {
+    if (bankedFor !== session) {
+      banked = [];
+      bankedFor = null;
+      await restoreTrack(session);
+      bankedFor = session;
+      if (gen !== myGen) return false;
+    }
     const id = await BackgroundGeolocation.addWatcher(
       {
         backgroundTitle: "NoBS – Workout Log",
@@ -155,6 +199,8 @@ export async function startTracking(getBpm: () => number | null, session: number
       points = []; // drop pending-mode pushes; the native buffer (filled since addWatcher) is authoritative
       drainTimer = setInterval(() => void drain(id), DRAIN_MS);
     }
+    saveTimer = setInterval(saveTrack, SAVE_MS);
+    saveTrack();
     return true;
   } catch {
     return false; // permission denied / plugin error — recording just stays off
@@ -178,6 +224,10 @@ export async function stopTracking(): Promise<TrackPoint[]> {
     clearInterval(drainTimer);
     drainTimer = null;
   }
+  if (saveTimer) {
+    clearInterval(saveTimer);
+    saveTimer = null;
+  }
   if (watcherId) {
     const id = watcherId;
     watcherId = null;
@@ -192,6 +242,7 @@ export async function stopTracking(): Promise<TrackPoint[]> {
   }
   banked = banked.concat(points);
   points = [];
+  saveTrack(); // GPS switched off mid-session: the banked stretch must survive a reload too
   return banked.slice();
 }
 
@@ -200,8 +251,14 @@ export async function stopTracking(): Promise<TrackPoint[]> {
 // belongs to another session (or GPS was never on).
 export async function takeTrack(session: number | undefined): Promise<TrackPoint[]> {
   const all = await stopTracking();
-  const mine = session != null && bankedFor === session ? all : [];
+  let mine = session != null && bankedFor === session ? all : [];
+  if (session != null && bankedFor !== session) {
+    // GPS was off when the app reloaded, so no start took the saved route back.
+    await restoreTrack(session);
+    mine = bankedFor === session ? banked.slice() : [];
+  }
   banked = [];
   bankedFor = null;
+  void setSetting(SAVED_KEY, null).catch(() => {});
   return mine;
 }

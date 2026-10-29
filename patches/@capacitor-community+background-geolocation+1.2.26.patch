@@ -40,7 +40,7 @@ index a92fcf9..0cd53a4 100644
      public void openSettings(PluginCall call) {
          Intent intent = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
 diff --git a/node_modules/@capacitor-community/background-geolocation/android/src/main/java/com/equimaps/capacitor_background_geolocation/BackgroundGeolocationService.java b/node_modules/@capacitor-community/background-geolocation/android/src/main/java/com/equimaps/capacitor_background_geolocation/BackgroundGeolocationService.java
-index fafbb86..e6adb3e 100644
+index fafbb86..b265b33 100644
 --- a/node_modules/@capacitor-community/background-geolocation/android/src/main/java/com/equimaps/capacitor_background_geolocation/BackgroundGeolocationService.java
 +++ b/node_modules/@capacitor-community/background-geolocation/android/src/main/java/com/equimaps/capacitor_background_geolocation/BackgroundGeolocationService.java
 @@ -17,7 +17,10 @@ import com.google.android.gms.location.LocationRequest;
@@ -99,10 +99,23 @@ index fafbb86..e6adb3e 100644
              watchers.add(watcher);
  
              // According to Android Studio, this method can throw a Security Exception if
-@@ -168,6 +191,21 @@ public class BackgroundGeolocationService extends Service {
+@@ -166,6 +189,32 @@ public class BackgroundGeolocationService extends Service {
+                         null
+                 );
              }
-         }
- 
++            // NoBS patch: on a first-time grant addWatcher ran before the user answered,
++            // and Android 14+ refuses a location-type startForeground without the
++            // permission, so the service never went foreground. Promote it now.
++            Notification notification = getNotification();
++            if (notification != null) {
++                try {
++                    startForeground(NOTIFICATION_ID, notification);
++                } catch (Exception exception) {
++                    Logger.error("Failed to foreground service", exception);
++                }
++            }
++        }
++
 +        // NoBS patch: return every buffered fix for this watcher and clear the
 +        // buffer, so JS gets the full screen-off track on resume/stop.
 +        List<Location> drainBuffer(String id) {
@@ -116,8 +129,6 @@ index fafbb86..e6adb3e 100644
 +                }
 +            }
 +            return new ArrayList<Location>();
-+        }
-+
-         void stopService() {
-             BackgroundGeolocationService.this.stopSelf();
          }
+ 
+         void stopService() {

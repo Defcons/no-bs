@@ -516,7 +516,7 @@ function TreadmillDetail({
   const stride = isRunningCadence(steps ?? 0, movingSec) ? strideRun : strideWalk;
   // Walk/run/stop from the step-CADENCE stream (no GPS indoors). Empty until an APK that
   // records timestamped samples (1.72+) — older sessions just won't show a band.
-  const segs = useMemo(() => segmentsFromCadence(stepSamples, stride), [stepSamples, stride]);
+  const segs = useMemo(() => segmentsFromCadence(stepSamples, strideWalk, strideRun), [stepSamples, strideWalk, strideRun]);
   if (!steps || steps <= 0) return null;
   const entered = treadmillM != null;
   const distM = treadmillM ?? steps * stride; // an entered ACTUAL distance wins over the estimate

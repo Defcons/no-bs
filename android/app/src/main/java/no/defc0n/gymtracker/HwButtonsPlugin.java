@@ -3,6 +3,7 @@ package no.defc0n.gymtracker;
 import android.content.Context;
 import android.database.ContentObserver;
 import android.media.AudioAttributes;
+import android.media.AudioDeviceInfo;
 import android.media.AudioFocusRequest;
 import android.media.AudioManager;
 import android.net.Uri;
@@ -203,6 +204,14 @@ public class HwButtonsPlugin extends Plugin {
                         lastMusicVol = now;
                         return;
                     }
+                    // No earbuds or headphones attached: it can't be an earbud press. On the
+                    // standard build a phone key on a locked screen reaches no onKeyDown to
+                    // suppress it, so without this it fired a false break (audit AND-2).
+                    if (!headsetConnected()) {
+                        log("  -> no headset output; phone volume change, no fire");
+                        lastMusicVol = now;
+                        return;
+                    }
                     // An earbud rocker change (no key event preceded it): treat it as a
                     // break trigger and restore the level so music volume doesn't drift.
                     //
@@ -229,6 +238,27 @@ public class HwButtonsPlugin extends Plugin {
         };
         getContext().getContentResolver()
                 .registerContentObserver(Settings.System.CONTENT_URI, true, volumeObserver);
+    }
+
+    private boolean headsetConnected() {
+        try {
+            for (AudioDeviceInfo d : audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS)) {
+                switch (d.getType()) {
+                    case AudioDeviceInfo.TYPE_BLUETOOTH_A2DP:
+                    case AudioDeviceInfo.TYPE_BLUETOOTH_SCO:
+                    case AudioDeviceInfo.TYPE_BLE_HEADSET:
+                    case AudioDeviceInfo.TYPE_HEARING_AID:
+                    case AudioDeviceInfo.TYPE_WIRED_HEADSET:
+                    case AudioDeviceInfo.TYPE_WIRED_HEADPHONES:
+                    case AudioDeviceInfo.TYPE_USB_HEADSET:
+                        return true;
+                    default:
+                }
+            }
+            return false;
+        } catch (Exception e) {
+            return true; // can't tell: keep the earbud break working
+        }
     }
 
     private void stopVolumeObserver() {

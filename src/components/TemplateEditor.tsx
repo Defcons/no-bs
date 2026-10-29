@@ -3,6 +3,7 @@
 // can be repeated. Deleting a workout keeps its logged sessions in History.
 import { useEffect, useState } from "react";
 import { db, distinctExerciseNames } from "../db";
+import { sessionKeys } from "../lib/sheetSync";
 import type { DayTemplate, Scheme } from "../types";
 import { uid } from "../lib/uid";
 import { resolveExercise } from "../lib/exercises";
@@ -91,7 +92,22 @@ export function TemplateEditor({ template, units, onClose }: { template: DayTemp
         const last = await db.templates.orderBy("order").last();
         await db.templates.add({ name: cleanName, order: (last?.order ?? -1) + 1, exercises });
       } else {
-        await db.templates.update(template.id!, { name: cleanName, exercises });
+        const oldName = template.name;
+        await db.transaction("rw", db.templates, db.workouts, async () => {
+          await db.templates.update(template.id!, { name: cleanName, exercises });
+          // Sessions find their template by name (last-time hints, History grouping), so a
+          // rename takes its history along (audit DAT-8). The old keys are remembered so
+          // "Import from sheet" still knows the sheet copies.
+          if (oldName !== cleanName) {
+            await db.workouts
+              .where("dayName")
+              .equals(oldName)
+              .modify((w) => {
+                w.sheetKeys = [...new Set([...(w.sheetKeys ?? []), ...sessionKeys(w)])];
+                w.dayName = cleanName;
+              });
+          }
+        });
       }
       onClose();
     } finally {
