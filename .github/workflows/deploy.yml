@@ -53,13 +53,15 @@ jobs:
     # A manual run on another branch tests it and deploys nothing.
     if: github.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write   # GitHub's OIDC token, the tailnet login
     steps:
       # Actions pinned to full commit SHAs (they receive the deploy secrets); bump deliberately.
       - name: Connect to Tailscale
-        uses: tailscale/github-action@6cae46e2d796f265265cfcf628b72a32b4d7cade # v3.3.0
+        uses: tailscale/github-action@99a8333667fff04fdd6cffb46dfd409f8329a7bf # v4.3.0
         with:
-          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
-          oauth-secret:    ${{ secrets.TS_OAUTH_SECRET }}
+          oauth-client-id: ${{ vars.TS_OIDC_CLIENT_ID }}
+          audience:        ${{ vars.TS_OIDC_AUDIENCE }}
           tags:            tag:ci
           version:         1.102.4
 
