@@ -63,45 +63,31 @@ jobs:
           oauth-client-id: ${{ vars.TS_OIDC_CLIENT_ID }}
           audience:        ${{ vars.TS_OIDC_AUDIENCE }}
           tags:            tag:ci
+          # The client is pinned too. To bump: a stable version and its
+          # tailscale_<ver>_amd64.tgz.sha256 from https://pkgs.tailscale.com/stable/
           version:         1.102.4
+          sha256sum:       50748df1045e60b5b695f19f4c56b0da36c019948b440fb456b6584a50f0d8b9
 
+      - name: Wait for subnet routes
+        run: sleep 10
+
+      # Plain OpenSSH, so no third-party SSH binary gets the key. DEPLOY_KNOWN_HOSTS pins the box's host
+      # keys, and the step stops when it is not set.
       - name: Deploy via SSH over Tailscale
-        uses: appleboy/ssh-action@0ff4204d59e8e51228ff73bce53f80d53301dee2 # v1.2.5
         env:
-          # The OTA bundles are world-readable (OTA requires it). VITE_APP_URL is the
-          # ONLY var the build takes. Sync is configured per-device in Settings — no
-          # build bakes in personal config (no VITE_SYNC_URL/SECRET/SEED in source).
-          # Never reintroduce a baked-config seam.
-          VITE_APP_URL:     ${{ secrets.VITE_APP_URL }}
-        with:
-          host:     ${{ secrets.DEPLOY_HOST }}
-          port:     ${{ secrets.DEPLOY_PORT }}
-          username: ${{ secrets.DEPLOY_USER }}
-          key:      ${{ secrets.DEPLOY_SSH_KEY }}
-          # pins the target's ECDSA host key (appleboy's client asks for ECDSA first)
-          fingerprint: ${{ secrets.DEPLOY_HOST_FINGERPRINT }}
-          envs:     VITE_APP_URL
-          script: |
-            set -euo pipefail
-            git config --global --add safe.directory /opt/nobs
-            cd /opt/nobs
-            git fetch origin
-            git reset --hard origin/master
-            export APP_VERSION="$(git rev-parse --short HEAD)"
-            echo "Building OTA bundle version $APP_VERSION"
-            docker compose build --no-cache
-            docker compose up -d --remove-orphans
-            # Health check: the new container must serve THIS build's version.json, or the
-            # job fails instead of reporting green over a restart-looping container.
-            for i in $(seq 1 15); do
-              if docker compose exec -T nobs wget -qO- http://127.0.0.1:3060/version.json 2>/dev/null | grep -q "+$APP_VERSION\""; then
-                echo "nobs deploy complete ($APP_VERSION)"
-                exit 0
-              fi
-              sleep 2
-            done
-            # The action's log only shows stderr, so send the diagnostics there.
-            echo "Health check failed: version.json does not report $APP_VERSION" >&2
-            docker compose ps >&2
-            docker compose logs --tail 50 nobs >&2
-            exit 1
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+          DEPLOY_CMD: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          if [ -z "$DEPLOY_KNOWN_HOSTS" ]; then echo "::error::DEPLOY_KNOWN_HOSTS is not set"; exit 1; fi
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          timeout 2400 ssh -i ~/.ssh/deploy_key -p "$DEPLOY_PORT" \
+            -o StrictHostKeyChecking=yes -o BatchMode=yes -o ConnectTimeout=60 -o ServerAliveInterval=30 \
+            "$DEPLOY_USER@$DEPLOY_HOST" "$DEPLOY_CMD"
